@@ -1,17 +1,51 @@
 {
-  "model": "public/models/model_fp16.onnx",
+  "model": "public/models/model_512.onnx",
   "inputs": [],
   "images": [
+    {
+      "image": "test-images/product-scent-bottle.jpg",
+      "original_size": [
+        960,
+        1400
+      ],
+      "infer_ms": 2417.6,
+      "mask_png": "product-scent-bottle.mask.png",
+      "mask_stats": {
+        "mean": 73.360786,
+        "min": 0,
+        "max": 255,
+        "p50": 0,
+        "p90": 255,
+        "p99": 255
+      }
+    },
+    {
+      "image": "test-images/animal-buddy-dog.jpg",
+      "original_size": [
+        960,
+        1260
+      ],
+      "infer_ms": 2581.8,
+      "mask_png": "animal-buddy-dog.mask.png",
+      "mask_stats": {
+        "mean": 81.849491,
+        "min": 0,
+        "max": 255,
+        "p50": 0,
+        "p90": 255,
+        "p99": 255
+      }
+    },
     {
       "image": "test-images/glass-wine.jpg",
       "original_size": [
         960,
         1280
       ],
-      "infer_ms": 11828.0,
+      "infer_ms": 2215.8,
       "mask_png": "glass-wine.mask.png",
       "mask_stats": {
-        "mean": 100.256799,
+        "mean": 100.216827,
         "min": 0,
         "max": 255,
         "p50": 0,

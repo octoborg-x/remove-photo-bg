@@ -18,7 +18,10 @@ function post(msg: WorkerProgressMessage): void {
   self.postMessage(msg);
 }
 
-const MODEL_SIZE = 1024;
+let MODEL_SIZE = 512;
+// The shipped 512 export applies sigmoid internally and returns probabilities;
+// the older 1024 export returned raw logits.
+let outputIsProbability = true;
 
 // ORT reports provider allocation failures as bare C++ text (e.g.
 // "failed to call OrtRun(). ERROR_CODE: 6, ERROR_MESSAGE: std::bad_alloc").
@@ -144,9 +147,14 @@ async function runInference(
     const timeMs = performance.now() - t0;
 
     const out = results.output_image.data as Float32Array;
-    // output_image is [1, 1, 1024, 1024] logits (fp32 raw conv output). The
-    // activation (sigmoid) is applied on the main thread.
-    const mask = new Float32Array(out);
+    // Normalise to a [0,1] probability map so the main thread never has to know
+    // whether this export emits logits or probabilities.
+    const mask = new Float32Array(out.length);
+    if (outputIsProbability) {
+      mask.set(out);
+    } else {
+      for (let i = 0; i < out.length; i++) mask[i] = 1 / (1 + Math.exp(-out[i]));
+    }
     return { mask, timeMs };
   } finally {
     feeds.input_image.dispose?.();
@@ -158,6 +166,10 @@ self.onmessage = async (e: MessageEvent<MainToWorkerMessage>) => {
   try {
     if (msg.kind === 'set-model') {
       modelUrl = msg.modelUrl;
+      if (msg.inputSize) MODEL_SIZE = msg.inputSize;
+      if (typeof msg.outputIsProbability === 'boolean') {
+        outputIsProbability = msg.outputIsProbability;
+      }
       post({ kind: 'loading-model', at: 10 });
       // Only attempt WebGPU if the browser actually exposes it (feature-detect).
       // In bare headless/WASM environments this avoids poisoning the WASM fallback.

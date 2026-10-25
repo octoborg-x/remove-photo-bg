@@ -1,19 +1,17 @@
-// Post-process the raw model output (logits, [1,1,1024,1024]) into a soft alpha
+// Post-process the model's probability mask ([1,1,N,N] in [0,1]) into a soft alpha
 // mask at the original image dimensions.
 //
 // Confirmed from upstream handler.py:
-//   preds[..., -1].sigmoid()  -> soft mask in [0,1]
+//   preds[..., -1].sigmoid()  -> soft mask in [0,1]  (applied in the worker)
 //   pred_pil.resize(image.size)  -> upscale mask to original dimensions
 // Then mask is used as the image alpha.
 
 import { MODEL_SIZE } from './image-preprocess';
 
-export function logitsToMask(logits: Float32Array): Uint8ClampedArray {
-  const mask = new Uint8ClampedArray(logits.length);
-  for (let i = 0; i < logits.length; i++) {
-    // sigmoid
-    const s = 1 / (1 + Math.exp(-logits[i]));
-    mask[i] = Math.round(Math.min(255, Math.max(0, s * 255)));
+export function probabilityToMask(prob: Float32Array): Uint8ClampedArray {
+  const mask = new Uint8ClampedArray(prob.length);
+  for (let i = 0; i < prob.length; i++) {
+    mask[i] = Math.round(Math.min(255, Math.max(0, prob[i] * 255)));
   }
   return mask;
 }

@@ -8,7 +8,7 @@ export type WorkerProgressMessage =
   | { kind: 'inference-time'; ms: number; runId: number }
   | {
       kind: 'result-ready';
-      mask: Float32Array; // 1 x 1024 x 1024 soft mask [0,1]
+      mask: Float32Array; // 1 x N x N probability mask [0,1]
       width: number; // original image width
       height: number; // original image height
     }
@@ -16,11 +16,17 @@ export type WorkerProgressMessage =
 
 // Main -> worker
 export type MainToWorkerMessage =
-  | { kind: 'set-model'; modelUrl: string; forceProvider?: string }
+  | {
+      kind: 'set-model';
+      modelUrl: string;
+      inputSize?: number;
+      outputIsProbability?: boolean;
+      forceProvider?: string;
+    }
   | {
       kind: 'run';
       runId: number;
-      tensor: Float32Array; // [1, 3, 1024, 1024] NCHW normalized
+      tensor: Float32Array; // [1, 3, N, N] NCHW normalized
       width: number;
       height: number;
     }

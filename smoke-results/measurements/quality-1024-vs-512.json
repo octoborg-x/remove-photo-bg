@@ -1,0 +1,38 @@
+{
+  "rows": [
+    {
+      "image": "product-scent-bottle",
+      "iou_at_0.5": 0.99316,
+      "mean_abs_diff": 0.00236,
+      "p99_abs_diff": 0.0544,
+      "max_abs_diff": 0.8604,
+      "fg_1024": 0.2893,
+      "fg_512": 0.2878,
+      "edge_1024": 0.3587,
+      "edge_512": 0.196
+    },
+    {
+      "image": "animal-buddy-dog",
+      "iou_at_0.5": 0.9925,
+      "mean_abs_diff": 0.00281,
+      "p99_abs_diff": 0.0873,
+      "max_abs_diff": 0.9705,
+      "fg_1024": 0.3215,
+      "fg_512": 0.3211,
+      "edge_1024": 0.3069,
+      "edge_512": 0.2005
+    },
+    {
+      "image": "glass-wine",
+      "iou_at_0.5": 0.98971,
+      "mean_abs_diff": 0.00445,
+      "p99_abs_diff": 0.1339,
+      "max_abs_diff": 0.9785,
+      "fg_1024": 0.3932,
+      "fg_512": 0.393,
+      "edge_1024": 0.3356,
+      "edge_512": 0.1709
+    }
+  ],
+  "mean_iou": 0.99179
+}

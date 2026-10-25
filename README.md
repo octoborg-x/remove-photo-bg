@@ -85,5 +85,14 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
   (single inference > 10 min in the Phase-1 sandbox; native CPU ~12 s). WebGPU
   is the only viable production path and could not be measured in the sandbox
   (no GPU/WebGPU).
+- Memory: the model's decoder materialises very large intermediate tensors at
+  the fixed 1024×1024 input — the largest single activation is 411 MB and peak
+  transient usage is roughly 1.8 GB. Devices (or GPU adapters) that cannot
+  allocate that fail inside `OrtRun()` with `ERROR_CODE: 6 … std::bad_alloc`.
+  The input size is not tunable (the graph hard-codes 1024 via `Split`/`Resize`
+  constants, so smaller inputs fail too), and no lower-memory quantised variant
+  is published for `BiRefNet_lite`. Mitigations in place: the high-performance
+  GPU adapter is requested, and a WebGPU allocation failure automatically
+  rebuilds the session on the WASM provider and reports the fallback in the log.
 - The full product UI (Phase 2), legal docs (Phase 3), and test suite (Phase 4)
   are not built yet per the Phase-1 prompt.

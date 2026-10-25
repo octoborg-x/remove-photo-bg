@@ -2,7 +2,7 @@
   {
     "method": "GET",
     "resourceType": "document",
-    "url": "http://localhost:5173/"
+    "url": "http://localhost:5173/?provider=wasm"
   },
   {
     "method": "GET",
@@ -13,11 +13,6 @@
     "method": "GET",
     "resourceType": "script",
     "url": "http://localhost:5173/src/main.ts"
-  },
-  {
-    "method": "GET",
-    "resourceType": "script",
-    "url": "http://localhost:5173/node_modules/vite/dist/client/env.mjs"
   },
   {
     "method": "GET",
@@ -33,6 +28,11 @@
     "method": "GET",
     "resourceType": "script",
     "url": "http://localhost:5173/src/features/background-removal/export-image.ts"
+  },
+  {
+    "method": "GET",
+    "resourceType": "script",
+    "url": "http://localhost:5173/node_modules/vite/dist/client/env.mjs"
   },
   {
     "method": "GET",

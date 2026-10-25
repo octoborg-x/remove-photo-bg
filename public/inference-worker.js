@@ -31,7 +31,10 @@ let lastProvider = 'none';
 let modelUrl = null;
 let lastError = null;
 let adapterLabel = '';
-const MODEL_SIZE = 1024;
+let MODEL_SIZE = 512;
+// The shipped BiRefNet_lite_512 export applies sigmoid internally and returns
+// probabilities; the older 1024 export returned raw logits.
+let outputIsProbability = true;
 
 function post(msg) {
   self.postMessage(msg);
@@ -149,9 +152,14 @@ async function runInference(tensor) {
     }
     const timeMs = performance.now() - t0;
     const out = results.output_image.data;
-    // output_image is [1, 1, 1024, 1024] raw logits. Sigmoid is applied on the
-    // main thread during post-processing.
-    const mask = new Float32Array(out);
+    // Normalise to a [0,1] probability map here, so the main thread never has to
+    // know whether this export emits logits or probabilities.
+    const mask = new Float32Array(out.length);
+    if (outputIsProbability) {
+      mask.set(out);
+    } else {
+      for (let i = 0; i < out.length; i++) mask[i] = 1 / (1 + Math.exp(-out[i]));
+    }
     return { mask, timeMs };
   } finally {
     feeds.input_image.dispose?.();
@@ -163,6 +171,10 @@ self.onmessage = async (e) => {
   try {
     if (msg.kind === 'set-model') {
       modelUrl = msg.modelUrl;
+      if (msg.inputSize) MODEL_SIZE = msg.inputSize;
+      if (typeof msg.outputIsProbability === 'boolean') {
+        outputIsProbability = msg.outputIsProbability;
+      }
       post({ kind: 'loading-model', at: 10 });
       // Only attempt WebGPU if the browser actually exposes it. `?provider=wasm`
       // forces the CPU path, which is the escape hatch when a GPU driver stalls.

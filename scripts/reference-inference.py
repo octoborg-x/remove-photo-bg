@@ -2,10 +2,9 @@
 """Native-CPU reference inference for Phase 1 correctness validation.
 
 Matches the upstream BiRefNet pre/post-processing (handler.py):
-  - pad/resize to (1024, 1024) bilinear
+  - pad/resize to (MODEL_SIZE, MODEL_SIZE) bilinear
   - rescale 1/255, ImageNet normalize
-  - forward -> logits [1,1,1024,1024]
-  - sigmoid on last map -> soft mask [0,1]
+  - forward -> probability map [1,1,MODEL_SIZE,MODEL_SIZE] (sigmoid is baked in)
   - resize mask back to original size
 
 Outputs:
@@ -25,10 +24,10 @@ import numpy as np
 import onnxruntime as ort
 from PIL import Image
 
-MODEL_SIZE = 1024
+MODEL_SIZE = 512
 MODEL_URL = os.environ.get(
     "BIREFNET_MODEL",
-    "public/models/model_fp16.onnx",
+    "public/models/model_512.onnx",
 )
 
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -69,11 +68,12 @@ def main() -> None:
         image = Image.open(path)
         tensor = preprocess(image)
         t0 = time.perf_counter()
-        logits = sess.run([out_name], {in_name: tensor})[0]
+        preds = sess.run([out_name], {in_name: tensor})[0]
         elapsed = time.perf_counter() - t0
 
-        # Sigmoid on last map, then resize to original size (upstream logic).
-        mask = 1.0 / (1.0 + np.exp(-logits[0, -1].astype(np.float64)))
+        # This export already applies sigmoid, so the map is a probability in
+        # [0,1]. Resize it back to the original image size.
+        mask = np.clip(preds[0, -1].astype(np.float64), 0.0, 1.0)
         mask = (mask * 255.0).round().astype(np.uint8)
         mask_pil = Image.fromarray(mask, mode="L").resize(image.size, Image.BILINEAR)
 

@@ -1,0 +1,19 @@
+{
+  "image": "glass-wine.jpg",
+  "provider": "wasm",
+  "stage": "Done",
+  "elapsed_s": 24.6,
+  "baseline_mb": 940,
+  "after_model_load_mb": 1859,
+  "after_run_mb": 2152,
+  "peak_mb": 2206,
+  "peak_above_baseline_mb": 1266,
+  "samples_n": 150,
+  "timings": [
+    "Inference 1: 5731.9 ms",
+    "Inference 2: 4444.9 ms",
+    "Inference 3: 4556.4 ms",
+    "Inference 4: 4464.0 ms",
+    "Inference 5: 4644.3 ms"
+  ]
+}

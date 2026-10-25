@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BiRefNet_lite Phase 1 — browser smoke test</title>
+    <style>
+      /* Minimal, plain styling for the Phase 1 smoke-test harness. */
+      body { font-family: system-ui, sans-serif; margin: 2rem; }
+      pre { background: #f4f4f4; padding: 1rem; white-space: pre-wrap; }
+      img { max-width: 45%; display: inline-block; margin: 0.5rem 0.5rem 0 0; }
+      .stage { font-size: 0.9rem; color: #333; }
+      canvas { max-width: 45%; border: 1px solid #ccc; }
+      button { margin-right: 0.5rem; }
+    </style>
+  </head>
+  <body>
+    <h1>BiRefNet_lite — browser smoke test</h1>
+    <p class="stage" id="stage">Starting…</p>
+    <button id="pickFile">Choose image</button>
+    <button id="runAll" disabled>Run smoke test (5 warm inferences)</button>
+    <div>
+      <strong>Input image</strong>
+      <div id="inputBox"></div>
+    </div>
+    <div>
+      <strong>Output (transparent PNG)</strong>
+      <div id="outputBox"></div>
+    </div>
+    <pre id="log"></pre>
+
+    <!-- The worker is loaded as a module worker via Vite. -->
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

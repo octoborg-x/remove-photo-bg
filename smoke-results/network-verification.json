@@ -1,0 +1,10 @@
+{
+  "modelReady": true,
+  "provider": "wasm",
+  "stage": "Inference 1/5…",
+  "pageUrl": "http://localhost:5173/",
+  "totalRequests": 9,
+  "externalRequests": [],
+  "fetchOrXhrRequests": [],
+  "verdict": "PASS — all requests first-party; no fetch/XHR; image pixels stayed on device"
+}

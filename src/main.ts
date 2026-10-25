@@ -33,6 +33,15 @@ const WARM_RUNS = 5;
 const timings: number[] = [];
 let loadTimeMs = 0;
 
+function setOutputStatus(text: string): void {
+  outputBox.innerHTML = '';
+  if (!text) return;
+  const p = document.createElement('p');
+  p.className = 'hint';
+  p.textContent = text;
+  outputBox.appendChild(p);
+}
+
 function log(msg: string): void {
   logEl.textContent += msg + '\n';
 }
@@ -170,7 +179,10 @@ async function initWorker(): Promise<void> {
       log(`Inference ${timings.length}: ${msg.ms.toFixed(1)} ms`);
       pending.resolve(msg.ms);
     } else if (msg.kind === 'result-ready') {
-      if (!currentImageData) return;
+      if (!currentImageData) {
+        log('WARNING: got a result with no loaded image; ignoring');
+        return;
+      }
       const { mask, width, height } = msg;
       const maskU8 = logitsToMask(mask);
       const upscaled = upscaleMask(maskU8, 1024, 1024, currentImageData.width, currentImageData.height);
@@ -182,19 +194,25 @@ async function initWorker(): Promise<void> {
       ctx.putImageData(out, 0, 0);
       const png = canvasToPngDataUrl(canvas);
 
+      let opaquePx = 0;
+      for (let i = 3; i < out.data.length; i += 4) if (out.data[i] > 127) opaquePx++;
+
       outputBox.innerHTML = '';
       const img = document.createElement('img');
       img.src = png;
+      img.alt = 'Background removed';
       outputBox.appendChild(img);
 
-      // Also offer a download link.
       const a = document.createElement('a');
       a.href = png;
       a.download = `smoke-${width}x${height}.png`;
       a.textContent = 'Download transparent PNG';
       outputBox.appendChild(a);
 
-      log(`Rendered transparent PNG (${width}x${height}), real alpha.`);
+      log(`Rendered transparent PNG (${width}x${height}), ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
+      // A uniform mask means the model did not segment anything; say so rather
+      // than leaving the user staring at a blank (fully transparent) image.
+      if (opaquePx === 0) log('WARNING: the mask is fully transparent, so there is no subject to show.');
     } else if (msg.kind === 'error') {
       // Errors tied to a run are delivered through that run's promise, so the
       // caller reports them once. Anything else is surfaced here.
@@ -230,6 +248,7 @@ function runOneInference(): Promise<number> {
   if (!currentImageData || !worker) return Promise.reject(new Error('No image loaded'));
   const imageData = currentImageData;
   setStage(`Inference ${timings.length + 1}/${WARM_RUNS}…`);
+  setOutputStatus(`Running inference ${timings.length + 1}/${WARM_RUNS}…`);
   const tensor = imageDataToTensor(imageData);
   const runId = nextRunId++;
   return new Promise<number>((resolve, reject) => {
@@ -304,12 +323,14 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
     return null;
   }
   timings.length = 0;
-  outputBox.innerHTML = '';
+  setOutputStatus('Preparing inference…');
   for (let i = 0; i < runs; i++) {
     try {
       await runOneInference();
     } catch (e) {
-      error(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      error(message);
+      setOutputStatus(`No output: ${message}`);
       if (currentImageData) runAllBtn.disabled = false;
       return null;
     }

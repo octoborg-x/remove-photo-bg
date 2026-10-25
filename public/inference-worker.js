@@ -85,13 +85,30 @@ function describeAdapter() {
   }
 }
 
+// A WebGPU run that never settles leaves the UI with no output and no error, so
+// bound it. The GPU should finish in seconds; the WASM fallback legitimately
+// takes many minutes, so no watchdog is applied there.
+const WEBGPU_RUN_TIMEOUT_MS = 120000;
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function runInference(tensor) {
   const feeds = {
     input_image: new ort.Tensor('float32', tensor, [1, 3, MODEL_SIZE, MODEL_SIZE]),
   };
   const t0 = performance.now();
   try {
-    const results = await session.run(feeds);
+    const run = session.run(feeds);
+    const results =
+      lastProvider === 'webgpu'
+        ? await withTimeout(run, WEBGPU_RUN_TIMEOUT_MS, `WebGPU run did not finish in ${WEBGPU_RUN_TIMEOUT_MS / 1000}s (device lost or allocation stalled)`)
+        : await run;
     const timeMs = performance.now() - t0;
     const out = results.output_image.data;
     // output_image is [1, 1, 1024, 1024] raw logits. Sigmoid is applied on the
@@ -132,8 +149,10 @@ self.onmessage = async (e) => {
         await createSession(['wasm']);
         result = await runInference(msg.tensor);
       }
-      post({ kind: 'inference-time', ms: result.timeMs, runId: msg.runId });
+      // result-ready first: the main thread renders the image before the promise
+      // for this run settles, so the output is on screen before the summary.
       post({ kind: 'result-ready', mask: result.mask, width: msg.width, height: msg.height });
+      post({ kind: 'inference-time', ms: result.timeMs, runId: msg.runId });
       return;
     }
     if (msg.kind === 'dispose') {

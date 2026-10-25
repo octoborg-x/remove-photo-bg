@@ -1,0 +1,47 @@
+[
+  {
+    "method": "GET",
+    "resourceType": "document",
+    "url": "http://localhost:5173/"
+  },
+  {
+    "method": "GET",
+    "resourceType": "script",
+    "url": "http://localhost:5173/@vite/client"
+  },
+  {
+    "method": "GET",
+    "resourceType": "script",
+    "url": "http://localhost:5173/src/main.ts"
+  },
+  {
+    "method": "GET",
+    "resourceType": "script",
+    "url": "http://localhost:5173/node_modules/vite/dist/client/env.mjs"
+  },
+  {
+    "method": "GET",
+    "resourceType": "script",
+    "url": "http://localhost:5173/src/features/background-removal/image-preprocess.ts"
+  },
+  {
+    "method": "GET",
+    "resourceType": "script",
+    "url": "http://localhost:5173/src/features/background-removal/mask-postprocess.ts"
+  },
+  {
+    "method": "GET",
+    "resourceType": "script",
+    "url": "http://localhost:5173/src/features/background-removal/export-image.ts"
+  },
+  {
+    "method": "GET",
+    "resourceType": "script",
+    "url": "http://localhost:5173/inference-worker.js"
+  },
+  {
+    "method": "GET",
+    "resourceType": "image",
+    "url": "http://localhost:5173/test-images/glass-wine.jpg"
+  }
+]

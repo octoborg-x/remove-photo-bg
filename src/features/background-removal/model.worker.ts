@@ -27,8 +27,16 @@ const MODEL_SIZE = 1024;
 const ALLOC_FAILURE =
   /bad_alloc|out of memory|outofmemory|allocation failed|allocation error|exceeds the (max|buffer)/i;
 
-function isAllocationFailure(err: unknown): boolean {
-  return ALLOC_FAILURE.test(err instanceof Error ? err.message : String(err));
+// A lost device and a dead adapter surface as these strings.
+const DEVICE_LOST =
+  /device (was )?lost|device removed|adapter (was )?lost|context lost|GPUDevice/i;
+
+function isProviderFailure(err: unknown): boolean {
+  // A timed-out run never settled, so switching providers is the only way
+  // forward. It is flagged by name rather than matched as text.
+  if (err instanceof Error && err.name === 'ProviderTimeoutError') return true;
+  const text = err instanceof Error ? err.message : String(err);
+  return ALLOC_FAILURE.test(text) || DEVICE_LOST.test(text);
 }
 
 async function createSession(
@@ -52,13 +60,25 @@ async function createSession(
   throw lastError ?? new Error(`No available execution provider (tried: ${providers.join(', ')})`);
 }
 
-// Adapter name/limits make memory failures diagnosable from the page log.
+type AdapterLike = {
+  info?: Record<string, string>;
+  limits?: { maxStorageBufferBindingSize?: number };
+  features?: Set<string>;
+};
+
+function adapterInfo(): AdapterLike | undefined {
+  return ort.env.webgpu?.adapter as AdapterLike | undefined;
+}
+
+function gpuFeatures(): string[] {
+  const features = adapterInfo()?.features;
+  return features ? Array.from(features) : [];
+}
+
+// Adapter name/limits/features make memory and precision failures diagnosable
+// from the page log.
 function describeAdapter(): string {
-  type AdapterLike = {
-    info?: Record<string, string>;
-    limits?: { maxStorageBufferBindingSize?: number };
-  };
-  const adapter = ort.env.webgpu?.adapter as AdapterLike | undefined;
+  const adapter = adapterInfo();
   if (!adapter) return '';
   const info = adapter.info ?? {};
   const limits = adapter.limits ?? {};
@@ -68,18 +88,27 @@ function describeAdapter(): string {
   const maxBuf = limits.maxStorageBufferBindingSize
     ? `, maxStorageBufferBindingSize=${Math.round(limits.maxStorageBufferBindingSize / 1048576)}MB`
     : '';
-  return (name || 'unknown adapter') + maxBuf;
+  const f16 = adapter.features
+    ? `, shader-f16=${adapter.features.has('shader-f16') ? 'yes' : 'no'}`
+    : '';
+  return (name || 'unknown adapter') + maxBuf + f16;
 }
 
 // A WebGPU run that never settles leaves the UI with no output and no error, so
 // bound it. The GPU should finish in seconds; the WASM fallback legitimately
 // takes many minutes, so no watchdog is applied there.
-const WEBGPU_RUN_TIMEOUT_MS = 120000;
+const FIRST_WEBGPU_TIMEOUT_MS = 180000;
+const WEBGPU_TIMEOUT_MS = 120000;
+let webgpuRunCount = 0;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), ms);
+    timer = setTimeout(() => {
+      const err = new Error(message);
+      err.name = 'ProviderTimeoutError';
+      reject(err);
+    }, ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
@@ -93,14 +122,25 @@ async function runInference(
   const t0 = performance.now();
   try {
     const run = session!.run(feeds);
-    const results =
-      lastProvider === 'webgpu'
-        ? await withTimeout(
-            run,
-            WEBGPU_RUN_TIMEOUT_MS,
-            `WebGPU run did not finish in ${WEBGPU_RUN_TIMEOUT_MS / 1000}s (device lost or allocation stalled)`,
-          )
-        : await run;
+    let results;
+    if (lastProvider === 'webgpu') {
+      const limit =
+        webgpuRunCount === 0 ? FIRST_WEBGPU_TIMEOUT_MS : WEBGPU_TIMEOUT_MS;
+      webgpuRunCount++;
+      try {
+        results = await withTimeout(
+          run,
+          limit,
+          `WebGPU run did not finish in ${limit / 1000}s (device lost, or the shader stalled)`,
+        );
+      } catch (err) {
+        // Race() leaves the GPU run pending; swallow its eventual rejection.
+        run.catch(() => {});
+        throw err;
+      }
+    } else {
+      results = await run;
+    }
     const timeMs = performance.now() - t0;
 
     const out = results.output_image.data as Float32Array;
@@ -123,7 +163,18 @@ self.onmessage = async (e: MessageEvent<MainToWorkerMessage>) => {
       // In bare headless/WASM environments this avoids poisoning the WASM fallback.
       const hasWebGPU =
         typeof (self as unknown as { navigator?: { gpu?: unknown } }).navigator?.gpu !== 'undefined';
-      await createSession(hasWebGPU ? ['webgpu', 'wasm'] : ['wasm']);
+      const forced = msg.forceProvider as
+        | ort.InferenceSession.ExecutionProviderName
+        | undefined;
+      await createSession(forced ? [forced] : hasWebGPU ? ['webgpu', 'wasm'] : ['wasm']);
+      if (lastProvider === 'webgpu' && !gpuFeatures().includes('shader-f16')) {
+        post({
+          kind: 'adapter-warning',
+          message:
+            'this GPU does not support shader-f16, but the model is float16. ' +
+            'WebGPU will be slow or may stall; use ?provider=wasm to force the CPU.',
+        });
+      }
       post({ kind: 'loading-model', at: 90 });
       post({ kind: 'load-time', ms: 0, provider: lastProvider, adapter: adapterLabel });
       return;
@@ -134,7 +185,7 @@ self.onmessage = async (e: MessageEvent<MainToWorkerMessage>) => {
       try {
         result = await runInference(msg.tensor);
       } catch (err) {
-        if (lastProvider !== 'webgpu' || !isAllocationFailure(err)) throw err;
+        if (lastProvider !== 'webgpu' || !isProviderFailure(err)) throw err;
         // The GPU could not hold this model's intermediate tensors. Rebuild the
         // session on the CPU provider and retry once so the user still gets a result.
         post({

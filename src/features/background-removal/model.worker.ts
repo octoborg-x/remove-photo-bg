@@ -71,6 +71,19 @@ function describeAdapter(): string {
   return (name || 'unknown adapter') + maxBuf;
 }
 
+// A WebGPU run that never settles leaves the UI with no output and no error, so
+// bound it. The GPU should finish in seconds; the WASM fallback legitimately
+// takes many minutes, so no watchdog is applied there.
+const WEBGPU_RUN_TIMEOUT_MS = 120000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function runInference(
   tensor: Float32Array,
 ): Promise<{ mask: Float32Array; timeMs: number }> {
@@ -79,7 +92,15 @@ async function runInference(
   };
   const t0 = performance.now();
   try {
-    const results = await session!.run(feeds);
+    const run = session!.run(feeds);
+    const results =
+      lastProvider === 'webgpu'
+        ? await withTimeout(
+            run,
+            WEBGPU_RUN_TIMEOUT_MS,
+            `WebGPU run did not finish in ${WEBGPU_RUN_TIMEOUT_MS / 1000}s (device lost or allocation stalled)`,
+          )
+        : await run;
     const timeMs = performance.now() - t0;
 
     const out = results.output_image.data as Float32Array;
@@ -127,8 +148,10 @@ self.onmessage = async (e: MessageEvent<MainToWorkerMessage>) => {
         await createSession(['wasm']);
         result = await runInference(msg.tensor);
       }
-      post({ kind: 'inference-time', ms: result.timeMs, runId: msg.runId });
+      // result-ready first: the main thread renders the image before the promise
+      // for this run settles, so the output is on screen before the summary.
       post({ kind: 'result-ready', mask: result.mask, width: msg.width, height: msg.height });
+      post({ kind: 'inference-time', ms: result.timeMs, runId: msg.runId });
       return;
     }
     if (msg.kind === 'dispose') {

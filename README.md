@@ -92,7 +92,17 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
   The input size is not tunable (the graph hard-codes 1024 via `Split`/`Resize`
   constants, so smaller inputs fail too), and no lower-memory quantised variant
   is published for `BiRefNet_lite`. Mitigations in place: the high-performance
-  GPU adapter is requested, and a WebGPU allocation failure automatically
-  rebuilds the session on the WASM provider and reports the fallback in the log.
+  GPU adapter is requested, and a WebGPU failure automatically rebuilds the
+  session on the WASM provider and reports the fallback in the log.
+- WebGPU runs are bounded by a watchdog: 180 s for the first run (it compiles
+  shaders) and 120 s afterwards. A run that never settles would otherwise leave
+  the UI with no output and no error. On timeout the run falls back to WASM.
+  WASM runs are deliberately unbounded — they are slow, not stalled.
+- The shipped model is float16 internally. Adapters without the `shader-f16`
+  feature emulate it, which is slow and may stall; the log reports
+  `shader-f16=yes|no` for the chosen adapter and warns when it is missing.
+- `?provider=wasm` forces the CPU path. Use it to rule the GPU out when
+  diagnosing a stall, or to get a result on a machine whose driver cannot run
+  this model.
 - The full product UI (Phase 2), legal docs (Phase 3), and test suite (Phase 4)
   are not built yet per the Phase-1 prompt.

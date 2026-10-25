@@ -61,16 +61,30 @@ function error(msg: string): void {
 
 const OOM_PATTERN = /bad_alloc|out of memory|outofmemory|allocation failed|allocation error/i;
 
+const MEMORY_NOTE =
+  'BiRefNet at its fixed 1024x1024 input needs ~1.8 GB of transient memory for its ' +
+  'intermediate tensors (the largest single one is 411 MB).';
+
 // ORT surfaces provider-level allocation failures as bare C++ messages such as
-// "failed to call OrtRun(). ... std::bad_alloc". Give the user the actual next step.
+// "failed to call OrtRun(). ... std::bad_alloc". Give the user the actual next
+// step, which depends on which provider just failed: on CPU there is nothing
+// left to fall back to.
 function describeError(msg: string): string {
   if (!OOM_PATTERN.test(msg)) return msg;
+  if (window.smokeProvider === 'wasm') {
+    return (
+      `${msg}\n` +
+      `The CPU (WASM) backend could not allocate this model. ${MEMORY_NOTE} ` +
+      'That exceeds what the browser\'s WASM heap can allocate, and there is no ' +
+      'further fallback from CPU. This model requires WebGPU: run without ' +
+      '?provider=wasm on a device whose WebGPU driver can run it.'
+    );
+  }
   return (
     `${msg}\n` +
-    'The browser ran out of memory while allocating this model\'s intermediate tensors. ' +
-    'BiRefNet at 1024x1024 needs ~1.8 GB of transient memory (its largest single tensor is 411 MB). ' +
-    'Close other tabs/apps and retry; if it keeps failing the GPU cannot fit this model and ' +
-    'the CPU fallback will be used (much slower).'
+    `The browser ran out of memory while allocating this model. ${MEMORY_NOTE} ` +
+    'Close other tabs/apps and retry. The GPU could not fit it and the CPU ' +
+    'fallback failed as well, so this device cannot run this model.'
   );
 }
 

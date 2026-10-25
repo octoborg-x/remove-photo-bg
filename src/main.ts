@@ -162,10 +162,12 @@ async function initWorker(): Promise<void> {
       runAllBtn.disabled = !currentImage;
       pickFileBtn.disabled = false;
       settleModel(null);
+    } else if (msg.kind === 'adapter-warning') {
+      log(`WARNING: ${msg.message}`);
     } else if (msg.kind === 'provider-fallback') {
       log(
         `Provider fallback: ${msg.from} → ${msg.to} (${msg.reason})\n` +
-          'WARNING: the GPU could not allocate this model. Inference is now running on the CPU, ' +
+          'WARNING: the GPU could not run this model. Inference is now running on the CPU, ' +
           'which can take several minutes per image.',
       );
       setStage(`Running on CPU (${msg.to}) — this is slow, please wait…`);
@@ -228,7 +230,9 @@ async function initWorker(): Promise<void> {
       }
     }
   };
-  worker.postMessage({ kind: 'set-model', modelUrl: MODEL_URL });
+  const forced = new URLSearchParams(location.search).get('provider');
+  if (forced) log(`Provider forced to: ${forced} (from ?provider=)`);
+  worker.postMessage({ kind: 'set-model', modelUrl: MODEL_URL, forceProvider: forced || undefined });
 }
 
 type PendingRun = { resolve: (ms: number) => void; reject: (err: Error) => void };
@@ -249,6 +253,9 @@ function runOneInference(): Promise<number> {
   const imageData = currentImageData;
   setStage(`Inference ${timings.length + 1}/${WARM_RUNS}…`);
   setOutputStatus(`Running inference ${timings.length + 1}/${WARM_RUNS}…`);
+  if (window.smokeProvider === 'webgpu' && timings.length === 0) {
+    log('First GPU run compiles shaders; this can take a minute or two.');
+  }
   const tensor = imageDataToTensor(imageData);
   const runId = nextRunId++;
   return new Promise<number>((resolve, reject) => {

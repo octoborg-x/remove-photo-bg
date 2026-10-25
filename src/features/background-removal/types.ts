@@ -4,6 +4,7 @@ export type WorkerProgressMessage =
   | { kind: 'loading-model'; at: number }
   | { kind: 'load-time'; ms: number; provider: string; adapter?: string }
   | { kind: 'provider-fallback'; from: string; to: string; reason: string }
+  | { kind: 'adapter-warning'; message: string }
   | { kind: 'inference-time'; ms: number; runId: number }
   | {
       kind: 'result-ready';
@@ -15,7 +16,7 @@ export type WorkerProgressMessage =
 
 // Main -> worker
 export type MainToWorkerMessage =
-  | { kind: 'set-model'; modelUrl: string }
+  | { kind: 'set-model'; modelUrl: string; forceProvider?: string }
   | {
       kind: 'run';
       runId: number;

@@ -1,8 +1,8 @@
 {
   "modelReady": true,
   "provider": "wasm",
-  "stage": "Inference 1/5…",
-  "pageUrl": "http://localhost:5173/",
+  "stage": "Done",
+  "pageUrl": "http://localhost:5173/?provider=wasm",
   "totalRequests": 9,
   "externalRequests": [],
   "fetchOrXhrRequests": [],

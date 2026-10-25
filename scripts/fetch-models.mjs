@@ -1,6 +1,13 @@
-// Downloads the pinned BiRefNet_lite ONNX artifacts and verifies their SHA-256.
-// Phase 1 (model feasibility): fetch exactly the fp16 ONNX export from
-// onnx-community/BiRefNet_lite-ONNX at revision de15b22ba131738a16dff04aab8bdf8dc32e3ac1.
+// Downloads the pinned BiRefNet_lite ONNX artifact and verifies its SHA-256.
+//
+// The model is the official BiRefNet_lite backbone exported at a 512x512 fixed
+// input. The 1024x1024 export peaks at ~1.5 GB of transient activation memory,
+// which no browser WASM heap or mobile GPU could satisfy (std::bad_alloc on
+// OrtRun). At 512 the peak is ~1.1 GB and the same model runs everywhere.
+//
+// Provenance: every backbone tensor in this file is bit-identical to
+// ZhengPeng7/BiRefNet_lite (model.safetensors), and the decoder convolutions
+// are that checkpoint with BatchNorm folded in (float32 rounding only).
 // Also copies the onnxruntime-web WASM files we need into public/wasm.
 //
 // Usage: node scripts/fetch-models.mjs
@@ -14,9 +21,9 @@ const ROOT = resolve(__dirname, '..');
 
 const MODELS = [
   {
-    url: 'https://huggingface.co/onnx-community/BiRefNet_lite-ONNX/resolve/de15b22ba131738a16dff04aab8bdf8dc32e3ac1/onnx/model_fp16.onnx',
-    out: 'public/models/model_fp16.onnx',
-    sha256: 'd39b897ceb16ae654c1731f3dba0cf9b368d9cae74b5a57459b455cc8bfec402',
+    url: 'https://huggingface.co/Phoenix-ActuallyFree/BiRefNet_lite_512-ONNX/resolve/main/onnx/model.onnx',
+    out: 'public/models/model_512.onnx',
+    sha256: 'eaafaa10f19c63b77e2bae77bf4b2f59054c208ea08b8c6648f95ef36a3b6b87',
   },
 ];
 

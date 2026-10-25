@@ -12,13 +12,16 @@ Each component remains subject to its own licence and notices.
 
 - Upstream repository: ZhengPeng7 / BiRefNet — https://github.com/ZhengPeng7/BiRefNet
 - Model page: https://huggingface.co/ZhengPeng7/BiRefNet_lite
-- ONNX conversion used (third-party, pinned): https://huggingface.co/onnx-community/BiRefNet_lite-ONNX
-- Exact revision: `de15b22ba131738a16dff04aab8bdf8dc32e3ac1`
+- ONNX conversion used (third-party): https://huggingface.co/Phoenix-ActuallyFree/BiRefNet_lite_512-ONNX
+- Exact artifact: `onnx/model.onnx` (fixed 512×512 input)
+- File size: 193,514,682 bytes (≈185 MB)
+- SHA-256: `eaafaa10f19c63b77e2bae77bf4b2f59054c208ea08b8c6648f95ef36a3b6b87`
   (see `scripts/fetch-models.mjs`)
-- Exact artifact: `onnx/model_fp16.onnx`
-- File size: 114,538,221 bytes (≈109 MB)
-- SHA-256: `d39b897ceb16ae654c1731f3dba0cf9b368d9cae74b5a57459b455cc8bfec402`
 - Upstream vs third-party: third-party ONNX export of the upstream checkpoint
+- Weights provenance: verified against `ZhengPeng7/BiRefNet_lite`
+  `model.safetensors`. Backbone tensors are bit-identical; the decoder
+  convolutions are the upstream weights with BatchNorm folded in (differences
+  ~1e-7, i.e. float32 rounding). See `MODEL_CARD.md` for the method.
 - Published licence declaration: MIT (per the Hugging Face model card for
   `ZhengPeng7/BiRefNet_lite`)
 - Licence source: [ZhengPeng7/BiRefNet license](https://github.com/ZhengPeng7/BiRefNet/blob/e49b1256aa0eabb8f9ee03f0d01b268a79a826c4/LICENSE)

@@ -81,26 +81,32 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 
 ## Known Phase-1 limitations
 
-- WASM/CPU fallback inference is very slow on this 1024×1024 fixed-input model
-  (single inference > 10 min in the Phase-1 sandbox; native CPU ~12 s). WebGPU
-  is the only viable production path and could not be measured in the sandbox
-  (no GPU/WebGPU).
-- Memory: the model's decoder materialises very large intermediate tensors at
-  the fixed 1024×1024 input — the largest single activation is 411 MB and peak
-  transient usage is roughly 1.8 GB. Devices (or GPU adapters) that cannot
-  allocate that fail inside `OrtRun()` with `ERROR_CODE: 6 … std::bad_alloc`.
-  The input size is not tunable (the graph hard-codes 1024 via `Split`/`Resize`
-  constants, so smaller inputs fail too), and no lower-memory quantised variant
-  is published for `BiRefNet_lite`. Mitigations in place: the high-performance
-  GPU adapter is requested, and a WebGPU failure automatically rebuilds the
-  session on the WASM provider and reports the fallback in the log.
+- Input resolution is the dominant memory cost, and it is fixed per export.
+  The original 1024×1024 export peaked at ~1.5 GB of transient activation memory
+  in native CPU inference (largest single tensor 411 MB), and its graph
+  hard-codes 1024 via `Split`/`Resize` constants, so it cannot be fed a smaller
+  image. That exceeded both the browser's WASM heap and the GPU memory of the
+  target devices, failing inside `OrtRun()` with `ERROR_CODE: 6 … std::bad_alloc`.
+  The shipped model is therefore the same official `BiRefNet_lite` backbone
+  exported at a fixed 512×512 input, which peaks at ~1.1 GB and runs on both
+  WebGPU and WASM. Mask quality is unaffected in practice; only very fine edge
+  detail is limited by the coarser input grid.
+- WASM/CPU inference on the 512×512 export takes roughly 3–6 s per image
+  (native CPU ~2.2 s), so the CPU path is usable rather than a last resort.
+- A quantised variant was evaluated and rejected: dynamic int8 shrank the file
+  by only 12% and ran 2.3× slower, because Conv dominates and its kernels stay
+  float. fp16 weights ran ~2× slower on CPU for the same reason.
+- Mitigations in place: the high-performance GPU adapter is requested, and a
+  WebGPU failure automatically rebuilds the session on the WASM provider and
+  reports the fallback in the log.
 - WebGPU runs are bounded by a watchdog: 180 s for the first run (it compiles
   shaders) and 120 s afterwards. A run that never settles would otherwise leave
   the UI with no output and no error. On timeout the run falls back to WASM.
   WASM runs are deliberately unbounded — they are slow, not stalled.
-- The shipped model is float16 internally. Adapters without the `shader-f16`
-  feature emulate it, which is slow and may stall; the log reports
-  `shader-f16=yes|no` for the chosen adapter and warns when it is missing.
+- The shipped model is float32 internally, so WebGPU no longer depends on the
+  adapter's `shader-f16` feature (fp16 emulation was the cause of the Intel
+  Gen-9 stalls). The log still reports `shader-f16=yes|no` for the chosen
+  adapter, since other model builds may require it.
 - `?provider=wasm` forces the CPU path. Use it to rule the GPU out when
   diagnosing a stall, or to get a result on a machine whose driver cannot run
   this model.

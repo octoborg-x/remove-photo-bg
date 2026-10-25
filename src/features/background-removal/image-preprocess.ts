@@ -1,8 +1,8 @@
 // Pre-process an ImageData (already decoded RGB) into the model's expected
-// NCHW Float32 tensor [1, 3, 1024, 1024].
+// NCHW Float32 tensor [1, 3, MODEL_SIZE, MODEL_SIZE].
 //
 // Confirmed from the upstream code/config:
-// - resize to (1024, 1024) with bilinear interpolation (resample=2)
+// - resize to (MODEL_SIZE, MODEL_SIZE) with bilinear interpolation (resample=2)
 // - rescale by 1/255
 // - normalize with ImageNet mean/std [0.485,0.456,0.406] / [0.229,0.224,0.225]
 //
@@ -12,7 +12,11 @@
 // acceptable for a smoke test, but the pipeline (inference + mask + alpha) must
 // be validated end-to-end.
 
-export const MODEL_SIZE = 1024;
+// The model's input is square and fixed by its export. BiRefNet_lite is
+// exported at 1024x1024 and _lite_512 at 512x512; the smaller input needs ~4x
+// less activation memory, which is the difference between fitting in a browser
+// and failing with std::bad_alloc.
+export const MODEL_SIZE = 512;
 
 export function resizeToModel(
   source: ImageData,

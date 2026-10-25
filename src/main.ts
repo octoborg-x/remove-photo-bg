@@ -3,16 +3,18 @@
 // - sends it to the worker for 5 warm inferences
 // - composites the mask and renders/downloads a transparent PNG
 // - reports timings and the execution provider
-import { imageDataToTensor } from './features/background-removal/image-preprocess';
+import { imageDataToTensor, MODEL_SIZE } from './features/background-removal/image-preprocess';
 import {
-  logitsToMask,
+  probabilityToMask,
   upscaleMask,
   applyMaskToImage,
 } from './features/background-removal/mask-postprocess';
 import { canvasToPngDataUrl } from './features/background-removal/export-image';
 import type { WorkerProgressMessage } from './features/background-removal/types';
 
-const MODEL_URL = '/models/model_fp16.onnx';
+const MODEL_URL = '/models/model_512.onnx';
+// This export applies sigmoid internally, so its output is already [0,1].
+const MODEL_OUTPUT_IS_PROBABILITY = true;
 
 const stageEl = document.getElementById('stage')!;
 const logEl = document.getElementById('log')! as HTMLPreElement;
@@ -62,8 +64,8 @@ function error(msg: string): void {
 const OOM_PATTERN = /bad_alloc|out of memory|outofmemory|allocation failed|allocation error/i;
 
 const MEMORY_NOTE =
-  'BiRefNet at its fixed 1024x1024 input needs ~1.8 GB of transient memory for its ' +
-  'intermediate tensors (the largest single one is 411 MB).';
+  `BiRefNet_lite at its fixed ${MODEL_SIZE}x${MODEL_SIZE} input needs ~1 GB of transient ` +
+  'memory for its intermediate tensors.';
 
 // ORT surfaces provider-level allocation failures as bare C++ messages such as
 // "failed to call OrtRun(). ... std::bad_alloc". Give the user the actual next
@@ -76,8 +78,8 @@ function describeError(msg: string): string {
       `${msg}\n` +
       `The CPU (WASM) backend could not allocate this model. ${MEMORY_NOTE} ` +
       'That exceeds what the browser\'s WASM heap can allocate, and there is no ' +
-      'further fallback from CPU. This model requires WebGPU: run without ' +
-      '?provider=wasm on a device whose WebGPU driver can run it.'
+      'further fallback from CPU. Retry without ?provider=wasm, or close other tabs ' +
+      'to free memory.'
     );
   }
   return (
@@ -200,8 +202,8 @@ async function initWorker(): Promise<void> {
         return;
       }
       const { mask, width, height } = msg;
-      const maskU8 = logitsToMask(mask);
-      const upscaled = upscaleMask(maskU8, 1024, 1024, currentImageData.width, currentImageData.height);
+      const maskU8 = probabilityToMask(mask);
+      const upscaled = upscaleMask(maskU8, MODEL_SIZE, MODEL_SIZE, currentImageData.width, currentImageData.height);
       const out = applyMaskToImage(currentImageData, upscaled);
       const canvas = document.createElement('canvas');
       canvas.width = out.width;
@@ -246,7 +248,13 @@ async function initWorker(): Promise<void> {
   };
   const forced = new URLSearchParams(location.search).get('provider');
   if (forced) log(`Provider forced to: ${forced} (from ?provider=)`);
-  worker.postMessage({ kind: 'set-model', modelUrl: MODEL_URL, forceProvider: forced || undefined });
+  worker.postMessage({
+    kind: 'set-model',
+    modelUrl: MODEL_URL,
+    inputSize: MODEL_SIZE,
+    outputIsProbability: MODEL_OUTPUT_IS_PROBABILITY,
+    forceProvider: forced || undefined,
+  });
 }
 
 type PendingRun = { resolve: (ms: number) => void; reject: (err: Error) => void };
@@ -289,7 +297,7 @@ function finishedRun(): void {
   log(`Warm inference timings (${timings.length} runs): ${timings.map((t) => t.toFixed(1)).join(', ')} ms`);
   log(`Average: ${avg.toFixed(1)} ms`);
   log(`Provider: ${window.smokeProvider || '<reported above>'}`);
-  log(`Model download size (fp16): ~109 MB (see report)`);
+  log(`Model download size: ~185 MB (model_512.onnx)`);
   runAllBtn.disabled = false;
 }
 

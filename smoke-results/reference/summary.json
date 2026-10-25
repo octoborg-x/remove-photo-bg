@@ -1,0 +1,23 @@
+{
+  "model": "public/models/model_fp16.onnx",
+  "inputs": [],
+  "images": [
+    {
+      "image": "test-images/glass-wine.jpg",
+      "original_size": [
+        960,
+        1280
+      ],
+      "infer_ms": 11828.0,
+      "mask_png": "glass-wine.mask.png",
+      "mask_stats": {
+        "mean": 100.256799,
+        "min": 0,
+        "max": 255,
+        "p50": 0,
+        "p90": 255,
+        "p99": 255
+      }
+    }
+  ]
+}

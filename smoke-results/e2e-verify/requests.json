@@ -1,0 +1,27 @@
+[
+  {
+    "method": "GET",
+    "url": "http://localhost:5199/",
+    "resourceType": "document"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:5199/assets/index-BBRRYM9v.js",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:5199/inference-worker.js",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:5199/favicon.ico",
+    "resourceType": "other"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:5199/test-images/glass-wine.jpg",
+    "resourceType": "image"
+  }
+]

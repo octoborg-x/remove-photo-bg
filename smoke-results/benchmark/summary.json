@@ -1,0 +1,204 @@
+{
+  "providers": [
+    "CPUExecutionProvider"
+  ],
+  "reps": 5,
+  "pipelines": [
+    {
+      "label": "1024-fp16",
+      "model": "/tmp/hf-model/model_1024_fp16.onnx",
+      "load_ms": 3732.2,
+      "provider": "CPUExecutionProvider",
+      "images": [
+        {
+          "image": "product-scent-bottle.jpg",
+          "original_size": [
+            960,
+            1400
+          ],
+          "model_input": [
+            1,
+            3,
+            1024,
+            1024
+          ],
+          "cold_ms": 18094.4,
+          "warm_ms": [
+            14512.1,
+            14371.6,
+            14388.9,
+            14486.9,
+            14461.3
+          ],
+          "warm_avg_ms": 14444.2,
+          "peak_rss_mb": 8603.3,
+          "mask_stats": {
+            "mean": 0.289271,
+            "p50": 0,
+            "p95": 254,
+            "p99": 254,
+            "fg_frac": 0.289281
+          }
+        },
+        {
+          "image": "animal-buddy-dog.jpg",
+          "original_size": [
+            960,
+            1260
+          ],
+          "model_input": [
+            1,
+            3,
+            1024,
+            1024
+          ],
+          "cold_ms": 15667.2,
+          "warm_ms": [
+            15849.1,
+            15500.6,
+            15257.8,
+            16690.3,
+            14495.2
+          ],
+          "warm_avg_ms": 15558.6,
+          "peak_rss_mb": 8616.8,
+          "mask_stats": {
+            "mean": 0.321458,
+            "p50": 0,
+            "p95": 255,
+            "p99": 255,
+            "fg_frac": 0.321491
+          }
+        },
+        {
+          "image": "glass-wine.jpg",
+          "original_size": [
+            960,
+            1280
+          ],
+          "model_input": [
+            1,
+            3,
+            1024,
+            1024
+          ],
+          "cold_ms": 14324.0,
+          "warm_ms": [
+            14301.5,
+            14307.9,
+            14296.9,
+            14272.1,
+            14290.5
+          ],
+          "warm_avg_ms": 14293.8,
+          "peak_rss_mb": 8616.8,
+          "mask_stats": {
+            "mean": 0.393173,
+            "p50": 0,
+            "p95": 255,
+            "p99": 255,
+            "fg_frac": 0.393219
+          }
+        }
+      ]
+    },
+    {
+      "label": "512-fp32",
+      "model": "public/models/model_512.onnx",
+      "load_ms": 1182.1,
+      "provider": "CPUExecutionProvider",
+      "images": [
+        {
+          "image": "product-scent-bottle.jpg",
+          "original_size": [
+            960,
+            1400
+          ],
+          "model_input": [
+            1,
+            3,
+            512,
+            512
+          ],
+          "cold_ms": 3906.5,
+          "warm_ms": [
+            3703.0,
+            3616.3,
+            3579.3,
+            3652.8,
+            3582.6
+          ],
+          "warm_avg_ms": 3626.8,
+          "peak_rss_mb": 1306.0,
+          "mask_stats": {
+            "mean": 0.287699,
+            "p50": 0,
+            "p95": 254,
+            "p99": 255,
+            "fg_frac": 0.287884
+          }
+        },
+        {
+          "image": "animal-buddy-dog.jpg",
+          "original_size": [
+            960,
+            1260
+          ],
+          "model_input": [
+            1,
+            3,
+            512,
+            512
+          ],
+          "cold_ms": 3613.7,
+          "warm_ms": [
+            3624.9,
+            3605.0,
+            3619.5,
+            3608.8,
+            3584.1
+          ],
+          "warm_avg_ms": 3608.5,
+          "peak_rss_mb": 1306.0,
+          "mask_stats": {
+            "mean": 0.320986,
+            "p50": 0,
+            "p95": 254,
+            "p99": 254,
+            "fg_frac": 0.321133
+          }
+        },
+        {
+          "image": "glass-wine.jpg",
+          "original_size": [
+            960,
+            1280
+          ],
+          "model_input": [
+            1,
+            3,
+            512,
+            512
+          ],
+          "cold_ms": 3649.2,
+          "warm_ms": [
+            3587.1,
+            3602.4,
+            3645.8,
+            3600.4,
+            3593.3
+          ],
+          "warm_avg_ms": 3605.8,
+          "peak_rss_mb": 1306.0,
+          "mask_stats": {
+            "mean": 0.393015,
+            "p50": 0,
+            "p95": 255,
+            "p99": 255,
+            "fg_frac": 0.393044
+          }
+        }
+      ]
+    }
+  ]
+}

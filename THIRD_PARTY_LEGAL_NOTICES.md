@@ -23,18 +23,61 @@ Each component remains subject to its own licence and notices.
   convolutions are the upstream weights with BatchNorm folded in (differences
   ~1e-7, i.e. float32 rounding). See `MODEL_CARD.md` for the method.
 - Published licence declaration: MIT (per the Hugging Face model card for
-  `ZhengPeng7/BiRefNet_lite`)
-- Licence source: [ZhengPeng7/BiRefNet license](https://github.com/ZhengPeng7/BiRefNet/blob/e49b1256aa0eabb8f9ee03f0d01b268a79a826c4/LICENSE)
-  (to be verified in Phase 3 and the exact text pasted below)
+  `ZhengPeng7/BiRefNet_lite`, incl. commit `aa62cd87eafb9cc43056d08ef3615a14628b831d`
+  "Complete the MIT license in the model card", card YAML `license: mit` and
+  tag `license:mit`; verified 2026-10-25)
+- Licence source: [ZhengPeng7/BiRefNet LICENSE @ 2713d1293ce8a923d5878f1f30177b78770bf24c](https://github.com/ZhengPeng7/BiRefNet/blob/2713d1293ce8a923d5878f1f30177b78770bf24c/LICENSE)
+  (verified 2026-10-25; exact text below)
 - Notes: The project implements and tests this checkpoint under its published
   licence declaration. Model training-data provenance is documented in
   `MODEL_CARD.md`. This notice is not a legal warranty.
 
+The MIT licence text below is copied verbatim from the upstream repository at
+`2713d1293ce8a923d5878f1f30177b78770bf24c` ("Add the MIT LICENSE", 2024-03-11),
+the commit that introduced the file (the file is unchanged on `main`, latest
+commit `f7079632d681ecf12161fcea8905682934e59e51`, checked 2026-10-25). A
+hand-retyped template is not used per MVP §4.
+
+```
+MIT License
+
 Copyright (c) 2024 ZhengPeng
 
-> Phase 3 action: paste the exact MIT licence text from the verified upstream
-> source (github.com/ZhengPeng7/BiRefNet/LICENSE at the pinned commit) here.
-> A hand-retyped template is not used per MVP §4.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### Alternative 512 exports reviewed (not adopted)
+
+Reviewed 2026-10-25 — two more 512×512 exports exist with a different
+input/output contract, so they are documented here for completeness:
+
+| Repo | Files | Licence | Notes |
+|---|---|---|---|
+| `studioludens/birefnet-lite-512` | `onnx/model.onnx` (191,877,254 B, sha256 `1cb0fb36…52ac`), `onnx/model_fp16.onnx` (98,484,532 B, sha256 `eff9216b…c516`) | MIT (`Copyright (c) 2024 ZhengPeng`; `Copyright (c) 2026 Studio Ludens V.O.F.`) | transformer.js-oriented export; output is single-channel **logits** (sigmoid applied by caller) |
+| `BRPOD123/birefnet-lite-512` | same filenames and byte-identical hashes as `studioludens` | MIT (`Copyright (c) 2024 Peng Zheng`; `Copyright (c) 2026 (Studio Ludens…)`) | mirror of `studioludens` |
+
+Not adopted because the **fp16** variant is ~51× slower in the WASM fallback
+(≈219 s per warm inference in the headless-Chromium harness vs ≈4.3 s for the
+shipped 512 fp32), and the **fp32** variant is 191,877,254 B (≈183 MB) with no
+size advantage over the shipped 185 MB artifact while also emitting logits
+(requiring an extra client sigmoid). See `PHASE1_REPORT.md` §Model-artifact
+review for measured numbers.
 
 ## Runtime
 

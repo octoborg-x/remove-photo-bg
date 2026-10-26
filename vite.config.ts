@@ -9,6 +9,12 @@ export default defineConfig({
     // Expose vite dev server so the page (and chrome headless) can reach it.
     host: true,
     port: 5173,
+    // The public work-host proxy URLs reverse-proxy to these ports; Vite
+    // otherwise rejects requests whose Host header is not an allowlisted name.
+    allowedHosts: [
+      'work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev',
+      'work-2-aybthnpldbthpfgf.prod-runtime.all-hands.dev',
+    ],
     headers: {
       // Cross-origin isolation enables SharedArrayBuffer, which onnxruntime-web
       // requires for its threaded WASM runtime (SIMD + multithreading).

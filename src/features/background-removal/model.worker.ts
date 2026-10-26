@@ -42,17 +42,70 @@ function isProviderFailure(err: unknown): boolean {
   return ALLOC_FAILURE.test(text) || DEVICE_LOST.test(text);
 }
 
+// Downloads the model bytes ourselves so the UI can show real progress on
+// slow mobile/cellular links (ORT's own fetch has no progress callback).
+// Returns an ArrayBuffer; the session is then created from those bytes so the
+// network transfer is not repeated when the worker retries a provider.
+async function downloadModel(
+  url: string,
+  onProgress: (fraction: number, bytes: number) => void,
+): Promise<ArrayBuffer> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to download model: HTTP ${res.status}`);
+  const totalReadable = Number(res.headers.get('content-length')) || 0;
+  const reader = res.body?.getReader();
+  if (!reader) {
+    // No streaming body (e.g. a transform stripped it) — fall back to arrayBuffer.
+    return await res.arrayBuffer();
+  }
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    if (totalReadable > 0) onProgress(Math.min(1, received / totalReadable), received);
+  }
+  const out = new Uint8Array(received);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out.buffer;
+}
+
+let modelBytes: ArrayBuffer | null = null;
+
 async function createSession(
   providers: ort.InferenceSession.ExecutionProviderName[],
 ): Promise<void> {
   for (const ep of providers) {
     try {
-      session = await ort.InferenceSession.create(modelUrl!, {
-        executionProviders: [ep],
-        graphOptimizationLevel: 'all',
-      });
+      if (!modelBytes) {
+        post({ kind: 'loading-model', at: 5, bytes: 0 });
+        modelBytes = await downloadModel(modelUrl!, (f, bytes) => {
+          post({ kind: 'loading-model', at: Math.round(5 + 85 * f), bytes });
+        });
+      }
+      post({ kind: 'loading-model', at: 90 });
+      session = await ort.InferenceSession.create(
+        // Pass the bytes directly so a provider retry doesn't re-download.
+        modelBytes!,
+        {
+          executionProviders: [ep],
+          graphOptimizationLevel: 'all',
+        },
+      );
       lastProvider = ep;
       if (ep === 'webgpu') adapterLabel = describeAdapter();
+      // If this was the last provider we will try, the bytes are no longer
+      // needed for a fallback; drop them so we don't keep 185 MB in JS while
+      // ORT holds its own copy in the WASM/GPU heap (matters on low-RAM mobile).
+      if (ep === providers[providers.length - 1]) {
+        modelBytes = null;
+      }
       return;
     } catch (err) {
       lastError = err;

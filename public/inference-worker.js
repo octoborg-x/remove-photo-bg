@@ -6,7 +6,7 @@
 //
 // Message protocol (see src/features/background-removal/types.ts):
 //   in:  {kind:'set-model', modelUrl} | {kind:'run', runId, tensor, width, height} | {kind:'dispose'}
-//   out: {kind:'loading-model', at} | {kind:'load-time', ms, provider, adapter}
+//   out: {kind:'loading-model', at, bytes?} | {kind:'load-time', ms, provider, adapter}
 //        | {kind:'provider-fallback', from, to, reason}
 //        | {kind:'inference-time', ms, runId} | {kind:'result-ready', mask, width, height}
 //        | {kind:'error', message, runId?, fatal?}
@@ -57,15 +57,55 @@ function isProviderFailure(err) {
   return ALLOC_FAILURE.test(text) || DEVICE_LOST.test(text);
 }
 
+// Downloads the model bytes ourselves so the UI shows real progress on slow
+// mobile/cellular links (ORT's own fetch has no progress callback). Returns an
+// ArrayBuffer; the session is built from those bytes so a provider retry
+// doesn't re-download the 185 MB over the network.
+async function downloadModel(url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Failed to download model: HTTP ' + res.status);
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!res.body) return await res.arrayBuffer();
+  const reader = res.body.getReader();
+  const chunks = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    if (total > 0) onProgress(Math.min(1, received / total), received);
+  }
+  const out = new Uint8Array(received);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out.buffer;
+}
+
+let modelBytes = null;
+
 async function createSession(providers) {
   for (const ep of providers) {
     try {
-      session = await ort.InferenceSession.create(modelUrl, {
+      if (!modelBytes) {
+        post({ kind: 'loading-model', at: 5, bytes: 0 });
+        modelBytes = await downloadModel(modelUrl, (fraction, bytes) => {
+          post({ kind: 'loading-model', at: Math.round(5 + 85 * fraction), bytes });
+        });
+      }
+      post({ kind: 'loading-model', at: 90 });
+      session = await ort.InferenceSession.create(modelBytes, {
         executionProviders: [ep],
         graphOptimizationLevel: 'all',
       });
       lastProvider = ep;
       if (ep === 'webgpu') adapterLabel = describeAdapter();
+      // Once every candidate has been tried, drop the bytes so we don't hold a
+      // second 185 MB copy in JS while ORT keeps its own (matters on low-RAM).
+      if (ep === providers[providers.length - 1]) modelBytes = null;
       return ep;
     } catch (err) {
       session?.release?.();
@@ -175,7 +215,6 @@ self.onmessage = async (e) => {
       if (typeof msg.outputIsProbability === 'boolean') {
         outputIsProbability = msg.outputIsProbability;
       }
-      post({ kind: 'loading-model', at: 10 });
       // Only attempt WebGPU if the browser actually exposes it. `?provider=wasm`
       // forces the CPU path, which is the escape hatch when a GPU driver stalls.
       const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
@@ -192,7 +231,6 @@ self.onmessage = async (e) => {
             'WebGPU will be slow or may stall; use ?provider=wasm to force the CPU.',
         });
       }
-      post({ kind: 'loading-model', at: 90 });
       post({ kind: 'load-time', ms: 0, provider: ep, adapter: adapterLabel });
       return;
     }

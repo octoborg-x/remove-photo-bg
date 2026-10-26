@@ -1,0 +1,13 @@
+{
+  "pageUrl": "https://work-2-aybthnpldbthpfgf.prod-runtime.all-hands.dev/",
+  "image": "test-images/product-scent-bottle.jpg",
+  "provider": "wasm",
+  "run": {
+    "timings": [
+      5047.444999999949
+    ],
+    "avgMs": 5047.444999999949,
+    "provider": "wasm"
+  },
+  "pageLog": "Worker initializing…\nIf the model is not downloaded, run: npm run fetch-models\nModel load time: 0.0 ms\nExecution provider: wasm\nLoaded image from URL: test-images/product-scent-bottle.jpg (960x1400)\nRendered transparent PNG (960x1400), 28.8% opaque.\nInference 1: 5047.4 ms\n--- Summary ---\nWarm inference timings (1 runs): 5047.4 ms\nAverage: 5047.4 ms\nProvider: wasm\nModel download size: ~185 MB (model_512.onnx)\n"
+}

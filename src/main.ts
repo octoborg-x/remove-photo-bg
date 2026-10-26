@@ -22,6 +22,7 @@ const inputBox = document.getElementById('inputBox')!;
 const outputBox = document.getElementById('outputBox')!;
 const pickFileBtn = document.getElementById('pickFile')! as HTMLButtonElement;
 const runAllBtn = document.getElementById('runAll')! as HTMLButtonElement;
+const copyReportBtn = document.getElementById('copyReport')! as HTMLButtonElement;
 
 let currentImage: HTMLImageElement | null = null;
 let currentImageData: ImageData | null = null;
@@ -166,13 +167,16 @@ async function initWorker(): Promise<void> {
   worker.onmessage = (e: MessageEvent<WorkerProgressMessage>) => {
     const msg = e.data;
     if (msg.kind === 'loading-model') {
-      setStage(`Loading model… ${msg.at}%`);
+      updateDownloadProgress((msg.at ?? 0) / 100, msg.bytes ?? modelDownloadBytes);
     } else if (msg.kind === 'load-time') {
       setStage(`Model loaded — provider ${msg.provider}`);
       loadTimeMs = msg.ms;
       log(`Model load time: ${loadTimeMs.toFixed(1)} ms`);
       log(`Execution provider: ${msg.provider}`);
-      if (msg.adapter) log(`GPU adapter: ${msg.adapter}`);
+      if (msg.adapter) {
+        adapterReport = msg.adapter;
+        log(`GPU adapter: ${msg.adapter}`);
+      }
       window.smokeProvider = msg.provider;
       announcedLog.push(msg.provider);
       runAllBtn.disabled = !currentImage;
@@ -327,6 +331,7 @@ declare global {
     onSmokeDone: ((result: RunDone, maskDataUrl: string) => void) | null;
     smokeModelReady: boolean;
     smokeProvider: string;
+    crossOriginIsolated: boolean;
   }
 }
 
@@ -377,6 +382,53 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
 
 window.runSmoke = runSmoke;
 window.smokeModelReady = false;
+
+// ——— Device report ———
+// One-copy summary of what the browser/device actually did, so real-device
+// testers can paste the result back into the Change-2 tracker without
+// photographing a screen. No pixels are uploaded: the image never leaves the
+// device; this text is produced and copied locally.
+let adapterReport = '';
+let modelDownloadBytes = 0;
+const downloadStart = performance.now();
+
+function updateDownloadProgress(fraction: number, bytes: number): void {
+  modelDownloadBytes = bytes;
+  const pct = Math.round(fraction * 100);
+  const mb = (bytes / 1048576).toFixed(1);
+  setStage(`Loading model… ${pct}% (${mb} MB)`);
+}
+
+copyReportBtn.addEventListener('click', () => {
+  const isolation = window.crossOriginIsolated
+    ? `yes (COOP/COEP headers served)`
+    : `NO — threaded WASM may not engage`;
+  const n = timings.length;
+  const avg = n ? timings.reduce((a, b) => a + b, 0) / n : NaN;
+  const mb = (modelDownloadBytes / 1048576).toFixed(1);
+  const dlSecs = modelDownloadBytes ? ((performance.now() - downloadStart) / 1000).toFixed(1) : 'n/a';
+  const lines = [
+    '== BiRefNet_lite Phase 1 device report ==',
+    `Page: ${location.origin}${location.pathname}`,
+    `Provider: ${window.smokeProvider || 'not loaded'}`,
+    `Adapter: ${adapterReport || 'n/a (not webgpu)'}`,
+    `Cross-origin isolated: ${isolation}`,
+    `Adapter f16: ${/shader-f16=yes/.test(adapterReport) ? 'yes' : adapterReport ? 'no' : 'n/a'}`,
+    `Warm inferences: ${n}`,
+    n ? `Timings (ms): ${timings.map((t) => t.toFixed(1)).join(', ')}` : 'Timings: n/a',
+    n ? `Average (ms): ${avg.toFixed(1)}` : 'Average: n/a',
+    `Model bytes: ${modelDownloadBytes ? mb + ' MB' : 'n/a'}`,
+    `Model download: ${dlSecs} s`,
+    `First-cold-start shader compile: see first-inference note in log`,
+    `UA: ${navigator.userAgent}`,
+  ].join('\n');
+  navigator.clipboard?.writeText(lines).then(
+    () => log('Device report copied to clipboard.'),
+    () => log('Could not copy automatically — select the report text from below.'),
+  );
+  log(`\n${lines}`);
+  setStage('Device report copied');
+});
 
 // Start: init the worker. No model binary is committed; the user must run the
 // fetch script first.

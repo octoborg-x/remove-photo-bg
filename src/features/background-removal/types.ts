@@ -1,7 +1,7 @@
 // Shared message types between the main thread and the inference worker.
 // Worker -> main
 export type WorkerProgressMessage =
-  | { kind: 'loading-model'; at: number }
+  | { kind: 'loading-model'; at: number; bytes?: number }
   | { kind: 'load-time'; ms: number; provider: string; adapter?: string }
   | { kind: 'provider-fallback'; from: string; to: string; reason: string }
   | { kind: 'adapter-warning'; message: string }

@@ -1,0 +1,52 @@
+[
+  {
+    "method": "GET",
+    "url": "https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/",
+    "resourceType": "document"
+  },
+  {
+    "method": "GET",
+    "url": "https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/@vite/client",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/src/main.ts",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/src/features/background-removal/image-preprocess.ts",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/src/features/background-removal/mask-postprocess.ts",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/src/features/background-removal/export-image.ts",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/node_modules/vite/dist/client/env.mjs",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/inference-worker.js",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/favicon.ico",
+    "resourceType": "other"
+  },
+  {
+    "method": "GET",
+    "url": "https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/test-images/glass-wine.jpg",
+    "resourceType": "image"
+  }
+]

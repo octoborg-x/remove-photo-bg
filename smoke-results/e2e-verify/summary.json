@@ -1,0 +1,14 @@
+{
+  "pageUrl": "http://localhost:5199/",
+  "image": "test-images/glass-wine.jpg",
+  "provider": "wasm",
+  "run": {
+    "timings": [
+      4859.834999999963,
+      3467.6349999997765
+    ],
+    "avgMs": 4163.73499999987,
+    "provider": "wasm"
+  },
+  "pageLog": "Worker initializing…\nIf the model is not downloaded, run: npm run fetch-models\nModel load time: 0.0 ms\nExecution provider: wasm\nLoaded image from URL: test-images/glass-wine.jpg (960x1280)\nRendered transparent PNG (960x1280), 39.3% opaque.\nInference 1: 4859.8 ms\nRendered transparent PNG (960x1280), 39.3% opaque.\nInference 2: 3467.6 ms\n--- Summary ---\nWarm inference timings (2 runs): 4859.8, 3467.6 ms\nAverage: 4163.7 ms\nProvider: wasm\nModel download size: ~185 MB (model_512.onnx)\n"
+}

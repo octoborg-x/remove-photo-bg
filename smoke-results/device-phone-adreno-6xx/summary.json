@@ -50,5 +50,15 @@
       "webgpu": "smoke-results/device-phone-adreno-6xx/desktop-site/webgpu.txt",
       "wasm": "smoke-results/device-phone-adreno-6xx/desktop-site/wasm.txt"
     }
+  },
+  "illustration_run": {
+    "note": "Separate WASM run on the same phone, captured as the screenshot in README.md ('Result — WASM path on a real phone'). Not one of the device-report runs above.",
+    "screenshot": "docs/screenshots/phone-wasm-smoke-test.jpg",
+    "image": "1000013169.jpg (960x1400)",
+    "provider": "wasm (forced via ?provider=)",
+    "opaque_fraction": 0.288,
+    "warm_inferences": 5,
+    "timings_ms": [6684.5, 6992.6, 6814.2, 6856.8, 7053.2],
+    "avg_ms": 6880.3
   }
 }

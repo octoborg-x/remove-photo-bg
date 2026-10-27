@@ -8,6 +8,9 @@ Phase-1 record for the model used by this project. See also
 
 - **Upstream model**: `ZhengPeng7/BiRefNet_lite`
   - Model page: https://huggingface.co/ZhengPeng7/BiRefNet_lite
+  - Verified HF commit: `aa62cd87eafb9cc43056d08ef3615a14628b831d`
+    ("Complete the MIT license in the model card", 2026-08-29; `license: mit`
+    in card YAML and `license:mit` tag; verified 2026-10-25)
   - Source repository: https://github.com/ZhengPeng7/BiRefNet
   - Published licence declaration on the model card: MIT
 - **ONNX artifact used**: `Phoenix-ActuallyFree/BiRefNet_lite_512-ONNX`
@@ -44,11 +47,30 @@ Phase-1 record for the model used by this project. See also
 | Runtime | onnxruntime-web 1.29.0 (WebGPU preferred, WASM fallback) |
 | Peak transient memory | ~1.1 GB at 512×512 (was ~1.5 GB at 1024×1024 on native CPU) |
 
+## Alternative 512 exports reviewed and rejected (2026-10-25)
+
+`studioludens/birefnet-lite-512` and its mirror `BRPOD123/birefnet-lite-512`
+both provide MIT-licensed 512×512 ONNX exports. They were **not adopted**:
+
+| Export | Size | Output contract | WASM warm inference (headless Chromium) |
+|---|---|---|---|
+| `studioludens` / `BRPOD123` fp16 | 98,484,532 B (≈94 MB) | logits (sigmoid by caller) | ≈219 s — **51× slower** than shipped |
+| `studioludens` / `BRPOD123` fp32 | 191,877,254 B (≈183 MB) | logits (sigmoid by caller) | ≈5.7 s (1.3× slower than shipped) |
+| **Shipped** 512 fp32 (Phoenix) | 193,514,682 B (≈185 MB) | probabilities (sigmoid baked in) | ≈4.3 s |
+
+The fp16 export's WASM stall is an onnxruntime-web limitation: WASM has no
+native float16 compute, so ORT interposes casts around every fp16 tensor,
+making the 17,490-node graph ~236× slower than its native-CPU runtime. The
+fp32 export gives no size benefit. Details and measured numbers:
+`THIRD_PARTY_LEGAL_NOTICES.md` → "Alternative 512 exports reviewed (not
+adopted)", `PHASE1_REPORT.md` → §Model-artifact review.
+
 ## Provenance / training-data note
 
 Per MVP_OPENHANDS.md §3: the MIT licence declaration from the official model
 page is the project's implementation basis. This is not a claim that every
-question about training data has been adjudicated. Date checked: 2026-10-24.
+question about training data has been adjudicated. Date checked: 2026-10-24
+(upstream commit `aa62cd87` re-verified 2026-10-25).
 
 ## Distribution note
 

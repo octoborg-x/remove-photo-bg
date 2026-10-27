@@ -1,0 +1,27 @@
+[
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/",
+    "resourceType": "document"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/assets/index-a_XgAJfX.js",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/inference-worker.js",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/favicon.ico",
+    "resourceType": "other"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/test-images/product-scent-bottle.jpg",
+    "resourceType": "image"
+  }
+]

@@ -4,18 +4,28 @@
 This mirrors the free-GPU (Google Colab T4 / CUDA) methodology: for each
 model, one session, then per image:
   - warm latency over REPS runs (first run = cold start, separated)
-  - peak RSS sampled around the run
+  - peak RSS *and* peak device VRAM sampled around the run
   - mask saved to npy for downstream quality comparison
+
+Each pipeline records the model's SHA-256 and size, and the summary carries an
+`environment` block (GPU name/driver/total VRAM, CUDA, onnxruntime version,
+available providers, git commit) so a results file identifies the machine that
+produced it. Earlier runs captured timings only; see COLAB_T4_REPORT.md.
 
 Outputs: smoke-results/benchmark/ (summary.json + masks/).
 
 Usage:
-  python3 scripts/benchmark-pipelines.py [--providers cpu,...] [--reps 5]
+  python3 scripts/benchmark-pipelines.py [--providers cpu,...] [--reps 10]
+                                        [--out smoke-results/benchmark]
 """
 import argparse
+import datetime
+import hashlib
 import json
 import os
+import platform
 import resource
+import subprocess
 import tempfile
 import threading
 import time
@@ -59,16 +69,85 @@ def peak_rss_mb() -> float:
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
 
 
+def _nvidia_smi(query: str) -> list[str] | None:
+    """Query nvidia-smi; None when unavailable (CPU-only hosts)."""
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=10, check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return [ln.strip() for ln in out.stdout.splitlines() if ln.strip()]
+
+
+def gpu_vram_used_mb() -> float | None:
+    """Device memory currently in use, MiB. Covers every process on the GPU."""
+    rows = _nvidia_smi("memory.used")
+    if not rows:
+        return None
+    try:
+        return float(rows[0])
+    except ValueError:
+        return None
+
+
+def environment() -> dict:
+    """Machine identity, so a summary.json is self-describing."""
+    gpu = _nvidia_smi("name,driver_version,memory.total")
+    env: dict = {
+        "captured_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(
+            timespec="seconds"
+        ),
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "onnxruntime": ort.__version__,
+        "onnxruntime_providers_available": list(ort.get_available_providers()),
+        "cpu_count": os.cpu_count(),
+    }
+    try:
+        env["git_commit"] = subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True,
+            timeout=5, check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        env["git_commit"] = None
+    if gpu:
+        name, driver, total = (p.strip() for p in gpu[0].split(","))
+        env["gpu"] = {"name": name, "driver_version": driver,
+                      "memory_total_mb": float(total)}
+    else:
+        env["gpu"] = None
+    return env
+
+
+def sha256_file(path: str) -> str | None:
+    if not os.path.isfile(path):
+        return None
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--providers", default="CPUExecutionProvider")
     ap.add_argument("--reps", type=int, default=5)
+    ap.add_argument("--out", default="smoke-results/benchmark")
     args = ap.parse_args()
     providers = [p for p in args.providers.split(",") if p]
     reps = max(1, args.reps)
+    out_dir = args.out.rstrip("/")
 
-    os.makedirs("smoke-results/benchmark/masks", exist_ok=True)
-    summary = {"providers": providers, "reps": reps, "pipelines": []}
+    os.makedirs(f"{out_dir}/masks", exist_ok=True)
+    summary = {
+        "providers": providers,
+        "reps": reps,
+        "environment": environment(),
+        "pipelines": [],
+    }
 
     for label, model_path, is_1024, is_logits in PIPELINES:
         size = 1024 if is_1024 else 512
@@ -96,11 +175,15 @@ def main() -> None:
             cold_ms = (time.perf_counter() - t0) * 1000
 
             rss_samples: list[float] = []
+            vram_samples: list[float] = []
             stop = threading.Event()
 
             def sampler() -> None:
                 while not stop.is_set():
                     rss_samples.append(peak_rss_mb())
+                    v = gpu_vram_used_mb()
+                    if v is not None:
+                        vram_samples.append(v)
                     time.sleep(0.05)
 
             st = threading.Thread(target=sampler, daemon=True)
@@ -119,7 +202,7 @@ def main() -> None:
             m = np.clip(m, 0.0, 1.0).astype(np.float32)
 
             base = os.path.splitext(os.path.basename(path))[0]
-            np.save(f"smoke-results/benchmark/masks/{base}_{label}.npy", m)
+            np.save(f"{out_dir}/masks/{base}_{label}.npy", m)
 
             entries.append(
                 {
@@ -130,6 +213,9 @@ def main() -> None:
                     "warm_ms": [round(t, 1) for t in timings],
                     "warm_avg_ms": round(float(np.mean(timings)), 1),
                     "peak_rss_mb": round(max(rss_samples, default=0), 1),
+                    "peak_vram_mb": (
+                        round(max(vram_samples), 1) if vram_samples else None
+                    ),
                     "mask_stats": {
                         "mean": round(float(m.mean()), 6),
                         "p50": int(np.percentile(m, 50) * 255),
@@ -142,15 +228,20 @@ def main() -> None:
             del preds, m, tensor
 
         summary["pipelines"].append(
-            {"label": label, "model": model_path, "load_ms": round(load_ms, 1),
+            {"label": label, "model": model_path,
+             "model_sha256": sha256_file(model_path),
+             "model_bytes": (
+                 os.path.getsize(model_path) if os.path.isfile(model_path) else None
+             ),
+             "load_ms": round(load_ms, 1),
              "provider": providers[0], "images": entries}
         )
         print(f"{label}: load {load_ms:.0f}ms, "
               "avgWarm " + " ".join(f"{e['warm_avg_ms']:.0f}ms" for e in entries))
 
-    with open("smoke-results/benchmark/summary.json", "w") as f:
+    with open(f"{out_dir}/summary.json", "w") as f:
         json.dump(summary, f, indent=2)
-    print("Wrote smoke-results/benchmark/summary.json")
+    print(f"Wrote {out_dir}/summary.json")
 
 
 if __name__ == "__main__":

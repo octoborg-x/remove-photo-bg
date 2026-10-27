@@ -302,15 +302,20 @@ is superseded: that premise came from the 1024 fp16 export.
 
 ## 9. Blockers / risks (revised)
 
-1. **No WebGPU measurement** — the production latency path on capable hardware
-   is still unverified. This is the top open item.
+1. **No laptop WebGPU measurement yet** — the phone (Adreno-6xx) was measured
+   on 2026-10-26 in both modes (Desktop Site active + canonical mobile-UA
+   retest): WebGPU ≈ 6709 ms vs WASM ≈ 6600 ms warm; WebGPU mis-segmented
+   the subject (opaque rails) in both runs while WASM was clean. Full report in
+   `smoke-results/device-phone-adreno-6xx/`. The laptop/desktop WebGPU case is
+   still unverified — now the top open item.
 2. **`bad_alloc` on unknown hardware** — reduced 4× by the 512 grid, but not
    eliminated for very low-memory devices. Peak measured 2206 MB total RSS in a
    software-rendering sandbox; real devices with less RAM headroom may still
    fail. No user-facing guidance exists yet for that case.
-3. **Device compatibility matrix is empty** — two failing hardware classes have
-   been observed in the field (Intel Gen-9 WebGPU stalls, Qualcomm Adreno). The
-   fallback path is verified, but what works on which device is not recorded.
+3. **Device compatibility matrix mostly empty** — three data points now:
+   Intel Gen-9 WebGPU stalls, this Qualcomm Adreno-6xx phone (WebGPU slow and
+   visually wrong vs clean WASM), and a Colab T4 server GPU (fast). One phone
+   is a start, not a matrix; more devices would harden the policy.
 4. **Download size** — 185 MB exceeds the §13 flag; bandwidth may dominate
    hosting cost and is a UX barrier on mobile data.
 5. **Resolved since revision 1:** the stock-export Concat/Split shader-limit
@@ -330,15 +335,13 @@ is superseded: that premise came from the 1024 fp16 export.
 3. Proceed to Phase 2 (full product workflow) once (1) is measured and (2) is
    decided.
 
-## 10a. Free-GPU benchmark of 1024 vs 512 (2026-10-25)
+## 10a. Free-GPU benchmark of 1024 vs 512 (2026-10-26, measured)
 
 This tests the claim in §6/§7 that the 512 pipeline is the right browser target
 by measuring both candidate pipelines on a free GPU with one consistent
 methodology (cold start separated from N warm runs, peak RSS sampled, masks
-saved). `scripts/benchmark-pipelines.py` is the runnable methodology; the
-self-contained Kaggle kernel `kaggle/birefnet-free-gpu-benchmark/` reproduces
-it on a Kaggle GPU and is pushed (private) at
-`octoxdev/birefnet-lite-free-gpu-benchmark-1024-vs-512`.
+saved). `scripts/benchmark-pipelines.py` is the runnable methodology and was
+run on a Google Colab Tesla T4 (`--providers CUDAExecutionProvider`).
 
 Local CPU run (native onnxruntime, single-threaded, `intra_op_num_threads=1`):
 
@@ -351,7 +354,18 @@ Quality (masks upscaled to original dimensions, 3 images): mean IoU@0.5
 **0.992**, mean abs diff ≈0.003, edge sharpness measurably softer at 512
 (≈0.19 vs ≈0.33 gradient in the transition band) — consistent with §6.
 
-Kaggle GPU run: kernel pushed 2026-10-25, status RUNNING at time of writing.
-When complete, the devices/latencies will be appended here and the JSON/npy
-outputs pulled from the kernel output. This is the first real-GPU measurement
-of the two pipelines.
+Google Colab T4 GPU run (onnxruntime-gpu 1.31.1, CUDA 13.0,
+`CUDAExecutionProvider`, 5 warm runs per image; artifacts in
+`smoke-results/benchmark-t4/`):
+
+| Pipeline | Model load | Cold (img₁) | **Warm avg (5×)** | Peak RSS |
+|---|---|---|---|---|
+| 1024 fp16 | 5394 ms | 1914 ms | **581 ms** | 1.23–1.27 GB |
+| 512 fp32 | 979 ms | 259 ms | **109 ms** | 1.52 GB |
+
+**512 fp32 is ≈5.3× faster than 1024 fp16 on the T4** at ≈1.5× the peak RSS,
+and both fit a 16 GB card. Mask quality at the common 1024 grid: **mean
+IoU@0.5 = 0.9917**, mean abs diff 0.0034 — no material quality loss from the
+coarser 512 export (matches the CPU IoU cross-check, 0.9918). Full per-image
+timings + mask stats in `smoke-results/benchmark-t4/summary.json`; visual
+side-by-side cutouts in `smoke-results/benchmark-t4/quality-t4/`.

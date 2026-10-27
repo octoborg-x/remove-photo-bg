@@ -13,6 +13,11 @@ Each component remains subject to its own licence and notices.
 - Upstream repository: ZhengPeng7 / BiRefNet — https://github.com/ZhengPeng7/BiRefNet
 - Model page: https://huggingface.co/ZhengPeng7/BiRefNet_lite
 - ONNX conversion used (third-party): https://huggingface.co/Phoenix-ActuallyFree/BiRefNet_lite_512-ONNX
+  - That repo itself declares **no licence** — it has no model card and no
+    `license:` metadata (HF API `cardData` empty; README absent; checked
+    2026-10-26). The licence that covers this project's use is the **upstream
+    MIT** below, which the export's weights are derived from / restated as
+    (same tensors, BN folded).
 - Exact artifact: `onnx/model.onnx` (fixed 512×512 input)
 - File size: 193,514,682 bytes (≈185 MB)
 - SHA-256: `eaafaa10f19c63b77e2bae77bf4b2f59054c208ea08b8c6648f95ef36a3b6b87`

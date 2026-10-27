@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Benchmark 1024 vs 512 inference pipelines with one consistent methodology.
 
-This mirrors the methodology the Kaggle kernel would run on GPU: for each
+This mirrors the free-GPU (Google Colab T4 / CUDA) methodology: for each
 model, one session, then per image:
   - warm latency over REPS runs (first run = cold start, separated)
   - peak RSS sampled around the run

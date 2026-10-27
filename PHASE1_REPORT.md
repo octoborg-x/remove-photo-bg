@@ -330,15 +330,13 @@ is superseded: that premise came from the 1024 fp16 export.
 3. Proceed to Phase 2 (full product workflow) once (1) is measured and (2) is
    decided.
 
-## 10a. Free-GPU benchmark of 1024 vs 512 (2026-10-25)
+## 10a. Free-GPU benchmark of 1024 vs 512 (2026-10-26, measured)
 
 This tests the claim in §6/§7 that the 512 pipeline is the right browser target
 by measuring both candidate pipelines on a free GPU with one consistent
 methodology (cold start separated from N warm runs, peak RSS sampled, masks
-saved). `scripts/benchmark-pipelines.py` is the runnable methodology; the
-self-contained Kaggle kernel `kaggle/birefnet-free-gpu-benchmark/` reproduces
-it on a Kaggle GPU and is pushed (private) at
-`octoxdev/birefnet-lite-free-gpu-benchmark-1024-vs-512`.
+saved). `scripts/benchmark-pipelines.py` is the runnable methodology and was
+run on a Google Colab Tesla T4 (`--providers CUDAExecutionProvider`).
 
 Local CPU run (native onnxruntime, single-threaded, `intra_op_num_threads=1`):
 
@@ -351,7 +349,18 @@ Quality (masks upscaled to original dimensions, 3 images): mean IoU@0.5
 **0.992**, mean abs diff ≈0.003, edge sharpness measurably softer at 512
 (≈0.19 vs ≈0.33 gradient in the transition band) — consistent with §6.
 
-Kaggle GPU run: kernel pushed 2026-10-25, status RUNNING at time of writing.
-When complete, the devices/latencies will be appended here and the JSON/npy
-outputs pulled from the kernel output. This is the first real-GPU measurement
-of the two pipelines.
+Google Colab T4 GPU run (onnxruntime-gpu 1.31.1, CUDA 13.0,
+`CUDAExecutionProvider`, 5 warm runs per image; artifacts in
+`smoke-results/benchmark-t4/`):
+
+| Pipeline | Model load | Cold (img₁) | **Warm avg (5×)** | Peak RSS |
+|---|---|---|---|---|
+| 1024 fp16 | 5394 ms | 1914 ms | **581 ms** | 1.23–1.27 GB |
+| 512 fp32 | 979 ms | 259 ms | **109 ms** | 1.52 GB |
+
+**512 fp32 is ≈5.3× faster than 1024 fp16 on the T4** at ≈1.5× the peak RSS,
+and both fit a 16 GB card. Mask quality at the common 1024 grid: **mean
+IoU@0.5 = 0.9917**, mean abs diff 0.0034 — no material quality loss from the
+coarser 512 export (matches the CPU IoU cross-check, 0.9918). Full per-image
+timings + mask stats in `smoke-results/benchmark-t4/summary.json`; visual
+side-by-side cutouts in `smoke-results/benchmark-t4/quality-t4/`.

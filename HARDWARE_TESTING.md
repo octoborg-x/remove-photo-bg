@@ -15,7 +15,7 @@ missing, and verified free-tier facts from vendor documentation (checked
 | WASM (CPU) measured? | Yes — 4.4–4.6 s warm per image in headless Chromium 155 (`PHASE1_REPORT.md` §5). |
 | Known bad devices | Intel Gen-9 WebGPU stalls, Qualcomm Adreno (records in `README.md` / report §9). |
 | Download size | ~185 MB (`model_512.onnx`) — exceeds the §13 100 MB flag. |
-| GPU benchmark run? | **Yes (measured).** 2026-10-25 free-GPU kernel pushed to Kaggle; **2026-10-26 ran the same methodology on a Google Colab Tesla T4** via `scripts/benchmark-pipelines.py --providers CUDAExecutionProvider` (§4/§5). First real-GPU measurement of 1024-vs-512: §4 table. Local CPU cross-check in the same script (1024 fp16 ≈14.2–15.6 s warm / ≈8.6 GB peak RSS vs 512 fp32 ≈3.6 s / ≈1.3 GB; mean IoU@0.5 0.992). |
+| GPU benchmark run? | **Yes (measured).** **2026-10-26 ran the methodology on a Google Colab Tesla T4** via `scripts/benchmark-pipelines.py --providers CUDAExecutionProvider` (§4/§5). First real-GPU measurement of 1024-vs-512: §4 table. Local CPU cross-check in the same script (1024 fp16 ≈14.2–15.6 s warm / ≈8.6 GB peak RSS vs 512 fp32 ≈3.6 s / ≈1.3 GB; mean IoU@0.5 0.992). |
 
 **Implication:** the one number that decides whether the WebGPU path is even
 needed as a rescue path is *"open the page in desktop Chrome and report 5 warm
@@ -104,16 +104,13 @@ whether fallback triggered.
 
 | Service | Free facts (official) | Fit |
 |---|---|---|
-| **Kaggle** | Free GPU session (Nvidia Tesla T4 x2 or P100) **30 h/week**, internet on, private kernels | ✅ **[done]** — kernel pushed & ran: `octoxdev/birefnet-lite-free-gpu-benchmark-1024-vs-512` |
-| **Google Colab** | Free T4 **~12 h/session**, no internet by default (upload test data as dataset) | ✅ **[done] — 2026-10-26 measured** on a live T4 (CUDA 13.0, onnxruntime-gpu 1.31.1) via Cloudflare quick-tunnel SSH: see §4 GPU results |
+| **Google Colab** | Free T4 **~12 h/session**, no internet by default (fetch models via SSH/tunnel or upload) | ✅ **[done] — 2026-10-26 measured** on a live Tesla T4 (CUDA 13.0, onnxruntime-gpu 1.31.1) via Cloudflare quick-tunnel SSH: see §4 GPU results |
 | **GitHub Actions** | Free on public repos; 2,000 min/mo on private plans; **no usable GPU** | ❌ GPU; fine for WASM/class-2 CI |
 
-The Kaggle kernel (`kaggle/birefnet-free-gpu-benchmark/`) is self-contained:
-it downloads the two candidate ONNX models, reproduces the
-`scripts/benchmark-pipelines.py` methodology (cold start, N warm runs, peak
-RSS, masks saved), and records the nvidia-smi device name. Credentials were
-provided and the kernel is running at the time of writing — first real-GPU
-measurement of the 1024-vs-512 question.
+The run is fully reproducible: clone the repo, install `onnxruntime-gpu`,
+fetch the two models (`public/models/model_512.onnx` +
+`/tmp/hf-model/model_1024_fp16.onnx`), then
+`python3 scripts/benchmark-pipelines.py --providers CUDAExecutionProvider`.
 
 ### GPU results — 2026-10-26, Google Colab Tesla T4 (measured)
 
@@ -154,9 +151,10 @@ unavoidable manual step.
 
 1. **Right now:** use the two work-host URLs as throwaway test endpoints
    (Section 3), because they require no account and no deploy.
-2. **For the GPU-vs-CPU question:** run the pushed Kaggle kernel (or the local
-   `scripts/benchmark-pipelines.py`) whenever a new model export is
-   considered. This gives a reproducible GPU baseline at $0.
+2. **For the GPU-vs-CPU question:** run
+   `scripts/benchmark-pipelines.py --providers CUDAExecutionProvider` on a free
+   Google Colab T4 (or local CPU) whenever a new model export is considered.
+   This gives a reproducible GPU baseline at $0.
 3. **Before release — deploy to Cloudflare Pages (app + wasm) and put
    `model_512.onnx` in a public Cloudflare R2 bucket (CORS +
    `Cache-Control: immutable`, long `max-age`).** Rationale: $0 recurring, R2
@@ -203,7 +201,6 @@ primary product risk.
 | GitHub Releases | Files up to **2 GiB each; no bandwidth limit** | docs.github.com/en/repositories/releasing-projects-on-github/about-releases |
 | Netlify Free | 300 credits/mo; bandwidth 20 credits/GB ⇒ ~15 GB/mo; 15 credits/deploy | netlify.com/pricing/ |
 | Vercel Hobby | 100 MB static-file upload cap | vercel.com/docs/limits |
-| Kaggle GPU | **30 h/week free** (Nvidia T4 x2 / P100), internet on | kaggle.com/docs/notebooks |
 | Google Colab GPU | **T4 GPU free, ~12 h/session**; network off by default (model must be fetched via SSH/tunnel or uploaded) | colab.research.google.com (runtime picker) |
 
 ## 7. Evidence URLs (all checked 2026-10-25)
@@ -217,4 +214,3 @@ primary product risk.
 - GitHub Actions billing (free on public repos): https://docs.github.com/en/billing/concepts/product-billing/github-actions
 - Netlify pricing (300-credit free cap, 20 credits/GB): https://www.netlify.com/pricing/
 - Vercel limits (100 MB static-file upload on Hobby): https://vercel.com/docs/limits
-- Kaggle notebooks docs (free GPU quota): https://www.kaggle.com/docs/notebooks

@@ -61,6 +61,17 @@ The export repo itself declares no licence; the upstream MIT covers the weights
 | Batch size | 1 |
 | Warm reps | 5 per image |
 | Access | Cloudflare quick tunnel + SSH (Colab exposes no inbound ports) |
+| **Follow-up GPU** | **ZeroGPU (free HF tier) — see [ZEROGPU_REPORT.md](ZEROGPU_REPORT.md)** |
+
+> **ZeroGPU follow-up (2026-10-27).** The Colab free tier has since expired.
+> The T4 gaps from §3–4 (10+ warm runs, peak VRAM) are closed on Hugging Face
+> **ZeroGPU** (free personal account, no PRO): same two models, same
+> methodology, 10 warm runs/image, `peak_vram_mb` via
+> `torch.cuda.mem_get_info()`. Blackwell numbers: 512-fp32 **22.0 ms / 1,577 MB**,
+> 1024-fp16 **112.6 ms / 3,724 MB**, mean IoU 0.992. Those numbers are not T4
+> numbers (Blackwell MIG slice vs T4 16GB), but they keep the warm-run and VRAM
+> gaps measured on comparable hardware. Full results and rerun instructions in
+> **ZEROGPU_REPORT.md**; raw JSON in `smoke-results/zerogpu/`.
 
 `smoke-results/benchmark-t4/environment.json` carries these values with
 `"capture_method": "transcribed"`. A fresh run writes a machine-generated
@@ -105,12 +116,16 @@ To close it: run the notebook with `--reps 10` (default in the cell). The G4/T4
 tunnel used for this run has since expired, so a fresh Colab session is needed.
 Cost is ~1 minute of GPU time.
 
+**Closed on ZeroGPU (2026-10-27):** the same 10-warm-run spec now runs on
+Hugging Face ZeroGPU (free tier) — see [ZEROGPU_REPORT.md](ZEROGPU_REPORT.md).
+T4 numbers remain 5-run; Blackwell numbers are 10-run.
+
 ## 4. Peak memory — RSS recorded, VRAM not measured
 
 | Pipeline | Peak **host** RSS | Peak **VRAM** |
 |---|---|---|
-| 1024 fp16 | 1228–1265 MB | **not measured** |
-| 512 fp32 | 1522 MB | **not measured** |
+| 1024 fp16 | 1228–1265 MB | **not measured** (ZeroGPU: **3,724 MB**, see [ZEROGPU_REPORT.md](ZEROGPU_REPORT.md)) |
+| 512 fp32 | 1522 MB | **not measured** (ZeroGPU: **1,577 MB**) |
 
 `peak_rss_mb` in `summary.json` is the Python process's resident set size
 (`VmRSS` sampled at 50 ms). That is **host RAM and CPU-side allocation, not

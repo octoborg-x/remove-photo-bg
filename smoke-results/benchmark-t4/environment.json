@@ -1,0 +1,27 @@
+{
+  "artifact": "smoke-results/benchmark-t4/summary.json",
+  "run_date": "2026-10-26",
+  "capture_method": "transcribed",
+  "capture_note": "The 2026-10-26 run predates automatic environment capture in scripts/benchmark-pipelines.py. These values are transcribed from the session (recorded in HARDWARE_TESTING.md section 4), not read from the machine. Re-running the notebook writes a machine-generated 'environment' block into summary.json that supersedes this file.",
+  "platform": "Google Colab, T4 GPU runtime",
+  "gpu": {
+    "name": "Tesla T4",
+    "driver_version": "580.82.07",
+    "memory_total_mb": null,
+    "memory_total_note": "not queried in that session; the T4 is a 16 GB card"
+  },
+  "cuda": "13.0",
+  "python": "3.13",
+  "runtime": {
+    "package": "onnxruntime-gpu",
+    "version": "1.31.1",
+    "execution_provider": "CUDAExecutionProvider"
+  },
+  "batch_size": 1,
+  "warm_reps": 5,
+  "served_by": "Cloudflare quick tunnel + SSH (Colab has no inbound ports)",
+  "gaps": [
+    "warm_reps is 5; the report asks for 10+",
+    "peak VRAM was not sampled; summary.json peak_rss_mb is host process RSS, not VRAM"
+  ]
+}

@@ -153,7 +153,9 @@ Ran both paths (same page, 5 warm inferences each) on the phone. Two runs:
 
 Raw reports: `smoke-results/device-phone-adreno-6xx/{mobile-ua,desktop-site}/`
 (webgpu.txt / wasm.txt per run) + `summary.json`. Desktop-site run: webgpu
-6525 ms / wasm 6457 ms, same quality outcome.
+6525 ms / wasm 6457 ms, same quality outcome. A separate WASM run on the same
+phone is the README screenshot (960×1400, 28.8% opaque, 6880 ms avg) — recorded
+as `illustration_run` in that `summary.json`.
 
 **What this changes:** on this phone (a class-3 device) WebGPU is **not** faster
 than WASM (6709 vs 6600 ms, within noise) *and* it mis-segmented part of the

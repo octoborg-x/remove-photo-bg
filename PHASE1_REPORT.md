@@ -303,8 +303,9 @@ is superseded: that premise came from the 1024 fp16 export.
 ## 9. Blockers / risks (revised)
 
 1. **No laptop WebGPU measurement yet** — the phone (Adreno-6xx) was measured
-   on 2026-10-26: WebGPU ≈ 6525 ms warm, WASM ≈ 6457 ms; WebGPU mis-segmented
-   the subject (opaque rails) while WASM was clean. Full report in
+   on 2026-10-26 in both modes (Desktop Site active + canonical mobile-UA
+   retest): WebGPU ≈ 6709 ms vs WASM ≈ 6600 ms warm; WebGPU mis-segmented
+   the subject (opaque rails) in both runs while WASM was clean. Full report in
    `smoke-results/device-phone-adreno-6xx/`. The laptop/desktop WebGPU case is
    still unverified — now the top open item.
 2. **`bad_alloc` on unknown hardware** — reduced 4× by the 512 grid, but not

@@ -302,15 +302,19 @@ is superseded: that premise came from the 1024 fp16 export.
 
 ## 9. Blockers / risks (revised)
 
-1. **No WebGPU measurement** — the production latency path on capable hardware
-   is still unverified. This is the top open item.
+1. **No laptop WebGPU measurement yet** — the phone (Adreno-6xx) was measured
+   on 2026-10-26: WebGPU ≈ 6525 ms warm, WASM ≈ 6457 ms; WebGPU mis-segmented
+   the subject (opaque rails) while WASM was clean. Full report in
+   `smoke-results/device-phone-adreno-6xx/`. The laptop/desktop WebGPU case is
+   still unverified — now the top open item.
 2. **`bad_alloc` on unknown hardware** — reduced 4× by the 512 grid, but not
    eliminated for very low-memory devices. Peak measured 2206 MB total RSS in a
    software-rendering sandbox; real devices with less RAM headroom may still
    fail. No user-facing guidance exists yet for that case.
-3. **Device compatibility matrix is empty** — two failing hardware classes have
-   been observed in the field (Intel Gen-9 WebGPU stalls, Qualcomm Adreno). The
-   fallback path is verified, but what works on which device is not recorded.
+3. **Device compatibility matrix mostly empty** — three data points now:
+   Intel Gen-9 WebGPU stalls, this Qualcomm Adreno-6xx phone (WebGPU slow and
+   visually wrong vs clean WASM), and a Colab T4 server GPU (fast). One phone
+   is a start, not a matrix; more devices would harden the policy.
 4. **Download size** — 185 MB exceeds the §13 flag; bandwidth may dominate
    hosting cost and is a UX barrier on mobile data.
 5. **Resolved since revision 1:** the stock-export Concat/Split shader-limit

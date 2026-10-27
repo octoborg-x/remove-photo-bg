@@ -1,0 +1,28 @@
+{
+  "device": "Android phone (user's phone), Qualcomm Adreno-6xx class GPU",
+  "page": "https://5173-cs-215478958940-default.cs-europe-west1-haha.cloudshell.dev/",
+  "crossOriginIsolated": true,
+  "date": "2026-10-26",
+  "provider": {
+    "webgpu": {
+      "adapter": "qualcomm adreno-6xx, maxStorageBufferBindingSize=512MB, shader-f16=yes",
+      "warm_inferences": 5,
+      "timings_ms": [6786.1, 6534.2, 6250.2, 6486.7, 6567.1],
+      "avg_ms": 6524.9
+    },
+    "wasm": {
+      "adapter": "n/a (not webgpu)",
+      "warm_inferences": 5,
+      "timings_ms": [6136.3, 6460.4, 6479.5, 6548.1, 6660.1],
+      "avg_ms": 6456.9
+    }
+  },
+  "observation": {
+    "raw": "WebGPU output had transparent background but left some opaque rails on the image's main object; WASM output was a perfect transparent-background image.",
+    "interpretation": "WebGPU (adreno f16=yes) produced a visually defective mask (missing foreground -> opaque rails left on the subject); WASM produced a clean mask. On this Adreno device WebGPU is neither faster (6525 ms vs 6457 ms, ~1% apart) nor visually reliable, so WASM is the safe default; WebGPU stays an opt-in path."
+  },
+  "raw_reports": {
+    "webgpu": "smoke-results/device-phone-adreno-6xx/webgpu.txt",
+    "wasm": "smoke-results/device-phone-adreno-6xx/wasm.txt"
+  }
+}

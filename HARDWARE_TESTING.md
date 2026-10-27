@@ -11,9 +11,9 @@ missing, and verified free-tier facts from vendor documentation (checked
 
 | Question | Answer (evidence) |
 |---|---|
-| WebGPU timed on real hardware? | **Never.** Sandbox has no GPU/WebGPU (`PHASE1_REPORT.md` §Environment honesty). Only WASM was measured. |
+| WebGPU timed on real hardware? | **Yes — one phone (Android, Qualcomm Adreno-6xx), 2026-10-26** (§4). WebGPU ≈6525 ms warm vs WASM ≈6457 ms warm; WebGPU left opaque artifacts on the subject (WASM clean). No-crash budget users: WASM is the safe default. Sandbox itself still has no GPU/WebGPU (`PHASE1_REPORT.md` §Environment honesty). |
 | WASM (CPU) measured? | Yes — 4.4–4.6 s warm per image in headless Chromium 155 (`PHASE1_REPORT.md` §5). |
-| Known bad devices | Intel Gen-9 WebGPU stalls, Qualcomm Adreno (records in `README.md` / report §9). |
+| Known bad devices | Intel Gen-9 WebGPU stalls, Qualcomm Adreno-6xx (WebGPU slow + visually wrong — §4 phone result / `PHASE1_REPORT.md` §9). |
 | Download size | ~185 MB (`model_512.onnx`) — exceeds the §13 100 MB flag. |
 | GPU benchmark run? | **Yes (measured).** **2026-10-26 ran the methodology on a Google Colab Tesla T4** via `scripts/benchmark-pipelines.py --providers CUDAExecutionProvider` (§4/§5). First real-GPU measurement of 1024-vs-512: §4 table. Local CPU cross-check in the same script (1024 fp16 ≈14.2–15.6 s warm / ≈8.6 GB peak RSS vs 512 fp32 ≈3.6 s / ≈1.3 GB; mean IoU@0.5 0.992). |
 
@@ -31,7 +31,7 @@ engages.
 |---|---|---|---|
 | 1 | Modern laptop, integrated GPU | WebGPU warm inference time, first-run shader compile time, correct provider line | **Work-host URLs now (run 1 below)**, then Cloudflare Pages/R2 or GitHub Releases + Pages |
 | 2 | Laptop/desktop *without* usable WebGPU | WASM path engages; confirm fallback message + timing, no silent cloud fallback | Same URLs with `?provider=wasm` (forces CPU path — feature already exists) |
-| 3 | Android phone, representative mobile GPU | WebGPU on mobile; ~185 MB download over mobile data; memory | Same URLs opened in mobile Chrome; R2 free egress makes bandwidth $0 |
+| 3 | Android phone, representative mobile GPU | WebGPU on mobile; ~185 MB download over mobile data; memory | ✓ measured 2026-10-26 (Adreno-6xx) — see §4; more phones welcome |
 | 4 | Low-memory device | Peak memory, `bad_alloc`, watchdog/fallback behavior | Same URLs; in-page error copy already exists (`describeError` in `src/main.ts`) |
 
 All four classes just need a URL that serves model + wasm with
@@ -137,6 +137,27 @@ from the coarser 512 input (matches the CPU-quality cross-check, mean IoU
 
 **vs the committed CPU baseline** (same script, CPU provider): 1024 fp16
 14.4–15.6 s → **0.58 s** (~25×); 512 fp32 3.6 s → **0.11 s** (~33×).
+
+### Phone result — 2026-10-26, Android (Qualcomm Adreno-6xx) — first real-phone WebGPU measurement
+
+Ran both paths (same page, 5 warm inferences each) on the phone's mobile
+Chrome 155:
+
+| Provider | Adapter | Ave (5 warm, ms) | Output quality |
+|---|---|---|---|
+| **webgpu** | qualcomm adreno-6xx, shader-f16=yes | **6525** (6786/6534/6250/6487/6567) | ❌ opaque rails left on the main object (transparent bg was correct) |
+| **wasm** | n/a (not webgpu) | **6457** (6136/6460/6480/6548/6660) | ✅ perfect transparent-background image |
+
+Raw reports: `smoke-results/device-phone-adreno-6xx/{webgpu,wasm}.txt`
+(+ `summary.json`).
+
+**What this changes:** on this phone (a class-3 device) WebGPU is **not** faster
+than WASM (6525 vs 6457 ms, within noise) *and* it mis-segmented part of the
+subject, while WASM was visually clean. This matches the earlier "Known bad
+devices" phone for Adreno quirks, and it is the first real-device evidence that
+**WebGPU should stay an opt-in path with WASM as the safe default on mobile**
+— not the primary provider. The fallback message for non-WASM quality should be
+"try WASM," not "your GPU is too weak."
 
 ### What no free tier provides
 

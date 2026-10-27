@@ -11,7 +11,7 @@ missing, and verified free-tier facts from vendor documentation (checked
 
 | Question | Answer (evidence) |
 |---|---|
-| WebGPU timed on real hardware? | **Yes — one phone (Android, Qualcomm Adreno-6xx), 2026-10-26** (§4). WebGPU ≈6525 ms warm vs WASM ≈6457 ms warm; WebGPU left opaque artifacts on the subject (WASM clean). No-crash budget users: WASM is the safe default. Sandbox itself still has no GPU/WebGPU (`PHASE1_REPORT.md` §Environment honesty). |
+| WebGPU timed on real hardware? | **Yes — one phone (Android, Qualcomm Adreno-6xx), 2026-10-26** (§4, canonical mobile-UA run: WebGPU ≈6709 ms vs WASM ≈6600 ms; both runs WebGPU left opaque artifacts on the subject (WASM clean)). WASM is the safe default. Sandbox itself still has no GPU/WebGPU (`PHASE1_REPORT.md` §Environment honesty). |
 | WASM (CPU) measured? | Yes — 4.4–4.6 s warm per image in headless Chromium 155 (`PHASE1_REPORT.md` §5). |
 | Known bad devices | Intel Gen-9 WebGPU stalls, Qualcomm Adreno-6xx (WebGPU slow + visually wrong — §4 phone result / `PHASE1_REPORT.md` §9). |
 | Download size | ~185 MB (`model_512.onnx`) — exceeds the §13 100 MB flag. |
@@ -140,20 +140,25 @@ from the coarser 512 input (matches the CPU-quality cross-check, mean IoU
 
 ### Phone result — 2026-10-26, Android (Qualcomm Adreno-6xx) — first real-phone WebGPU measurement
 
-Ran both paths (same page, 5 warm inferences each) on the phone's mobile
-Chrome 155:
+Ran both paths (same page, 5 warm inferences each) on the phone. Two runs:
+"Desktop Site active" (desktop Linux UA) then the canonical retest with
+**Desktop Site disabled** (real Android UA:
+`Linux; Android 10; ... Chrome/155 Mobile`). Table shows the **mobile-UA
+(canonical)** run; the desktop-site run is in the raw reports for comparison.
 
 | Provider | Adapter | Ave (5 warm, ms) | Output quality |
 |---|---|---|---|
-| **webgpu** | qualcomm adreno-6xx, shader-f16=yes | **6525** (6786/6534/6250/6487/6567) | ❌ opaque rails left on the main object (transparent bg was correct) |
-| **wasm** | n/a (not webgpu) | **6457** (6136/6460/6480/6548/6660) | ✅ perfect transparent-background image |
+| **webgpu** | qualcomm adreno-6xx, shader-f16=yes | **6709** (7251/6503/6620/6592/6581) | ❌ opaque rails left on the main object (transparent bg was correct) |
+| **wasm** | n/a (not webgpu) | **6600** (6452/6489/6567/6662/6828) | ✅ perfect transparent-background image |
 
-Raw reports: `smoke-results/device-phone-adreno-6xx/{webgpu,wasm}.txt`
-(+ `summary.json`).
+Raw reports: `smoke-results/device-phone-adreno-6xx/{mobile-ua,desktop-site}/`
+(webgpu.txt / wasm.txt per run) + `summary.json`. Desktop-site run: webgpu
+6525 ms / wasm 6457 ms, same quality outcome.
 
 **What this changes:** on this phone (a class-3 device) WebGPU is **not** faster
-than WASM (6525 vs 6457 ms, within noise) *and* it mis-segmented part of the
-subject, while WASM was visually clean. This matches the earlier "Known bad
+than WASM (6709 vs 6600 ms, within noise) *and* it mis-segmented part of the
+subject in **both** mobile-UA and desktop-site modes, while WASM was visually
+clean both times. This matches the earlier "Known bad
 devices" phone for Adreno quirks, and it is the first real-device evidence that
 **WebGPU should stay an opt-in path with WASM as the safe default on mobile**
 — not the primary provider. The fallback message for non-WASM quality should be

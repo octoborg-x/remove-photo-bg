@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""Compare 1024x1024 fp16 vs 512x512 fp32 masks from the T4 GPU
+benchmark (smoke-results/benchmark-t4/masks).
+
+Resizes both computed masks to a common 1024x1024 grid so IoU / abs-diff are
+measured on the same pixels; edge sharpness is still measured at each mask's
+native resolution (that is the real trade-off the coarser input makes).
+
+Usage: python3 scripts/compare-models-gpu.py [RESULTS_DIR]   # default smoke-results/benchmark-t4
+Writes <RESULTS_DIR>/quality-t4/quality.json + per-image cutout PNGs.
+"""
+import json
+import os
+import sys
+
+import numpy as np
+from PIL import Image
+
+BASE = sys.argv[1] if len(sys.argv) > 1 else "smoke-results/benchmark-t4"
+OUT = f"{BASE}/quality-t4"
+MASKS = f"{BASE}/masks"
+IMAGES = ["product-scent-bottle", "animal-buddy-dog", "glass-wine"]
+os.makedirs(OUT, exist_ok=True)
+
+rows = []
+for name in IMAGES:
+    a = np.load(f"{MASKS}/{name}_1024-fp16.npy")  # 1024 fp16, sigmoid applied
+    b = np.load(f"{MASKS}/{name}_512-fp32.npy")   # 512 fp32, probability output
+
+    def up(m):
+        return np.asarray(
+            Image.fromarray(m.astype(np.float32)).resize((1024, 1024), Image.BILINEAR),
+            dtype=np.float32,
+        )
+
+    a1, b1 = up(a), up(b)
+    ta, tb = a1 >= 0.5, b1 >= 0.5
+    inter = np.logical_and(ta, tb).sum()
+    union = np.logical_or(ta, tb).sum()
+    diff = np.abs(a1 - b1)
+
+    def gmag(m):
+        bnd = np.abs(m - 0.5) < 0.25
+        return float(np.hypot(*np.gradient(m))[bnd].mean()) if bnd.any() else 0.0
+
+    row = {
+        "image": name,
+        "iou_at_0.5": round(float(inter / union), 5),
+        "mean_abs_diff": round(float(diff.mean()), 5),
+        "p99_abs_diff": round(float(np.percentile(diff, 99)), 4),
+        "max_abs_diff": round(float(diff.max()), 4),
+        "fg_1024": round(float((a >= 0.5).mean()), 4),
+        "fg_512": round(float((b >= 0.5).mean()), 4),
+        "edge_1024_native": round(gmag(a), 4),
+        "edge_512_native": round(gmag(b), 4),
+    }
+    rows.append(row)
+    print(json.dumps(row))
+
+    for tag, m in (("1024", a), ("512", b)):
+        src = Image.open(f"test-images/{name}.jpg").convert("RGB")
+        alpha = Image.fromarray((m * 255).round().astype(np.uint8), "L").resize(src.size, Image.BILINEAR)
+        out = src.copy()
+        out.putalpha(alpha)
+        out.save(f"{OUT}/{name}_{tag}_cut.png")
+
+mean_iou = float(np.mean([r["iou_at_0.5"] for r in rows]))
+result = {
+    "rows": rows,
+    "mean_iou": round(mean_iou, 5),
+    "mean_abs_diff": round(float(np.mean([r["mean_abs_diff"] for r in rows])), 5),
+}
+with open(f"{OUT}/quality.json", "w") as f:
+    json.dump(result, f, indent=2)
+print(f"\nmean IoU @0.5: {mean_iou:.5f}")
+print(f"mean abs diff: {result['mean_abs_diff']:.5f}")
+print(f"wrote {OUT}/quality.json")

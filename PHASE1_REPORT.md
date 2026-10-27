@@ -235,6 +235,53 @@ The download-size reduction that matters is the input resolution, not the
 numeric precision: 1024→512 cuts activations 4×, which is what removes the
 `bad_alloc`.
 
+## 7a. Model-artifact review: the browser-tuned 512 exports (2026-10-25)
+
+The task asked to investigate `BRPOD123/birefnet-lite-512` (a browser-tuned
+512 export) and check the upstream MIT licence. Findings:
+
+- `BRPOD123/birefnet-lite-512` is a **mirror** of `studioludens/birefnet-lite-512`
+  (both lists of file hashes are byte-identical):
+  - `onnx/model.onnx` — 191,877,254 B, sha256 `1cb0fb360dadd15af77c639085d77a9df67db0c64315560c3de005f676345ac2`
+  - `onnx/model_fp16.onnx` — 98,484,532 B, sha256 `eff9216bb2f9d3f023d9c2b7196845a7485739ab1f231593633e4d2344ffc516`
+  - `LICENSE` — MIT with a dual copyright line: `Copyright (c) 2024 ZhengPeng`
+    and `Copyright (c) 2026` (Studio Ludens on the original, a second author
+    name on the mirror); both are structurally valid MIT texts.
+- **Graph contract is different from the shipped artifact**: both files output
+  **single-channel logits** (`output_image`, `[1,1,512,512]`, float32) — the
+  sigmoid is applied by the caller, unlike the shipped export where sigmoid is
+  baked in. Input is still `input_image` `[1,3,512,512]` float32, opset 17.
+  The harness already supports this via `outputIsProbability:false`, so the
+  contract difference is not a blocker by itself.
+- **Measured in the same headless Chromium harness (WASM, software rendering):**
+
+  | Export | Size | Warm infer | vs shipped |
+  |---|---|---|---|
+  | `studioludens`/`BRPOD123` fp16 | 94 MB | **219,272 ms** | 51× slower |
+  | `studioludens`/`BRPOD123` fp32 | 183 MB | 5,679 ms | 1.3× slower |
+  | shipped 512 fp32 (Phoenix) | 185 MB | 4,280 ms | baseline |
+
+- **Why fp16 is unusable here:** 17,490 nodes, and onnxruntime-web's WASM
+  backend has no native float16 compute — it interposes a Cast before/after
+  every fp16 tensor. The same graph on native CPU (onnxruntime Python, fp16
+  constants) runs at ≈3.0 s, so this is a WASM-emulation penalty, not a
+  material model difference.
+- **Verdict:** do **not** switch. The fp16 export's 94 MB size is attractive
+  for Change-1 (download size) but it makes the mandatory WASM fallback
+  unusable (219 s), and the fp32 export (183 MB) gives no size benefit while
+  being slightly slower and adding a client sigmoid. Keep the shipped artifact.
+
+Upstream MIT licence verification (task item):
+
+- `ZhengPeng7/BiRefNet_lite` HF commit
+  `aa62cd87eafb9cc43056d08ef3615a14628b831d` (2026-08-29, "Complete the MIT
+  license in the model card") — `license: mit` in card YAML and tag.
+- `ZhengPeng7/BiRefNet` LICENSE on GitHub — MIT, introduced at
+  `2713d1293ce8a923d5878f1f30177b78770bf24c` (2024-03-11 "Add the MIT
+  LICENSE"), unchanged since; Copyright (c) 2024 ZhengPeng. Full text pasted
+  in `THIRD_PARTY_LEGAL_NOTICES.md`. (The commit previously pinned there,
+  `e49b1256…`, was **not a valid commit** and has been corrected.)
+
 ## 8. Verdict (revised)
 
 **GO on WASM — with two accepted costs and one unmeasured requirement.**
@@ -282,3 +329,29 @@ is superseded: that premise came from the 1024 fp16 export.
    a product decision, not an engineering one, and it gates Phase 2 scope.
 3. Proceed to Phase 2 (full product workflow) once (1) is measured and (2) is
    decided.
+
+## 10a. Free-GPU benchmark of 1024 vs 512 (2026-10-25)
+
+This tests the claim in §6/§7 that the 512 pipeline is the right browser target
+by measuring both candidate pipelines on a free GPU with one consistent
+methodology (cold start separated from N warm runs, peak RSS sampled, masks
+saved). `scripts/benchmark-pipelines.py` is the runnable methodology; the
+self-contained Kaggle kernel `kaggle/birefnet-free-gpu-benchmark/` reproduces
+it on a Kaggle GPU and is pushed (private) at
+`octoxdev/birefnet-lite-free-gpu-benchmark-1024-vs-512`.
+
+Local CPU run (native onnxruntime, single-threaded, `intra_op_num_threads=1`):
+
+| Pipeline | Model load | Cold start | Warm (avg) | Peak RSS |
+|---|---|---|---|---|
+| 1024 fp16 (onnx-community) | 3.73 s | 15–18 s | 14.2–15.6 s | ≈8.6 GB |
+| 512 fp32 (shipped) | 1.18 s | 3.6–3.9 s | 3.6 s | ≈1.3 GB |
+
+Quality (masks upscaled to original dimensions, 3 images): mean IoU@0.5
+**0.992**, mean abs diff ≈0.003, edge sharpness measurably softer at 512
+(≈0.19 vs ≈0.33 gradient in the transition band) — consistent with §6.
+
+Kaggle GPU run: kernel pushed 2026-10-25, status RUNNING at time of writing.
+When complete, the devices/latencies will be appended here and the JSON/npy
+outputs pulled from the kernel output. This is the first real-GPU measurement
+of the two pipelines.

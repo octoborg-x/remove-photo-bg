@@ -1,4 +1,4 @@
-# MODEL_CARD — BiRefNet_lite (ONNX fp16)
+# MODEL_CARD — BiRefNet_lite (ONNX fp32)
 
 Phase-1 record for the model used by this project. See also
 `THIRD_PARTY_LEGAL_NOTICES.md` (hashes/licences) and `PHASE1_REPORT.md`
@@ -76,4 +76,4 @@ question about training data has been adjudicated. Date checked: 2026-10-24
 
 - Redistributed only as a self-hosted first-party asset from this app's origin.
 - Re-downloadable and verifiable via `npm run fetch-models` (fails on SHA-256 mismatch).
-- Phase-1 flag: ≈109 MB (over the 100 MB download-size flag in §13).
+- Phase-1 flag: ≈185 MB (over the 100 MB download-size flag in §13).

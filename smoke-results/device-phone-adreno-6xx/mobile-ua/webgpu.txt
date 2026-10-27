@@ -1,0 +1,13 @@
+== BiRefNet_lite Phase 1 device report ==
+Page: https://5173-cs-215478958940-default.cs-europe-west1-haha.cloudshell.dev/
+Provider: webgpu
+Adapter: qualcomm adreno-6xx, maxStorageBufferBindingSize=512MB, shader-f16=yes
+Cross-origin isolated: yes (COOP/COEP headers served)
+Adapter f16: yes
+Warm inferences: 5
+Timings (ms): 7250.6, 6502.6, 6620.3, 6591.8, 6580.8
+Average (ms): 6709.2
+Model bytes: n/a
+Model download: n/a s
+First-cold-start shader compile: see first-inference note in log
+UA: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36

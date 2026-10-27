@@ -1,0 +1,13 @@
+== BiRefNet_lite Phase 1 device report ==
+Page: https://5173-cs-215478958940-default.cs-europe-west1-haha.cloudshell.dev/
+Provider: wasm
+Adapter: n/a (not webgpu)
+Cross-origin isolated: yes (COOP/COEP headers served)
+Adapter f16: n/a
+Warm inferences: 5
+Timings (ms): 6136.3, 6460.4, 6479.5, 6548.1, 6660.1
+Average (ms): 6456.9
+Model bytes: n/a
+Model download: n/a s
+First-cold-start shader compile: see first-inference note in log
+UA: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36

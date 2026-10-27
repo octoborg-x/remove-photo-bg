@@ -8,6 +8,19 @@ Web Worker); no image pixels leave the device.
 > `MVP_OPENHANDS.md` §13 (implement only Phase 0 + Phase 1). The verdict and
 > measured results are in [`PHASE1_REPORT.md`](./PHASE1_REPORT.md).
 
+## Result — WASM path on a real phone
+
+![BiRefNet_lite smoke test on an Android phone, WASM provider: input vase photo above a clean transparent-background cutout, with the run log below](./docs/screenshots/phone-wasm-smoke-test.jpg)
+
+Android phone (Chrome 155, mobile UA), `provider=wasm`: 960×1400 input →
+transparent PNG, 28.8% opaque, **6880 ms average over 5 warm inferences**.
+The same page on the same phone with `provider=webgpu` (Adreno-6xx) was **not
+faster** (≈6.6–6.7 s warm) and **mis-segmented the subject** (opaque rails left
+on the object), while WASM was clean in every run. The worker currently tries
+`['webgpu', 'wasm']` in that order, so on this device class the clean output
+needs `?provider=wasm` — evidence recorded in `HARDWARE_TESTING.md` §4 and
+`smoke-results/device-phone-adreno-6xx/`.
+
 ## What works (Phase 1)
 
 - Model download + self-hosted serving (`fetch-models` verifies SHA-256).

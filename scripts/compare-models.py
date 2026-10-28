@@ -10,19 +10,49 @@ Q = "smoke-results/measurements/masks"
 IMAGES = ["product-scent-bottle", "animal-buddy-dog", "glass-wine"]
 rows = []
 
+
+def up(m, size=(1024, 1024)):
+    """Bilinear resize to a common grid so both masks are measured on the same
+    pixels. np.gradient is a per-pixel finite difference: the same physical edge
+    reads steeper on the coarser 512 native grid, which made a native-grid
+    comparison report 512 as *sharper* - a measurement artifact, not the model.
+    Always compare on a common grid."""
+    return np.asarray(
+        Image.fromarray(m.astype(np.float32)).resize(size, Image.BILINEAR),
+        dtype=np.float32,
+    )
+
+
+def gmag(m):
+    bnd = np.abs(m - 0.5) < 0.25
+    return float(np.hypot(*np.gradient(m))[bnd].mean()) if bnd.any() else 0.0
+
+
+def band_width(m, size):
+    # Grid-independent softness in ORIGINAL-image pixels: area of the transition
+    # band divided by the length of the 0.5 level set, both after resampling to
+    # the source size, so the two masks are measured on the same grid.
+    r = up(m, size)
+    band = (r > 0.25) & (r < 0.75)
+    fg = r >= 0.5
+    p = np.pad(fg, 1)  # false border => image edge counts as boundary
+    enclosed = p[:-2, 1:-1] & p[2:, 1:-1] & p[1:-1, :-2] & p[1:-1, 2:]
+    boundary = fg & ~enclosed
+    return float(band.sum() / max(boundary.sum(), 1))
+
+
 for name in IMAGES:
     a = np.load(f"{Q}/{name}_1024.npy")  # 1024 fp16 export, sigmoid applied
     b = np.load(f"{Q}/{name}_512.npy")   # 512 fp32 export, probability output
 
-    ta, tb = a >= 0.5, b >= 0.5
+    # Both masks resized to a common 1024 grid: IoU / abs-diff and the edge
+    # gradient are then measured on identical pixels.
+    a1, b1 = up(a), up(b)
+    ta, tb = a1 >= 0.5, b1 >= 0.5
     inter = np.logical_and(ta, tb).sum()
     union = np.logical_or(ta, tb).sum()
-    diff = np.abs(a - b)
-
-    # Edge sharpness: mean gradient magnitude across the transition band, which
-    # is where a coarser input grid would show up first.
-    band = np.abs(a - 0.5) < 0.25
-    gmag = lambda m: float(np.hypot(*np.gradient(m))[band].mean()) if band.any() else 0.0
+    diff = np.abs(a1 - b1)
+    src_size = Image.open(f"test-images/{name}.jpg").size
 
     row = {
         "image": name,
@@ -30,10 +60,14 @@ for name in IMAGES:
         "mean_abs_diff": round(float(diff.mean()), 5),
         "p99_abs_diff": round(float(np.percentile(diff, 99)), 4),
         "max_abs_diff": round(float(diff.max()), 4),
-        "fg_1024": round(float(ta.mean()), 4),
-        "fg_512": round(float(tb.mean()), 4),
-        "edge_1024": round(gmag(a), 4),
-        "edge_512": round(gmag(b), 4),
+        "fg_1024": round(float((a >= 0.5).mean()), 4),
+        "fg_512": round(float((b >= 0.5).mean()), 4),
+        # Edge sharpness measured on the common 1024 grid. Native-grid gradients
+        # are grid-dependent and report 512 as "sharper"; do not use them.
+        "edge_1024_common": round(gmag(a1), 4),
+        "edge_512_common": round(gmag(b1), 4),
+        "bandwidth_1024_px": round(band_width(a, src_size), 3),
+        "bandwidth_512_px": round(band_width(b, src_size), 3),
     }
     rows.append(row)
     print(json.dumps(row))

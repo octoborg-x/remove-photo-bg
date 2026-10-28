@@ -8,8 +8,10 @@
       "max_abs_diff": 0.8559,
       "fg_1024": 0.2893,
       "fg_512": 0.2879,
-      "edge_1024_native": 0.4375,
-      "edge_512_native": 0.474
+      "edge_1024_common": 0.4375,
+      "edge_512_common": 0.235,
+      "bandwidth_1024_px": 1.367,
+      "bandwidth_512_px": 2.439
     },
     {
       "image": "animal-buddy-dog",
@@ -19,8 +21,10 @@
       "max_abs_diff": 0.9729,
       "fg_1024": 0.3215,
       "fg_512": 0.3211,
-      "edge_1024_native": 0.3365,
-      "edge_512_native": 0.4221
+      "edge_1024_common": 0.3361,
+      "edge_512_common": 0.218,
+      "bandwidth_1024_px": 1.537,
+      "bandwidth_512_px": 2.359
     },
     {
       "image": "glass-wine",
@@ -30,8 +34,10 @@
       "max_abs_diff": 0.98,
       "fg_1024": 0.3932,
       "fg_512": 0.393,
-      "edge_1024_native": 0.3868,
-      "edge_512_native": 0.4526
+      "edge_1024_common": 0.3877,
+      "edge_512_common": 0.2293,
+      "bandwidth_1024_px": 1.408,
+      "bandwidth_512_px": 2.365
     }
   ],
   "mean_iou": 0.99169,

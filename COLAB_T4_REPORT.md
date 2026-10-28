@@ -127,32 +127,57 @@ workload).
 ## 5. Mask quality vs the 1024 reference — the 512-vs-1024 open check
 
 Both pipelines ran on the same 3 test images on the T4. Masks were resized to a
-common 1024×1024 grid before comparison, so IoU is measured on identical
-pixels; edge sharpness is measured at each mask's native resolution.
+common 1024×1024 grid before comparison, so IoU **and edge sharpness** are
+measured on identical pixels. Edge sharpness is reported in two ways: the mean
+per-pixel gradient on that common grid, and the transition-band width in
+original-image pixels (band area ÷ boundary length), which is independent of
+the sampling grid.
 
-| Image | IoU@0.5 | Mean abs diff | p99 abs diff | FG frac 1024 | FG frac 512 | Edge 1024 (native) | Edge 512 (native) |
-|---|---|---|---|---|---|---|---|
-| product-scent-bottle | 0.99321 | 0.00252 | 0.0603 | 0.2893 | 0.2879 | 0.4375 | 0.4740 |
-| animal-buddy-dog | 0.99211 | 0.00299 | 0.0939 | 0.3215 | 0.3211 | 0.3365 | 0.4221 |
-| glass-wine | 0.98976 | 0.00457 | 0.1386 | 0.3932 | 0.3930 | 0.3868 | 0.4526 |
-| **Mean** | **0.99169** | **0.00336** | — | — | — | — | — |
+| Image | IoU@0.5 | Mean abs diff | p99 abs diff | FG frac 1024 | FG frac 512 | Edge 1024 (common) | Edge 512 (common) | Bandwidth 1024 | Bandwidth 512 |
+|---|---|---|---|---|---|---|---|---|---|
+| product-scent-bottle | 0.99321 | 0.00252 | 0.0603 | 0.2893 | 0.2879 | 0.4375 | 0.2350 | 1.37 px | 2.45 px |
+| animal-buddy-dog | 0.99211 | 0.00299 | 0.0939 | 0.3215 | 0.3211 | 0.3361 | 0.2180 | 1.54 px | 2.37 px |
+| glass-wine | 0.98976 | 0.00457 | 0.1386 | 0.3932 | 0.3930 | 0.3877 | 0.2293 | 1.42 px | 2.38 px |
+| **Mean** | **0.99169** | **0.00336** | — | — | — | — | — | — | — |
 
 Result: the 512 export reproduces the 1024 mask to **IoU 0.9917** with mean
 absolute probability difference 0.0034. Foreground coverage agrees to within
 0.14 percentage points (largest case: 0.2893 vs 0.2879).
 
-The one systematic difference is in the native-resolution edge gradient, where
-512 is consistently *higher* than 1024 (0.474 vs 0.437, 0.422 vs 0.337, 0.453
-vs 0.387). That is a measured direction, and it runs **opposite** to the CPU
-comparison in `PHASE1_REPORT.md` §10a, which reported 512 as *softer* at the
-edge (≈0.19 vs ≈0.33). The two runs use different measurement code on
-different grids, so the discrepancy is unresolved rather than explained; the
-IoU and abs-diff numbers, which agree across all runs, are the figures this
-report relies on.
+**Edge sharpness — resolved.** The earlier revision of this section reported
+512 as *sharper* than 1024 (edge gradient 0.474 vs 0.437 etc.) and flagged the
+contradiction with the CPU run, which reported 512 as *softer*. The cause was
+the measurement, not the model: `np.gradient` is a per-pixel finite difference,
+so the same physical edge spans fewer pixels on the coarser 512 grid and yields
+a mechanically larger slope there. Comparing the two masks at their **native**
+grids therefore reports 512 as sharper even when the masks are identical. A
+synthetic control — one soft edge resampled to 1024 and 512 with no real
+difference — reproduces exactly this artifact (ratio 1.39 at native grids,
+0.69 on a common grid).
+
+Measured on the common 1024 grid, the direction is the one the CPU run
+reported: **512 is consistently softer** (0.235 vs 0.438, 0.218 vs 0.336, 0.229
+vs 0.388). The grid-independent bandwidth agrees and quantifies it: the
+transition band is **1.5–1.8× wider** at 512 (≈2.4 px vs ≈1.4 px in
+original-image pixels). So the CPU and GPU runs no longer disagree; the earlier
+GPU number was an artifact, now corrected in `scripts/compare-models-gpu.py`.
+
+The magnitude is small and edge-localised: the band is 1–2 px wide either way,
+and of the foreground pixels 512 drops, 47–76% sit within 1 px of the 1024
+boundary (thin-edge thinning, not lost objects). The visible exception is
+specular/glass detail — composited over white, the mean per-pixel difference is
+0.04–0.36/255 for all three images, but glass-wine over black reaches mean
+1.2/255 with a p99 of 42/255 at the wine-glass rim.
 
 This is the independent cross-check on the CPU figure (mean IoU 0.9918 in
 `smoke-results/measurements/quality-1024-vs-512.json`) and on the ZeroGPU
 figure (0.992). Three runtimes on three machines agree to 4 decimal places.
+
+The table above was recomputed from this run's saved cutouts with the corrected
+`scripts/compare-models-gpu.py`. The committed
+`smoke-results/benchmark-t4/quality-t4/quality.json` still carries the original
+`edge_*_native` fields (the pre-correction, grid-dependent measurement); its
+IoU, abs-diff and foreground values are unchanged and match the table.
 
 ## 6. What this supports
 

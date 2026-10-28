@@ -207,17 +207,21 @@ average). Foreground coverage agrees to within 0.15 percentage points, so 512
 does not systematically gain or lose object area.
 
 **Honest caveat on edge sharpness.** Mean gradient magnitude across the
-transition band is 0.34–0.36 at 1024 versus 0.17–0.20 at 512. That difference is
-**partly an artifact of the resampling ratio**: the 512 mask is upscaled ~2.5×
-to reach native size, while the 1024 mask is upscaled ~1.25×, and upsampling
-necessarily smooths a boundary. The metric therefore overstates the loss. Visual
-inspection of native-resolution cutouts shows the practical difference is
-confined to thin specular detail (the wine-glass rim shows a slightly softer,
-fainter edge); fur and product silhouettes are visually equivalent.
+transition band is 0.34–0.36 at 1024 versus 0.17–0.20 at 512 — 512 is genuinely
+softer. The grid-independent measure agrees: the transition band is ~1.5–1.8×
+wider at 512 (≈2.4 px vs ≈1.4 px in original-image pixels). The absolute
+gradient numbers are themselves grid-dependent (`np.gradient` is a per-pixel
+difference, so the same edge reads steeper on a coarser grid), which is why the
+T4/ZeroGPU runs initially reported 512 as *sharper*; measured on a common grid
+they agree with this direction. See `COLAB_T4_REPORT.md` §5. Visual inspection
+of native-resolution cutouts shows the practical difference is confined to thin
+specular detail (the wine-glass rim shows a slightly softer, fainter edge); fur
+and product silhouettes are visually equivalent.
 
-**Conclusion:** 512 costs a small, mostly edge-localised amount of refinement and
-buys a working pipeline. Anyone who needs the last few percent of hair/specular
-edge fidelity should treat this as the known trade-off, not a defect.
+**Conclusion:** 512 costs a small, edge-localised amount of refinement — roughly
+one extra pixel of transition width — and buys a working pipeline. Anyone who
+needs the last few percent of hair/specular edge fidelity should treat this as
+the known trade-off, not a defect.
 
 ## 7. Smaller-variant options evaluated (new in revision 2)
 

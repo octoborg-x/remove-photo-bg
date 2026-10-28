@@ -29,17 +29,26 @@ same two ONNX models** used for the T4 numbers.
 Quality vs the 1024 reference (resized to common 1024² grid; edge sharpness at
 native resolution):
 
-| image | IoU@0.5 | mean \|Δ\| | fg 1024 / 512 | edge 1024 / 512 |
+| image | IoU@0.5 | mean \|Δ\| | fg 1024 / 512 | edge 1024 / 512 (native) |
 |---|---|---|---|---|
 | product-scent-bottle | 0.99319 | 0.00252 | 0.2893 / 0.2878 | 0.4375 / 0.4741 |
 | animal-buddy-dog | 0.99214 | 0.00298 | 0.3215 / 0.3211 | 0.3361 / 0.4221 |
 | glass-wine | 0.98985 | 0.00455 | 0.3931 / 0.3930 | 0.3877 / 0.4526 |
 | **mean** | **0.99173** | — | — | — |
 
+> **Correction (edge sharpness).** The `edge` columns above are measured at each
+> mask's **native** grid, which makes them grid-dependent: `np.gradient` is a
+> per-pixel finite difference, so the same physical edge yields a larger slope
+> on the coarser 512 grid. Read this way the table suggests 512 has *sharper*
+> edges, which is an artifact, not the model. Measured on a common 1024 grid,
+> **512 is consistently softer** (≈0.22–0.24 vs ≈0.34–0.44), and the
+> transition band is ≈1.5–1.8× wider (≈2.4 px vs ≈1.4 px). See
+> `COLAB_T4_REPORT.md` §5 for the resolved analysis.
+
 Same relationship as on the T4: the coarser 512 input is **faster and less
-memory-hungry** but has **sharper edges at native resolution** (0.4741/0.4221/
-0.4526 vs 0.4375/0.3361/0.3877), with near-identical foreground fractions and
-IoU ~0.992.
+memory-hungry**, with near-identical foreground fractions and IoU ~0.992, at the
+cost of a slightly wider transition band at the subject boundary (the softened
+edge detail is most visible on specular/glass content).
 
 ## How to rerun
 

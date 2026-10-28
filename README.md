@@ -102,8 +102,16 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
   target devices, failing inside `OrtRun()` with `ERROR_CODE: 6 … std::bad_alloc`.
   The shipped model is therefore the same official `BiRefNet_lite` backbone
   exported at a fixed 512×512 input, which peaks at ~1.1 GB and runs on both
-  WebGPU and WASM. Mask quality is unaffected in practice; only very fine edge
-  detail is limited by the coarser input grid.
+  WebGPU and WASM.
+- **Known quality limitation (measured):** the 512 input reproduces the 1024
+  mask at IoU 0.992 with sub-1/255 mean difference, but its edge is genuinely
+  softer — the transition band at the subject boundary is ~1.5–1.8× wider
+  (≈2.4 px vs ≈1.4 px). The difference is edge-localised and most visible on
+  specular/glass detail (a wine-glass rim reads slightly softer and fainter);
+  product and fur silhouettes are visually equivalent. This is an accepted
+  trade-off, not a defect. Note that an earlier edge-sharpness metric reported
+  the opposite direction; that was a grid-sampling artifact, corrected in
+  `COLAB_T4_REPORT.md` §5.
 - WASM/CPU inference on the 512×512 export takes roughly 3–6 s per image
   (native CPU ~2.2 s), so the CPU path is usable rather than a last resort.
 - A quantised variant was evaluated and rejected: dynamic int8 shrank the file

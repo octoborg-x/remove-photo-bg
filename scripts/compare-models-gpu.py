@@ -43,6 +43,23 @@ for name in IMAGES:
         bnd = np.abs(m - 0.5) < 0.25
         return float(np.hypot(*np.gradient(m))[bnd].mean()) if bnd.any() else 0.0
 
+    def band_width(m, size):
+        # Grid-independent softness, in ORIGINAL-image pixels: transition-band
+        # area divided by the length of the 0.5 level set, both after resampling
+        # to the source size so the two masks are measured on the same grid.
+        # A per-pixel gradient changes when only the sampling grid changes; this
+        # does not.
+        r = np.asarray(Image.fromarray(m.astype(np.float32)).resize(size, Image.BILINEAR),
+                       dtype=np.float32)
+        band = (r > 0.25) & (r < 0.75)
+        fg = r >= 0.5
+        p = np.pad(fg, 1)  # False border => image edge counts as boundary
+        enclosed = p[:-2, 1:-1] & p[2:, 1:-1] & p[1:-1, :-2] & p[1:-1, 2:]
+        boundary = fg & ~enclosed
+        return float(band.sum() / max(boundary.sum(), 1))
+
+    src_size = Image.open(f"test-images/{name}.jpg").size
+
     row = {
         "image": name,
         "iou_at_0.5": round(float(inter / union), 5),
@@ -51,8 +68,15 @@ for name in IMAGES:
         "max_abs_diff": round(float(diff.max()), 4),
         "fg_1024": round(float((a >= 0.5).mean()), 4),
         "fg_512": round(float((b >= 0.5).mean()), 4),
-        "edge_1024_native": round(gmag(a), 4),
-        "edge_512_native": round(gmag(b), 4),
+        # Edge sharpness is measured on the common 1024 grid. np.gradient is a
+        # per-pixel finite difference, so the same physical edge yields a larger
+        # slope on the coarser 512 grid purely from pixel spacing; a
+        # native-grid comparison therefore reports 512 as "sharper" even for an
+        # identical edge. Do not compare a and b at their native resolutions.
+        "edge_1024_common": round(gmag(a1), 4),
+        "edge_512_common": round(gmag(b1), 4),
+        "bandwidth_1024_px": round(band_width(a, src_size), 3),
+        "bandwidth_512_px": round(band_width(b, src_size), 3),
     }
     rows.append(row)
     print(json.dumps(row))

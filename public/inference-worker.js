@@ -26,6 +26,42 @@ if (ort.env.webgpu) {
   ort.env.webgpu.powerPreference = 'high-performance';
 }
 
+// WebGPU is enabled only on adapters that have been validated to produce a
+// correct mask. BiRefNet on onnxruntime-web is precision- and layout-sensitive;
+// on Adreno-6xx it silently returned a wrong result (missing foreground, opaque
+// rails left on the subject) with no error, so the WASM fallback never fired.
+// Until an adapter is verified end-to-end (correct mask + acceptable latency,
+// see the laptop test), default to WASM. `?provider=webgpu` still opts in.
+//
+// Each entry is a lowercase substring of `adapter.info.device ||
+// adapter.info.architecture || adapter.info.vendor || adapter.info.description`.
+// Keep the list empty until an adapter passes validation.
+const VALIDATED_WEBGPU_SUBSTRINGS = [
+  // e.g. 'radeon 780m', 'apple m2', 'intel iris xe — validated <date>'
+];
+
+function adapterSubstrings() {
+  try {
+    const a = ort.env.webgpu?.adapter;
+    if (!a) return '';
+    const info = a.info ?? {};
+    return [info.device, info.architecture, info.vendor, info.description]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+// Do NOT call navigator.gpu inside the worker before importScripts has run:
+// `adapterSubstrings()` is only meaningful once ort has enumerated the adapter.
+function webgpuValidated() {
+  const blob = adapterSubstrings();
+  if (!blob) return false;
+  return VALIDATED_WEBGPU_SUBSTRINGS.some((s) => blob.includes(s));
+}
+
 let session = null;
 let lastProvider = 'none';
 let modelUrl = null;
@@ -215,11 +251,20 @@ self.onmessage = async (e) => {
       if (typeof msg.outputIsProbability === 'boolean') {
         outputIsProbability = msg.outputIsProbability;
       }
-      // Only attempt WebGPU if the browser actually exposes it. `?provider=wasm`
-      // forces the CPU path, which is the escape hatch when a GPU driver stalls.
+      // Only attempt WebGPU if the browser actually exposes it AND the adapter
+      // is one we have validated (see VALIDATED_WEBGPU_SUBSTRINGS). An
+      // unvalidated GPU can silently produce a wrong mask, so the WASM fallback
+      // wouldn't fire. `?provider=webgpu` still forces it as an opt-in.
       const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
       const forced = msg.forceProvider;
-      const candidates = forced ? [forced] : hasWebGPU ? ['webgpu', 'wasm'] : ['wasm'];
+      let candidates;
+      if (forced) {
+        candidates = [forced];
+      } else if (hasWebGPU && webgpuValidated()) {
+        candidates = ['webgpu', 'wasm'];
+      } else {
+        candidates = ['wasm'];
+      }
       const ep = await createSession(candidates);
       if (ep === 'webgpu' && !gpuFeatures().includes('shader-f16')) {
         // The shipped model is float16 internally; without shader-f16 the driver

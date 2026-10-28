@@ -57,7 +57,7 @@ export (MIT weights).
 | Batch size | 1 |
 | Warm reps | 10 per image (30 total per pipeline) |
 | Captured UTC | 2026-10-28T05:28:00+00:00, git `873fc9c` |
-| Access | Cloudflare quick tunnel + SSH (Colab exposes no inbound ports) |
+| Access | SSH over a Cloudflare TCP tunnel into the Colab session (Colab exposes no inbound ports; mechanism as in `notebooks/colab-t4-benchmark.ipynb`) |
 | **Follow-up GPU** | **ZeroGPU (free HF tier) — see [ZEROGPU_REPORT.md](ZEROGPU_REPORT.md)** |
 
 > **ZeroGPU follow-up (2026-10-27).** Hugging Face ZeroGPU (free tier) ran the

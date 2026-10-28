@@ -54,10 +54,13 @@ button on the page.
    model size, and the UA — no hand-typing and no photo required.
 5. _Optionally_, also capture:
    - page `#stage` text during the first run (shader-compile note prints only
-     on the `webgpu` path)
+     on the `webgpu` path — which is **off by default**; append
+     `?provider=webgpu` to test it)
    - `performance.memory` or `/proc` peak if convenient (class 4)
    - whether a fallback message ever appears
-6. For class 2, repeat with `?provider=wasm` appended to the URL.
+6. The default provider is now **WASM**, so a default run is the CPU probe.
+   To exercise the WebGPU path on a not-yet-validated adapter, append
+   `?provider=webgpu`. To rule the GPU out explicitly, append `?provider=wasm`.
 
 **Privacy:** the harness never uploads anything. `run-smoke.mjs` additionally
 records every network request and fails the summary if any is non-first-party;

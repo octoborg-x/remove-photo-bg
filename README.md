@@ -16,16 +16,19 @@ Android phone (Chrome 155, mobile UA), `provider=wasm`: 960×1400 input →
 transparent PNG, 28.8% opaque, **6880 ms average over 5 warm inferences**.
 The same page on the same phone with `provider=webgpu` (Adreno-6xx) was **not
 faster** (≈6.6–6.7 s warm) and **mis-segmented the subject** (opaque rails left
-on the object), while WASM was clean in every run. The worker currently tries
-`['webgpu', 'wasm']` in that order, so on this device class the clean output
-needs `?provider=wasm` — evidence recorded in `HARDWARE_TESTING.md` §4 and
-`smoke-results/device-phone-adreno-6xx/`.
+on the object), while WASM was clean in every run. So WebGPU is now **opt-in by
+default**: WASM is used unless an adapter has passed validation (the
+allowlist is currently empty — see the laptop WebGPU test in `PHASE1_REPORT.md`
+§10 and the device plan in `HARDWARE_TESTING.md` §2), and `?provider=webgpu`
+still forces the GPU path. Evidence recorded in
+`HARDWARE_TESTING.md` §4 and `smoke-results/device-phone-adreno-6xx/`.
 
 ## What works (Phase 1)
 
 - Model download + self-hosted serving (`fetch-models` verifies SHA-256).
-- ONNX Runtime Web (1.29.0) inference on **WebGPU** when available, with a
-  **WASM (threaded)** fallback.
+- ONNX Runtime Web (1.29.0) inference on **WASM (threaded) by default**, with
+  **WebGPU** enabled only on validated adapters (currently none) or via
+  `?provider=webgpu`.
 - Minimal page + Worker pre/post-processing: mask upscale to original
   dimensions, alpha composite, transparent PNG export.
 - Headless smoke harness (`run-smoke.mjs`) that records every network request
@@ -117,9 +120,17 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 - A quantised variant was evaluated and rejected: dynamic int8 shrank the file
   by only 12% and ran 2.3× slower, because Conv dominates and its kernels stay
   float. fp16 weights ran ~2× slower on CPU for the same reason.
-- Mitigations in place: the high-performance GPU adapter is requested, and a
-  WebGPU failure automatically rebuilds the session on the WASM provider and
-  reports the fallback in the log.
+- Mitigations in place: WASM is the default provider, the high-performance GPU
+  adapter is requested for opt-in WebGPU, and a WebGPU failure automatically
+  rebuilds the session on the WASM provider and reports the fallback in the log.
+- WebGPU is **disabled by default** until an adapter is validated. `navigator.gpu`
+  existing is not enough — an unvalidated driver can silently return a wrong
+  mask (observed on Adreno-6xx), which the WASM fallback would never catch.
+  The allowlist lives in `public/inference-worker.js`
+  (`VALIDATED_WEBGPU_SUBSTRINGS`) and in
+  `src/features/background-removal/model.worker.ts`; validate an adapter
+  end-to-end (correct mask + acceptable latency) before adding it.
+  `?provider=webgpu` forces WebGPU regardless of the allowlist.
 - WebGPU runs are bounded by a watchdog: 180 s for the first run (it compiles
   shaders) and 120 s afterwards. A run that never settles would otherwise leave
   the UI with no output and no error. On timeout the run falls back to WASM.
@@ -128,8 +139,9 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
   adapter's `shader-f16` feature (fp16 emulation was the cause of the Intel
   Gen-9 stalls). The log still reports `shader-f16=yes|no` for the chosen
   adapter, since other model builds may require it.
-- `?provider=wasm` forces the CPU path. Use it to rule the GPU out when
-  diagnosing a stall, or to get a result on a machine whose driver cannot run
-  this model.
+- `?provider=wasm` and `?provider=webgpu` force a specific backend. Use
+  `?provider=wasm` to rule the GPU out when diagnosing a stall, and
+  `?provider=webgpu` to opt into the GPU on an adapter that is not on the
+  validated list yet (or to pre-validate one). The default (no flag) is WASM.
 - The full product UI (Phase 2), legal docs (Phase 3), and test suite (Phase 4)
   are not built yet per the Phase-1 prompt.

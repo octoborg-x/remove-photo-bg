@@ -22,6 +22,6 @@
   },
   "batch_size": 1,
   "warm_reps": 10,
-  "served_by": "Cloudflare quick tunnel + SSH (Colab has no inbound ports)",
+  "served_by": "SSH over a Cloudflare TCP tunnel into the Colab session (Colab has no inbound ports; mechanism as in notebooks/colab-t4-benchmark.ipynb)",
   "captured_utc": "2026-10-28T05:28:00+00:00"
 }

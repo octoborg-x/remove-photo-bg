@@ -363,9 +363,17 @@ Google Colab T4 GPU run (onnxruntime-gpu 1.31.1, CUDA 13.0,
 | 1024 fp16 | 5394 ms | 1914 ms | **581 ms** | 1.23–1.27 GB |
 | 512 fp32 | 979 ms | 259 ms | **109 ms** | 1.52 GB |
 
-**512 fp32 is ≈5.3× faster than 1024 fp16 on the T4** at ≈1.5× the peak RSS,
-and both fit a 16 GB card. Mask quality at the common 1024 grid: **mean
+**512 fp32 is ≈5.3× faster than 1024 fp16 on the T4** at ≈1.5× the peak host
+RSS, and both fit a 16 GB card. Mask quality at the common 1024 grid: **mean
 IoU@0.5 = 0.9917**, mean abs diff 0.0034 — no material quality loss from the
 coarser 512 export (matches the CPU IoU cross-check, 0.9918). Full per-image
 timings + mask stats in `smoke-results/benchmark-t4/summary.json`; visual
 side-by-side cutouts in `smoke-results/benchmark-t4/quality-t4/`.
+
+The per-field record for this run — model files and SHA-256, exact runtime,
+10-run latency, peak VRAM, and the mask-IoU table — is
+[`COLAB_T4_REPORT.md`](./COLAB_T4_REPORT.md), reproducible with
+`notebooks/colab-t4-benchmark.ipynb`. Two fields in this run are short of that
+spec and are marked as such there: it used 5 warm runs rather than 10+, and
+**peak VRAM was never sampled** — the figures above are host RSS, which is not
+device memory, so "fits a 16 GB card" is a weaker claim than it reads.

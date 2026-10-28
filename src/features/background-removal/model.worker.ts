@@ -24,7 +24,9 @@ const VALIDATED_WEBGPU_SUBSTRINGS: string[] = [
 
 function adapterSubstrings(): string {
   try {
-    const adapter = ort.env.webgpu?.adapter;
+    // Reuse the AdapterLike cast: ort.env.webgpu.adapter is TryGetGlobalType<'GPUAdapter'>,
+    // which resolves to {} without @webgpu/types, so .info is not visible on it directly.
+    const adapter = adapterInfo();
     if (!adapter) return '';
     const info = adapter.info ?? {};
     return [info.device, info.architecture, info.vendor, info.description]
@@ -266,7 +268,7 @@ self.onmessage = async (e: MessageEvent<MainToWorkerMessage>) => {
       const forced = msg.forceProvider as
         | ort.InferenceSession.ExecutionProviderName
         | undefined;
-      const candidates = forced
+      const candidates: ort.InferenceSession.ExecutionProviderName[] = forced
         ? [forced]
         : hasWebGPU && webgpuValidated()
           ? ['webgpu', 'wasm']

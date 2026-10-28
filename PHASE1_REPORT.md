@@ -358,9 +358,10 @@ Quality (masks upscaled to original dimensions, 3 images): mean IoU@0.5
 **0.992**, mean abs diff ≈0.003, edge sharpness measurably softer at 512
 (≈0.19 vs ≈0.33 gradient in the transition band) — consistent with §6.
 
-Google Colab T4 GPU run (onnxruntime-gpu 1.31.1, CUDA 13.0,
-`CUDAExecutionProvider`, 5 warm runs per image; artifacts in
-`smoke-results/benchmark-t4/`):
+Google Colab T4 GPU run, initial 5-run pass (onnxruntime-gpu 1.31.1,
+CUDA 13.0, `CUDAExecutionProvider`; artifacts in
+`smoke-results/benchmark-t4/`; superseded by the 10-run peak-VRAM run in
+[`COLAB_T4_REPORT.md`](./COLAB_T4_REPORT.md)):
 
 | Pipeline | Model load | Cold (img₁) | **Warm avg (5×)** | Peak RSS |
 |---|---|---|---|---|
@@ -377,7 +378,7 @@ side-by-side cutouts in `smoke-results/benchmark-t4/quality-t4/`.
 The per-field record for this run — model files and SHA-256, exact runtime,
 10-run latency, peak VRAM, and the mask-IoU table — is
 [`COLAB_T4_REPORT.md`](./COLAB_T4_REPORT.md), reproducible with
-`notebooks/colab-t4-benchmark.ipynb`. Two fields in this run are short of that
-spec and are marked as such there: it used 5 warm runs rather than 10+, and
-**peak VRAM was never sampled** — the figures above are host RSS, which is not
-device memory, so "fits a 16 GB card" is a weaker claim than it reads.
+`notebooks/colab-t4-benchmark.ipynb`. The earlier arm of this run (the five
+warm runs and host-RSS figures above, from the initial T4 pass) has been
+superseded: the follow-up T4 run sampled peak VRAM and ran 10 warm runs per
+image.

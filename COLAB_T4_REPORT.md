@@ -97,7 +97,7 @@ The `1024 fp16` first-run figure for image 1 (2018 ms) includes one-off CUDA
 kernel compilation for the larger graph; images 2–3 need no new kernels and
 settle at ~582–583 ms, i.e. essentially their warm time.
 
-### Why this is now 10 runs ❌→✅
+### Why 10 warm runs
 
 This run satisfies the spec's 10+ warm-run minimum (10 per image, 30 total per
 pipeline). Tightness is confirmed across all 30 samples per pipeline: SD 1.53 ms

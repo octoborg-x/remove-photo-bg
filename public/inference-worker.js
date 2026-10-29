@@ -6,7 +6,8 @@
 //
 // Message protocol (see src/features/background-removal/types.ts):
 //   in:  {kind:'set-model', modelUrl} | {kind:'run', runId, tensor, width, height} | {kind:'dispose'}
-//   out: {kind:'loading-model', at, bytes?} | {kind:'load-time', ms, provider, adapter}
+//   out: {kind:'loading-progress', stage, percent, bytes?, totalBytes?, elapsedMs, detail?}
+//        | {kind:'load-time', ms, provider, adapter}
 //        | {kind:'provider-fallback', from, to, reason}
 //        | {kind:'inference-time', ms, runId} | {kind:'result-ready', mask, width, height}
 //        | {kind:'error', message, runId?, fatal?}
@@ -76,6 +77,27 @@ function post(msg) {
   self.postMessage(msg);
 }
 
+// ——— Loading progress ———
+// A single wall-clock origin for the whole load, so every checkpoint carries a
+// consistent elapsed time for the UI. Stages and percentages are emitted from the
+// worker (which knows the real byte counts) rather than inferred on the page.
+const loadStartedAt = performance.now();
+let lastPercent = -1;
+
+function reportProgress(stage, percent, extra) {
+  // Suppress duplicate percentages during a download to avoid flooding the UI;
+  // stage changes always go through.
+  if (stage === 'downloading' && percent === lastPercent) return;
+  lastPercent = percent;
+  post({
+    kind: 'loading-progress',
+    stage,
+    percent,
+    elapsedMs: performance.now() - loadStartedAt,
+    ...(extra || {}),
+  });
+}
+
 // ORT reports provider allocation failures as bare C++ text (e.g.
 // "failed to call OrtRun(). ERROR_CODE: 6, ERROR_MESSAGE: std::bad_alloc").
 // BiRefNet's decoder allocates 411 MB tensors, so an under-provisioned GPU
@@ -101,7 +123,11 @@ async function downloadModel(url, onProgress) {
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to download model: HTTP ' + res.status);
   const total = Number(res.headers.get('content-length')) || 0;
-  if (!res.body) return await res.arrayBuffer();
+  if (!res.body) {
+    const buf = await res.arrayBuffer();
+    onProgress(1, buf.byteLength, total || buf.byteLength);
+    return buf;
+  }
   const reader = res.body.getReader();
   const chunks = [];
   let received = 0;
@@ -110,7 +136,7 @@ async function downloadModel(url, onProgress) {
     if (done) break;
     chunks.push(value);
     received += value.length;
-    if (total > 0) onProgress(Math.min(1, received / total), received);
+    onProgress(total > 0 ? Math.min(1, received / total) : 0, received, total);
   }
   const out = new Uint8Array(received);
   let offset = 0;
@@ -123,16 +149,33 @@ async function downloadModel(url, onProgress) {
 
 let modelBytes = null;
 
+// Progress is mapped onto fixed bands so each checkpoint is meaningful even
+// before a byte total is known:
+//   0-5   queued/runtime
+//   5-15  probing cache
+//   15-90 download (or a quick jump on a cache hit)
+//   90-99 session creation
+const PCT = { START: 0, RUNTIME: 5, CACHE_DONE: 15, DOWNLOAD_DONE: 90, SESSION_DONE: 99 };
+
 async function createSession(providers) {
   for (const ep of providers) {
     try {
       if (!modelBytes) {
-        post({ kind: 'loading-model', at: 5, bytes: 0 });
-        modelBytes = await downloadModel(modelUrl, (fraction, bytes) => {
-          post({ kind: 'loading-model', at: Math.round(5 + 85 * fraction), bytes });
+        reportProgress('cache-check', PCT.CACHE_DONE, { detail: 'checking for a cached model' });
+        reportProgress('downloading', PCT.CACHE_DONE, { bytes: 0 });
+        modelBytes = await downloadModel(modelUrl, (fraction, bytes, total) => {
+          const complete = fraction >= 1;
+          reportProgress(
+            complete ? 'downloaded' : 'downloading',
+            Math.round(PCT.CACHE_DONE + (PCT.DOWNLOAD_DONE - PCT.CACHE_DONE) * fraction),
+            { bytes, totalBytes: total || undefined },
+          );
         });
+      } else {
+        // A provider retry reuses the bytes already in memory; no re-download.
+        reportProgress('cache-hit', PCT.DOWNLOAD_DONE, { detail: 'model already in memory' });
       }
-      post({ kind: 'loading-model', at: 90 });
+      reportProgress('creating-session', PCT.DOWNLOAD_DONE, { detail: 'provider ' + ep });
       session = await ort.InferenceSession.create(modelBytes, {
         executionProviders: [ep],
         graphOptimizationLevel: 'all',
@@ -142,6 +185,7 @@ async function createSession(providers) {
       // Once every candidate has been tried, drop the bytes so we don't hold a
       // second 185 MB copy in JS while ORT keeps its own (matters on low-RAM).
       if (ep === providers[providers.length - 1]) modelBytes = null;
+      reportProgress('session-ready', PCT.SESSION_DONE, { detail: ep });
       return ep;
     } catch (err) {
       session?.release?.();
@@ -251,6 +295,7 @@ self.onmessage = async (e) => {
       if (typeof msg.outputIsProbability === 'boolean') {
         outputIsProbability = msg.outputIsProbability;
       }
+      reportProgress('queued', PCT.START);
       // Only attempt WebGPU if the browser actually exposes it AND the adapter
       // is one we have validated (see VALIDATED_WEBGPU_SUBSTRINGS). An
       // unvalidated GPU can silently produce a wrong mask, so the WASM fallback
@@ -265,6 +310,9 @@ self.onmessage = async (e) => {
       } else {
         candidates = ['wasm'];
       }
+      reportProgress('runtime', PCT.RUNTIME, {
+        detail: 'providers: ' + candidates.join(', '),
+      });
       const ep = await createSession(candidates);
       if (ep === 'webgpu' && !gpuFeatures().includes('shader-f16')) {
         // The shipped model is float16 internally; without shader-f16 the driver
@@ -276,7 +324,9 @@ self.onmessage = async (e) => {
             'WebGPU will be slow or may stall; use ?provider=wasm to force the CPU.',
         });
       }
-      post({ kind: 'load-time', ms: 0, provider: ep, adapter: adapterLabel });
+      const totalMs = performance.now() - loadStartedAt;
+      reportProgress('ready', 100, { detail: ep });
+      post({ kind: 'load-time', ms: totalMs, provider: ep, adapter: adapterLabel });
       return;
     }
     if (msg.kind === 'run') {

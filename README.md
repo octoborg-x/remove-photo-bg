@@ -26,6 +26,10 @@ still forces the GPU path. Evidence recorded in
 ## What works (Phase 1)
 
 - Model download + self-hosted serving (`fetch-models` verifies SHA-256).
+- **Persistent model loading:** a service worker (`public/sw.js`) stores the
+  model and the ONNX Runtime WASM binaries in the Cache API, so only the first
+  visit downloads them. Later visits (including after closing the tab or
+  restarting the browser) load from the device instead of re-fetching ~235 MB.
 - ONNX Runtime Web (1.29.0) inference on **WASM (threaded) by default**, with
   **WebGPU** enabled only on validated adapters (currently none) or via
   `?provider=webgpu`.
@@ -50,6 +54,44 @@ npm install
 npm run fetch-models   # downloads model + WASM into public/ with SHA-256 checks
 npm run dev            # http://localhost:5173
 ```
+
+## Persistent model loading
+
+The model (`model_512.onnx`, ~185 MB) and the ONNX Runtime WASM binaries
+(~42 MB) are large enough that re-downloading them on every visit is the dominant
+cost of using the app. A service worker (`public/sw.js`) fixes that:
+
+- On the first visit, `/models/*` and `/wasm/*` are fetched from the network and
+  stored in a versioned Cache API bucket (`remove-bg-assets-<version>`).
+- On every later visit the service worker serves them cache-first, so the model
+  loads from the device. This survives closing the tab and restarting the
+  browser (subject to the browser's normal storage-eviction rules).
+- The page waits for the service worker to control it *before* starting the
+  inference worker, so the worker's own fetches are cached on the first visit
+  too. If the worker cannot take control within 5 s, the app still starts (a
+  cache miss is a performance problem, not a correctness one).
+- The page log reports `Asset cache ready (N artifact(s) already on this
+  device)` and lists what was newly cached.
+- The load is reported as named checkpoints (see below), so the UI says what is
+  happening rather than only a percentage.
+
+### Loading checkpoints
+
+The worker emits a `loading-progress` message at each milestone, and the page
+renders it on the stage line and logs each stage once. The stages are:
+
+`queued` → `runtime` → `cache-check` → `downloading` → `downloaded` →
+`creating-session` → `session-ready` → `ready`
+
+Each message carries a monotonic `percent`, the bytes transferred and expected
+total (while downloading), and the elapsed time since loading began, so the UI
+can show e.g. `Downloading model… 42% (78.1 MB / 185.0 MB, 12.3s)`. On a cached
+visit the whole load takes ~1–2 s instead of the first-visit download time.
+
+To force a re-download after changing the model or upgrading ONNX Runtime, bump
+`CACHE_VERSION` in `public/sw.js`. For production, `public/_headers` (Cloudflare
+Pages syntax) also sets `Cache-Control: immutable` on `/models/*` and `/wasm/*`
+as a second layer for browsers where a service worker is unavailable.
 
 ## Browser smoke test (headless)
 

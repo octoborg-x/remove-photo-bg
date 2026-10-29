@@ -10,7 +10,13 @@ import {
   applyMaskToImage,
 } from './features/background-removal/mask-postprocess';
 import { canvasToPngDataUrl } from './features/background-removal/export-image';
-import type { WorkerProgressMessage } from './features/background-removal/types';
+import {
+  ensureAssetCache,
+  cachedAssetCount,
+  onAssetCacheMessage,
+} from './features/background-removal/asset-cache';
+import { describeProgress } from './features/background-removal/load-progress';
+import type { LoadStage, WorkerProgressMessage } from './features/background-removal/types';
 
 const MODEL_URL = '/models/model_512.onnx';
 // This export applies sigmoid internally, so its output is already [0,1].
@@ -161,13 +167,28 @@ function settleModel(error: string | null): void {
 }
 
 async function initWorker(): Promise<void> {
+  // Persist the model + WASM runtime before the inference worker starts, so the
+  // worker's own fetches are served from the cache on every visit after the first.
+  const cachedBefore = await cachedAssetCount();
+  const cacheStatus = await ensureAssetCache(log);
+  if (cacheStatus === 'controlling') {
+    log(
+      cachedBefore > 0
+        ? `Asset cache ready (${cachedBefore} artifact(s) already on this device).`
+        : 'Asset cache ready. First visit: the model downloads once and is kept on this device.',
+    );
+  }
+  onAssetCacheMessage((msg) => {
+    if (msg.kind === 'asset-cached') log(`Cached for next visit: ${new URL(msg.url).pathname}`);
+  });
+
   // Classic worker (plain JS in /public) so onnxruntime-web's wasm loaders are
   // fetched as static files instead of being transformed by Vite.
   worker = new Worker('/inference-worker.js', { type: 'classic' });
   worker.onmessage = (e: MessageEvent<WorkerProgressMessage>) => {
     const msg = e.data;
-    if (msg.kind === 'loading-model') {
-      updateDownloadProgress((msg.at ?? 0) / 100, msg.bytes ?? modelDownloadBytes);
+    if (msg.kind === 'loading-progress') {
+      updateLoadProgress(msg);
     } else if (msg.kind === 'load-time') {
       setStage(`Model loaded — provider ${msg.provider}`);
       loadTimeMs = msg.ms;
@@ -390,13 +411,29 @@ window.smokeModelReady = false;
 // device; this text is produced and copied locally.
 let adapterReport = '';
 let modelDownloadBytes = 0;
+let modelTotalBytes = 0;
+let lastLoadStage: LoadStage | null = null;
 const downloadStart = performance.now();
 
-function updateDownloadProgress(fraction: number, bytes: number): void {
-  modelDownloadBytes = bytes;
-  const pct = Math.round(fraction * 100);
-  const mb = (bytes / 1048576).toFixed(1);
-  setStage(`Loading model… ${pct}% (${mb} MB)`);
+// Renders a checkpoint to the stage line and logs each new stage exactly once,
+// so the log reads as an ordered timeline of the load rather than a stream of
+// percentages.
+function updateLoadProgress(msg: {
+  stage: LoadStage;
+  percent: number;
+  bytes?: number;
+  totalBytes?: number;
+  elapsedMs: number;
+  detail?: string;
+}): void {
+  if (msg.bytes !== undefined) modelDownloadBytes = msg.bytes;
+  if (msg.totalBytes) modelTotalBytes = msg.totalBytes;
+  setStage(describeProgress(msg));
+  if (msg.stage !== lastLoadStage) {
+    lastLoadStage = msg.stage;
+    const extra = msg.detail ? ` (${msg.detail})` : '';
+    log(`Load stage: ${msg.stage}${extra}`);
+  }
 }
 
 copyReportBtn.addEventListener('click', () => {
@@ -406,6 +443,7 @@ copyReportBtn.addEventListener('click', () => {
   const n = timings.length;
   const avg = n ? timings.reduce((a, b) => a + b, 0) / n : NaN;
   const mb = (modelDownloadBytes / 1048576).toFixed(1);
+  const totalMb = modelTotalBytes ? (modelTotalBytes / 1048576).toFixed(1) + ' MB' : 'unknown';
   const dlSecs = modelDownloadBytes ? ((performance.now() - downloadStart) / 1000).toFixed(1) : 'n/a';
   const lines = [
     '== BiRefNet_lite Phase 1 device report ==',
@@ -417,7 +455,8 @@ copyReportBtn.addEventListener('click', () => {
     `Warm inferences: ${n}`,
     n ? `Timings (ms): ${timings.map((t) => t.toFixed(1)).join(', ')}` : 'Timings: n/a',
     n ? `Average (ms): ${avg.toFixed(1)}` : 'Average: n/a',
-    `Model bytes: ${modelDownloadBytes ? mb + ' MB' : 'n/a'}`,
+    `Model bytes: ${modelDownloadBytes ? mb + ' MB' : 'n/a'}${modelTotalBytes ? ' of ' + totalMb : ''}`,
+    `Model load total: ${loadTimeMs ? loadTimeMs.toFixed(0) + ' ms' : 'n/a'}`,
     `Model download: ${dlSecs} s`,
     `First-cold-start shader compile: see first-inference note in log`,
     `UA: ${navigator.userAgent}`,

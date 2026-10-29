@@ -1,0 +1,15 @@
+# Do not upload the generated model/WASM binaries: the model exceeds Vercel's
+# per-file source-upload limit, and both are rebuilt during the deployment by
+# `npm run fetch-models` (wired into buildCommand in vercel.json).
+#
+# Keep scripts/ (the build runs scripts/fetch-models.mjs), public/wasm/*.mjs
+# loaders, public/inference-worker.js, public/sw.js, and public/_headers.
+public/models/
+public/wasm/*.wasm
+
+# Local-only heavy or irrelevant paths.
+node_modules/
+dist/
+smoke-results/
+notebooks/
+*.md

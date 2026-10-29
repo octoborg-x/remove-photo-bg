@@ -29,7 +29,7 @@ engages.
 
 | # | Device class | What "close to the test" means | Free path |
 |---|---|---|---|
-| 1 | Modern laptop, integrated GPU | WebGPU warm inference time, first-run shader compile time, correct provider line | **Work-host URLs now (run 1 below)**, then Cloudflare Pages/R2 or GitHub Releases + Pages |
+| 1 | Modern laptop, integrated GPU | WebGPU warm inference time, first-run shader compile time, correct provider line | **Work-host URLs now (run 1 below)**, then Cloudflare Pages + Hugging Face |
 | 2 | Laptop/desktop *without* usable WebGPU | WASM path engages; confirm fallback message + timing, no silent cloud fallback | Same URLs with `?provider=wasm` (forces CPU path — feature already exists) |
 | 3 | Android phone, representative mobile GPU | WebGPU on mobile; ~185 MB download over mobile data; memory | ✓ measured 2026-10-26 (Adreno-6xx) — see §4; more phones welcome |
 | 4 | Low-memory device | Peak memory, `bad_alloc`, watchdog/fallback behavior | Same URLs; in-page error copy already exists (`describeError` in `src/main.ts`) |
@@ -192,27 +192,29 @@ unavoidable manual step.
    `scripts/benchmark-pipelines.py --providers CUDAExecutionProvider` on a free
    Google Colab T4 (or local CPU) whenever a new model export is considered.
    This gives a reproducible GPU baseline at $0.
-3. **Before release — deploy to Cloudflare Pages and put the binaries in a
-   public Cloudflare R2 bucket.** This is implemented; see `DEPLOY.md`. The
-   split is forced by two verified constraints:
+3. **Before release — deploy the small site to Cloudflare Pages, keep the model
+   on Hugging Face.** This is implemented; see `DEPLOY.md`. The split is forced
+   by two verified constraints:
    - **The threaded WASM runtime must be same-origin.** onnxruntime-web's pthread
      workers fetch their own subresources directly, bypassing the service worker,
      so a cross-origin `.wasm` never gets the `Cross-Origin-Resource-Policy`
      header a COEP page needs and `InferenceSession.create` hangs forever.
    - **Pages caps a single static file at 25 MiB**, below the 26.5 MiB
-     `ort-wasm-simd-threaded.jsep.wasm` the runtime loads even with WebGPU off.
+     `ort-wasm-simd-threaded.jsep.wasm` the runtime loads for the WebGPU backend
+     even with WebGPU off.
 
-   So: the **model** is fetched straight from R2 by the service worker (proxied
-   and cached same-origin), and the **WASM runtime** is served by a Pages Function
-   (`functions/wasm/[[path]].js`) that streams it from R2 on the site's own
-   origin. The site itself stays ~400 KB.
-   Rationale: $0 recurring, R2 egress is explicitly free (so the 185 MB model
-   costs **$0 bandwidth**), Pages is fine for a static SPA, and Cloudflare's
-   `_headers` concisely expresses `Cross-Origin-Embedder-Policy: require-corp`,
-   which the threaded-WASM runtime needs.
+   So: the **model** is fetched straight from Hugging Face by the service worker
+   (proxied and cached same-origin; HF serves CORS + no size cap, verified), and
+   the **WASM runtime** is the **CPU-only bundle** (`ort.wasm.min.js`, 13.3 MiB)
+   shipped as a same-origin Pages static file. The site itself stays ~400 KB.
+   WebGPU is not attempted in this configuration (the `jsep` binary cannot fit on
+   Pages without a card-billing feature like R2); `?provider=wasm` is the only
+   provider. Rationale: $0 recurring and no credit card anywhere; HF has no
+   per-file cap and a public repo costs nothing.
    - Alternative model rails that cost $0 but cache worse or live off-origin:
-     GitHub Releases (`curl -L` redirect to `objects.githubusercontent.com`),
-     Hugging Face (`no-store` cache header, third-party domain — verified above).
+     GitHub Releases (`curl -L` redirect to `objects.githubusercontent.com`,
+     native CORS unsupported — the SW must have CORS headers, so this needs a
+     worker-side fallback), or Cloudflare R2 (requires a payment method).
 4. **CI regression (free on the public repo):** GitHub Actions job running
    `npm ci && npm run build && node scripts/run-smoke.mjs` with system
    Chromium software rendering (class-2/memory gate). Do **not** publish
@@ -224,23 +226,21 @@ unavoidable manual step.
    device-compatibility matrix.
 
 **Cost check against `MVP_OPENHANDS.md §10` ($0 dev, <$50/mo target):** the
-recommended path is $0/month: Cloudflare Pages has no bandwidth charge and R2
-egress is free (billed only above the free operation counts), so the model
-download costs nothing per user until volume is high enough to trigger rate
-limits. The one cost/performance driver remains the download itself (185 MB
-per first-load per device); that is the reason Change-1 (model size) stays the
-primary product risk.
+recommended path is $0/month and needs **no credit card**: Cloudflare Pages has
+no bandwidth charge for the small static site, and Hugging Face serves the model
+for free on its CDN (public repo). The download costs nothing per user until the
+HF repo hits rate limits at very high volume. The one cost/performance driver
+remains the download itself (185 MB per first-load per device); that is the
+reason Change-1 (model size) stays the primary product risk.
 
 ## 6. Verified free-tier numbers (official docs, 2026-10-25)
 
 | Fact | Value | Source |
 |---|---|---|
-| R2 Free storage | **10 GB-month** | developers.cloudflare.com/r2/pricing/ |
-| R2 Free operations | 1M Class A + 10M Class B ops/month | same |
-| R2 egress (data transfer to Internet) | **Free** (S3 API, `r2.dev`, Workers API) | same |
+| Hugging Face — model hosting | Free; no per-file cap for LFS files; serves CORS (`Access-Control-Allow-Origin: *`, verified by curl 2026-10-29) | huggingface.co |
 | Pages Free builds | **500 builds/month**, 1 at a time | developers.cloudflare.com/pages/platform/limits/ |
 | Pages Free files | **20,000 files per site** | same |
-| Pages max single-file size | **25 MiB** (docs point to R2 for larger) | same |
+| Pages max single-file size | **25 MiB** | same |
 | GitHub Pages (free) | 100 GB/mo soft bandwidth, 1 GB site cap; not for commercial SaaS | docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits |
 | GitHub Releases | Files up to **2 GiB each; no bandwidth limit** | docs.github.com/en/repositories/releasing-projects-on-github/about-releases |
 | Netlify Free | 300 credits/mo; bandwidth 20 credits/GB ⇒ ~15 GB/mo; 15 credits/deploy | netlify.com/pricing/ |

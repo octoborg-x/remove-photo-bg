@@ -123,16 +123,15 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 | `npm run build` | typecheck + production build |
 | `npm run build:site` | build + strip the large binaries (for Cloudflare Pages; see [`DEPLOY.md`](./DEPLOY.md)) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run fetch-models` | download + verify model/WASM artifacts |
-| `npm run upload-assets` | push model/WASM to the R2 bucket (needs R2_* env) |
+| `npm run fetch-models` | download + verify model/WASM artifacts (also prepares `public/wasm/` for local dev) |
 | `node scripts/run-smoke.mjs <url> [--image …] [--runs n] [--out dir]` | headless browser smoke test |
 
 ## Deployment
 
-The app deploys to Cloudflare Pages with the model + WASM runtime on R2. See
-[`DEPLOY.md`](./DEPLOY.md) for the architecture (and why the assets are split the
-way they are), the branch model (`production` deploys, `staging` previews, `main`
-does not deploy), and the required secrets.
+The app deploys to Cloudflare Pages with the model on Hugging Face. See
+[`DEPLOY.md`](./DEPLOY.md) for the architecture (free tiers, no credit card — and
+why the assets are split the way they are), the branch model (`production`
+deploys, `staging` previews, `main` does not deploy), and the required secrets.
 
 ## Privacy
 

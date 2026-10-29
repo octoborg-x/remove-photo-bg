@@ -10,8 +10,7 @@
     "build:site": "npm run build && node scripts/strip-large-assets.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "fetch-models": "node scripts/fetch-models.mjs",
-    "upload-assets": "node scripts/upload-assets-r2.mjs"
+    "fetch-models": "node scripts/fetch-models.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "1.29.0"

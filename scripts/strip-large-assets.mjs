@@ -1,7 +1,11 @@
-// Removes the model and WASM binaries from the built site so it can be deployed
-// to a host with a small per-file limit (Cloudflare Pages: 25 MiB). The binaries
-// are served from the remote asset origin instead (see VITE_ASSET_BASE), and the
-// service worker proxies them through as same-origin responses.
+// Removes the model from the built site so it can be deployed to a host with a
+// small per-file limit (Cloudflare Pages: 25 MiB). The model is served from the
+// remote asset origin instead (see VITE_ASSET_BASE), and the service worker
+// proxies it through as a same-origin response.
+//
+// The WASM runtime is NOT stripped: the CPU-only bundle (
+// `ort-wasm-simd-threaded.wasm`, 13.3 MiB) fits under the per-file cap and must
+// be served same-origin for the threaded runtime to work (see fetch-models.mjs).
 //
 // Run after `vite build`; wired into `npm run build:site`.
 import { rmSync, existsSync, statSync, readdirSync } from 'node:fs';
@@ -16,8 +20,9 @@ if (!existsSync(DIST)) {
   process.exit(1);
 }
 
-// Only the large binary directories are removed; the HTML/JS shell stays.
-const TARGETS = ['models', 'wasm'];
+// Only the model directory is removed; the HTML/JS shell and the WASM runtime
+// stay.
+const TARGETS = ['models'];
 for (const dir of TARGETS) {
   const path = resolve(DIST, dir);
   if (!existsSync(path)) continue;

@@ -1,8 +1,13 @@
 // Phase 1 inference worker (classic worker).
 //
 // Loads onnxruntime-web through the legacy UMD bundle via importScripts so the
-// WASM/JSEP loader files (under /wasm/) are NOT transformed by Vite's module
-// pipeline (which refuses dynamic import() of /public files).
+// WASM loader files (under /wasm/) are NOT transformed by Vite's module pipeline
+// (which refuses dynamic import() of /public files).
+//
+// The CPU-only bundle (`ort.wasm.min.js`) is loaded, not `ort.all.min.js`: the
+// full bundle pulls an additional 26.5 MiB `.jsep.wasm` for WebGPU that exceeds
+// Cloudflare Pages' 25 MiB per-file cap and cannot be split cross-origin (see
+// fetch-models.mjs). With this bundle only the CPU (wasm) provider exists.
 //
 // Message protocol (see src/features/background-removal/types.ts):
 //   in:  {kind:'set-model', modelUrl} | {kind:'run', runId, tensor, width, height} | {kind:'dispose'}
@@ -11,7 +16,7 @@
 //        | {kind:'provider-fallback', from, to, reason}
 //        | {kind:'inference-time', ms, runId} | {kind:'result-ready', mask, width, height}
 //        | {kind:'error', message, runId?, fatal?}
-importScripts('/wasm/ort.all.min.js');
+importScripts('/wasm/ort.wasm.min.js');
 
 // The UMD bundle declares a top-level `var ort` (a global in this classic
 // worker), so `ort` is available directly. Do NOT redeclare it.

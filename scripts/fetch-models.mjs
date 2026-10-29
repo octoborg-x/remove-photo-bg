@@ -28,14 +28,19 @@ const MODELS = [
 ];
 
 // WASM files from onnxruntime-web that must be self-hosted.
+//
+// CPU-only bundle (`ort.wasm.min.js`), not the full `ort.all.min.js`: the full
+// bundle pulls `ort-wasm-simd-threaded.jsep.wasm` (26.5 MiB) for the WebGPU
+// backend, which exceeds Cloudflare Pages' 25 MiB per-file cap. (A cross-origin
+// copy wouldn't work anyway — ORT's pthread workers bypass the service worker, so
+// they never get the `Cross-Origin-Resource-Policy` header a COEP page needs.)
+// The CPU bundle loads `ort-wasm-simd-threaded.wasm` (13.3 MiB), small enough to
+// deploy as a same-origin static file.
 const SOURCE_WASM_DIR = resolve(ROOT, 'node_modules/onnxruntime-web/dist');
 const WASM_FILES = [
-  // WASM (CPU) backend loader + binary
+  'ort.wasm.min.js',
   'ort-wasm-simd-threaded.mjs',
   'ort-wasm-simd-threaded.wasm',
-  // WebGPU (JSEP) backend loader + binary (used when WebGPU is available)
-  'ort-wasm-simd-threaded.jsep.mjs',
-  'ort-wasm-simd-threaded.jsep.wasm',
 ];
 
 for (const m of MODELS) {

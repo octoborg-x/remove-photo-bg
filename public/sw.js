@@ -10,20 +10,21 @@
 // The Cache API persists across navigations and browser restarts (subject to the
 // browser's storage eviction policy), unlike a page-scoped HTTP cache.
 //
-// Remote asset origin (R2): the heavy binaries are too large for the static host,
-// so they live on a separate origin (Cloudflare R2) and this worker fetches them
-// from there, then returns them to the page as if they were same-origin. That is
-// what lets a cross-origin asset satisfy the page's COEP policy: the page needs
-// `Cross-Origin-Resource-Policy` on the response, which an R2 bucket's CORS rules
-// cannot set, but a service worker can. The base URL is passed on the
-// registration query string (`/sw.js?base=https://assets.example.com`), so it is
-// available before the first fetch is handled.
+// Remote asset origin (Hugging Face): the model is too large for the static
+// host (Cloudflare Pages caps a file at 25 MiB), so it lives on a separate
+// origin (Hugging Face) and this worker fetches it from there, then returns it
+// to the page as if it were same-origin. That is what lets a cross-origin asset
+// satisfy the page's COEP policy: the page needs `Cross-Origin-Resource-Policy`
+// on the response, which a plain CDN cannot set, but a service worker can. The
+// base URL is passed on the registration query string
+// (`/sw.js?base=https://huggingface.co/.../resolve/main/`), so it is available
+// before the first fetch is handled.
 //
 // Versioning: bump CACHE_VERSION to invalidate every cached artifact at once
 // (e.g. after a model or ORT upgrade). Each artifact is otherwise keyed by its
 // full URL, so a changed filename is picked up automatically.
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `remove-bg-assets-${CACHE_VERSION}`;
 
 // Where the heavy binaries actually live. Empty means "same origin" (local dev,

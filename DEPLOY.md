@@ -1,95 +1,90 @@
-# Deploying to Cloudflare Pages + R2
+# Deploying to Cloudflare Pages + Hugging Face (no credit card)
 
-The app is a ~400 KB static site. The ~230 MB of model + WASM binaries are **not**
-part of it: Cloudflare Pages rejects any single file over 25 MiB, and the threaded
-onnxruntime-web runtime loads a 26.5 MiB `.wasm` even when WebGPU is disabled.
+Two free tiers, neither needs a payment method:
 
-## What is served from where
+| Artifact | Where it lives | Why |
+|---|---|---|
+| `model_512.onnx` (185 MB) | **Hugging Face** (free, no CC) | Cloudflare Pages caps a static file at 25 MiB and GitHub Releases sends no CORS header; HF serves with `Access-Control-Allow-Origin` and no size cap. Fetched inside the service worker, which proxies + caches it. |
+| WASM runtime (13.3 MB `ort-wasm-simd-threaded.wasm` + loaders) | **Cloudflare Pages static** (same-origin) | ORT's threaded `pthread` workers bypass the service worker, so the `.wasm` must be same-origin (or carry CORP — an R2 domain wouldn't without a card). The CPU-only bundle fits under the 25 MiB cap. |
+| App shell | Cloudflare Pages static | ~400 KB after stripping the model. |
 
-| Artifact | Size | Served by | Why |
-|---|---|---|---|
-| `model_512.onnx` | 185 MB | **R2**, fetched by the service worker | Largest file; fetched inside a worker the SW controls, so it can be proxied and cached. A Pages Function could time out on a slow client. |
-| `ort-wasm-simd-threaded*.wasm/.mjs`, `ort.all.min.js` | ≤ 26.5 MB | **Pages Function** (`functions/wasm/[[path]].js`) → R2 | Must be same-origin and over 25 MiB. |
-| HTML / JS shell, test images | small | **Pages static** | Everything else. |
+## Why this split
 
-Two constraints force the split, both verified by test:
+- **Model → HF.** The service worker fetches it cross-origin (HF answers with
+  `Access-Control-Allow-Origin: *`), normalizes it into a same-origin,
+  `Cross-Origin-Resource-Policy: cross-origin` cached response, and caches it. On
+  later visits nothing is re-downloaded (verified: 0 model requests on reload).
+- **WASM → Pages static.** The WebGPU (`jsep`) binary is 26.5 MiB — over the
+  25 MiB per-file cap — so we ship the **CPU-only bundle** (`ort.wasm.min.js`,
+  which loads only the 13.3 MiB threaded binary). Runtime provider is `wasm`;
+  WebGPU is no longer attempted (see `scripts/fetch-models.mjs` for the
+  reasoning). Cross-origin WASM would hang anyway.
 
-1. **Threaded WASM must be same-origin.** onnxruntime-web's pthread workers fetch
-   their own subresources directly, bypassing the service worker. A cross-origin
-   `.wasm` therefore never receives the `Cross-Origin-Resource-Policy` header a
-   COEP page demands, and `InferenceSession.create` hangs forever (single-threaded
-   mode works, which is how this was isolated).
-2. **Pages caps a single static file at 25 MiB**, below the 26.5 MiB `.jsep.wasm`.
+## One-time setup (no credit card)
 
-A Pages Function satisfies both: it runs on the site's own origin and streams the
-object straight from R2, so the 25 MiB static cap does not apply.
+1. **Create the HF model repo** (free). Layout matters — the app requests
+   `/models/model_512.onnx`, so put the file under `models/`:
 
-## One-time setup
-
-1. **Create the R2 bucket and make it public.**
-   ```sh
-   npx wrangler r2 bucket create remove-bg-assets
    ```
-   Enable public access (R2 → bucket → Settings → Public access) via a custom
-   domain (recommended) or the `r2.dev` URL. Note that URL — it is
-   `VITE_ASSET_BASE`.
-
-2. **Allow the site origin through CORS** (the service worker reads the response
-   body, so the fetch is a CORS request). Edit `r2-cors.json` with your Pages URL
-   and apply it:
-   ```sh
-   npx wrangler r2 bucket cors put remove-bg-assets --file r2-cors.json
-```
-
-3. **Upload the binaries** (they are gitignored; fetch then push):
-   ```sh
-   npm run fetch-models
-   R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… R2_BUCKET=remove-bg-assets \
-     npm run upload-assets
+   your-repo/
+   └── models/
+       └── model_512.onnx
    ```
 
-4. **Create the Pages project** (Direct Upload) and bind the bucket. `wrangler.toml`
-   already declares the `ASSETS_BUCKET` binding; the Function reads it.
+   Upload it (`huggingface-cli upload` with your token, or drag-and-drop on
+   https://huggingface.co/new). The base URL is then:
 
-5. **Set the production branch to `production`** in the Pages project settings, so
-   pushes to `main` do **not** trigger a production deploy.
+   ```
+   https://huggingface.co/<owner>/<repo>/resolve/main/
+   ```
+
+   (`resolve/` redirects to a CDN host; the SW follows the redirect and the
+   cache key is the URL you gave it.)
+
+2. **Create the Pages project** at https://dash.cloudflare.com → Workers & Pages.
+   (Direct Upload via `wrangler pages deploy`; Git integration also works.)
+
+3. **Set the repo secrets/variables** (GitHub → Settings → Secrets and
+   variables → Actions):
+
+   | Name | Type | Value |
+   |---|---|---|
+   | `CLOUDFLARE_API_TOKEN` | secret | token with `Pages:Edit` |
+   | `CLOUDFLARE_ACCOUNT_ID` | secret | your Cloudflare account id |
+   | `VITE_ASSET_BASE` | variable | `https://huggingface.co/<owner>/<repo>/resolve/main/` |
+
+   Until `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` exist, the `deploy`
+   workflow no-ops with a notice (branches stay green).
+
+4. In the Pages project settings set **production branch = `production`**
+   (optional but recommended; pushes to `production` deploy to prod, pushes to
+   `staging` create preview deploys, and pushes to `main` don't re-deploy).
 
 ## Branch model
 
-| Branch | Cloudflare environment | Trigger |
-|---|---|---|
-| `production` | Production | pushes to `production` only |
-| `staging` | Preview | every push |
-| `main` | — | no deploy (integration branch) |
+- `staging` → preview deployment, every push
+- `production` → production deployment only when its branch is pushed
+- `main` → no deploy (so merges don't recreate production)
 
-`.github/workflows/deploy-pages.yml` implements this: it fetches the model, uploads
-to R2 (idempotent — unchanged objects are skipped), builds the small site with
-`npm run build:site`, and runs `wrangler pages deploy --branch=<git branch>`.
-
-### Required repository secrets / variables
-
-| Name | Kind | Value |
-|---|---|---|
-| `CLOUDFLARE_API_TOKEN` | secret | Pages:Edit + R2:Edit token |
-| `CLOUDFLARE_ACCOUNT_ID` | secret | account id |
-| `R2_ACCOUNT_ID` | secret | account id |
-| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | secret | R2 API token |
-| `R2_BUCKET` | secret | `remove-bg-assets` |
-| `VITE_ASSET_BASE` | variable | public R2 URL, e.g. `https://assets.example.com` |
-
-## Local development
-
-Unset `VITE_ASSET_BASE` and the app serves everything same-origin from `public/`
-(what `npm run dev` does). To exercise the remote path locally, point
-`VITE_ASSET_BASE` at any origin serving the same paths over CORS:
+## Local development against the real remote
 
 ```sh
-VITE_ASSET_BASE=https://your-r2-public-url npm run dev
+VITE_ASSET_BASE=https://huggingface.co/<owner>/<repo>/resolve/main/ npm run dev
 ```
 
-## Verifying persistence
+If the repo is public, a `VITE_ASSET_BASE` without credentials works from any
+browser; the SW caches the model on first load and subsequent visits need no
+network for it.
 
-After a first load, a reload must not re-fetch the model. Open DevTools →
-Application → Cache Storage → `remove-bg-assets-*`; the model and WASM entries
-should be present, and the Network tab should show no request for
-`model_512.onnx` on the second visit.
+## The deploy workflow
+
+`.github/workflows/deploy-pages.yml`:
+
+- Runs on pushes to `staging`/`production` and manual dispatch.
+- No-ops with a descriptive notice until Cloudflare secrets are configured.
+- With secrets: `npm ci` → `npm run build:site` (removes `dist/models/`) →
+  `npx wrangler pages deploy`.
+
+The model is **not** fetched during deploy — it lives on HF. To re-upload it
+after a change, push to the HF repo (or run `npm run fetch-models` locally and
+`hf upload` the file).

@@ -22,6 +22,16 @@ export default defineConfig({
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
   },
+  preview: {
+    // The production host sets these via public/_headers; mirror them locally so
+    // `vite preview` matches the deployed behavior (and threaded WASM engages).
+    host: true,
+    port: 4173,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
   optimizeDeps: {
     // onnxruntime-web ships wasm bundles; include in optimization to avoid
     // browser-side import errors in the worker.

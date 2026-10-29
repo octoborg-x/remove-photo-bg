@@ -14,10 +14,14 @@ import {
   ensureAssetCache,
   cachedAssetCount,
   onAssetCacheMessage,
+  ASSET_BASE,
 } from './features/background-removal/asset-cache';
 import { describeProgress } from './features/background-removal/load-progress';
 import type { LoadStage, WorkerProgressMessage } from './features/background-removal/types';
 
+// The model lives at a same-origin path; when a remote asset origin is
+// configured the service worker transparently proxies this to R2, so the path
+// here stays origin-relative.
 const MODEL_URL = '/models/model_512.onnx';
 // This export applies sigmoid internally, so its output is already [0,1].
 const MODEL_OUTPUT_IS_PROBABILITY = true;
@@ -181,6 +185,7 @@ async function initWorker(): Promise<void> {
   onAssetCacheMessage((msg) => {
     if (msg.kind === 'asset-cached') log(`Cached for next visit: ${new URL(msg.url).pathname}`);
   });
+  if (ASSET_BASE) log(`Assets served from: ${ASSET_BASE}`);
 
   // Classic worker (plain JS in /public) so onnxruntime-web's wasm loaders are
   // fetched as static files instead of being transformed by Vite.

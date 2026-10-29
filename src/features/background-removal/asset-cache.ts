@@ -5,6 +5,19 @@
 
 const READY_TIMEOUT_MS = 5000;
 
+/**
+ * Origin that serves the heavy binaries (model + WASM), or '' when this origin
+ * serves them itself. Configured at build time with `VITE_ASSET_BASE` so the
+ * static site can stay small while the ~230 MB of artifacts live on R2.
+ */
+export const ASSET_BASE: string = (import.meta.env.VITE_ASSET_BASE ?? '').replace(/\/+$/, '');
+
+/** Full URL for a persistent asset path (e.g. 'models/model_512.onnx'). */
+export function assetUrl(path: string): string {
+  const clean = path.replace(/^\/+/, '');
+  return ASSET_BASE ? `${ASSET_BASE}/${clean}` : `/${clean}`;
+}
+
 export type AssetCacheStatus = 'controlling' | 'unsupported' | 'timeout' | 'failed';
 
 /**
@@ -19,8 +32,11 @@ export async function ensureAssetCache(onLog?: (msg: string) => void): Promise<A
     return 'unsupported';
   }
 
+  // Pass the remote asset origin on the registration URL: the worker reads it
+  // synchronously at startup, before the first fetch it must handle.
+  const swUrl = ASSET_BASE ? `/sw.js?base=${encodeURIComponent(ASSET_BASE)}` : '/sw.js';
   try {
-    await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    await navigator.serviceWorker.register(swUrl, { scope: '/' });
   } catch (err) {
     onLog?.(`Asset cache registration failed: ${err instanceof Error ? err.message : String(err)}`);
     return 'failed';

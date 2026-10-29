@@ -10,26 +10,70 @@
 // The Cache API persists across navigations and browser restarts (subject to the
 // browser's storage eviction policy), unlike a page-scoped HTTP cache.
 //
+// Remote asset origin (Hugging Face): the model is too large for the static
+// host (Cloudflare Pages caps a file at 25 MiB), so it lives on a separate
+// origin (Hugging Face) and this worker fetches it from there, then returns it
+// to the page as if it were same-origin. That is what lets a cross-origin asset
+// satisfy the page's COEP policy: the page needs `Cross-Origin-Resource-Policy`
+// on the response, which a plain CDN cannot set, but a service worker can. The
+// base URL is passed on the registration query string
+// (`/sw.js?base=https://huggingface.co/.../resolve/main/`), so it is available
+// before the first fetch is handled.
+//
 // Versioning: bump CACHE_VERSION to invalidate every cached artifact at once
 // (e.g. after a model or ORT upgrade). Each artifact is otherwise keyed by its
 // full URL, so a changed filename is picked up automatically.
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `remove-bg-assets-${CACHE_VERSION}`;
+
+// Where the heavy binaries actually live. Empty means "same origin" (local dev,
+// or a host that can serve the files itself).
+//
+// Only the model is ever fetched from a remote origin. The WASM runtime must stay
+// same-origin: onnxruntime-web's threaded build spawns pthread workers whose
+// subresource fetches bypass the service worker, so a cross-origin `.wasm` never
+// receives the `Cross-Origin-Resource-Policy` header the COEP page demands and
+// session creation hangs forever (verified). The model fetch, by contrast, runs
+// inside the worker this service worker controls, so it proxies cleanly.
+const ASSET_BASE = (() => {
+  try {
+    return new URL(self.location.href).searchParams.get('base') || '';
+  } catch {
+    return '';
+  }
+})();
 
 // Only these directories (relative to the app's own scope) are persisted.
 // Everything else (HTML, JS bundles, test images) goes straight to the network so
 // the app itself is never served stale.
 const PERSISTENT_DIRS = ['models/', 'wasm/'];
 
-function isPersistentRequest(url) {
+// Paths served from the remote origin. The WASM runtime is deliberately excluded
+// (see ASSET_BASE above).
+const REMOTE_DIRS = ['models/'];
+
+// Relative path under the app scope for a persistent request, or null if the
+// request is not one we persist (e.g. `models/` -> `model_512.onnx`).
+function persistentRelativePath(url) {
   // Derive the base path from the worker's own scope so a sub-path deployment
   // (vite `base: './'`) still matches, rather than assuming a root deployment.
   const base = new URL(self.registration.scope).pathname;
   const pathname = new URL(url).pathname;
-  if (!pathname.startsWith(base)) return false;
+  if (!pathname.startsWith(base)) return null;
   const relative = pathname.slice(base.length);
-  return PERSISTENT_DIRS.some((dir) => relative.startsWith(dir));
+  return PERSISTENT_DIRS.some((dir) => relative.startsWith(dir)) ? relative : null;
+}
+
+// Fetches a persistent artifact, from the remote origin when one is configured
+// and the path is remote-eligible, otherwise from this origin.
+async function fetchAsset(request, relativePath) {
+  const remote = ASSET_BASE && REMOTE_DIRS.some((dir) => relativePath.startsWith(dir));
+  if (!remote) return fetch(request);
+  const target = new URL(relativePath, ASSET_BASE).toString();
+  // `cors` mode is required so the worker can read the body (to cache it) and so
+  // the response is not opaque. The bucket must allow this origin via CORS.
+  return fetch(target, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
 }
 
 self.addEventListener('install', () => {
@@ -57,7 +101,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
-  if (!isPersistentRequest(request.url)) return;
+  const relativePath = persistentRelativePath(request.url);
+  if (!relativePath) return;
 
   event.respondWith(
     (async () => {
@@ -72,17 +117,18 @@ self.addEventListener('fetch', (event) => {
         return cached;
       }
 
-      const response = await fetch(request);
-      if (response.ok && response.status === 200) {
-        // Store a copy with `Vary` removed so the stored response never depends
-        // on a request header that varies by call site.
-        cache.put(request, withoutVary(response)).catch(() => {
-          // A full quota must not break the load; the network response still
-          // reaches the caller.
-        });
-        notifyClient({ kind: 'asset-cached', url: request.url });
-      }
-      return response;
+      const remote = ASSET_BASE && REMOTE_DIRS.some((dir) => relativePath.startsWith(dir));
+      const response = await fetchAsset(request, relativePath);
+      if (!response.ok || response.status !== 200) return response;
+      // Normalise before returning as well as before caching: on the very first
+      // load the page receives this response directly, and a COEP page rejects a
+      // cross-origin asset that lacks CORP.
+      const normalized = normalizeForStore(response, remote);
+      cache.put(request, normalized.clone()).catch(() => {
+        // A full quota must not break the load; the response still reaches the caller.
+      });
+      notifyClient({ kind: 'asset-cached', url: request.url });
+      return normalized;
     })(),
   );
 });
@@ -95,13 +141,15 @@ function notifyClient(message) {
   }).catch(() => {});
 }
 
-// Returns a storable copy of the response with any `Vary` header removed. Clones
-// first, so the caller's copy of the body stays readable.
-function withoutVary(response) {
+// Returns a storable copy of the response with any `Vary` header removed and, for
+// remote-origin bytes, a `Cross-Origin-Resource-Policy: cross-origin` header so a
+// COEP page accepts the response as if it were same-origin. Clones first, so the
+// caller's copy of the body stays readable.
+function normalizeForStore(response, remote) {
   const clone = response.clone();
-  if (!clone.headers.has('Vary')) return clone;
   const headers = new Headers(clone.headers);
   headers.delete('Vary');
+  if (remote) headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
   return new Response(clone.body, {
     status: clone.status,
     statusText: clone.statusText,

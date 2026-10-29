@@ -1,0 +1,66 @@
+name: deploy
+
+# Deploys the small static site to Cloudflare Pages. The model is NOT part of
+# the site — it lives on Hugging Face (see DEPLOY.md). The WASM runtime IS part
+# of the site (CPU-only bundle, under the 25 MiB static-file cap).
+#
+# Branch model:
+#   staging    -> preview deployment (every push)
+#   production -> production deployment (only this branch, so pushes to main do
+#                 not trigger a production re-deploy)
+# Set "production" as the project's production branch in the Cloudflare Pages
+# settings; --branch maps the Git branch onto Cloudflare's so Direct Upload and
+# Git deploys agree.
+#
+# Until the Cloudflare secrets are configured the job no-ops with a notice
+# instead of failing, so the branches stay green before the account exists.
+on:
+  push:
+    branches: [staging, production]
+  workflow_dispatch:
+
+concurrency:
+  # One deploy per branch at a time; a newer push supersedes an in-flight one.
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'production' && 'production' || 'staging' }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      VITE_ASSET_BASE: ${{ vars.VITE_ASSET_BASE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Check Cloudflare credentials
+        id: guard
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice title=Deploy skipped::Cloudflare secrets are not configured yet."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Small static site; the large model is stripped from dist/ (it lives on
+      # Hugging Face, see DEPLOY.md). The WASM runtime stays in dist/.
+      - name: Build site
+        if: steps.guard.outputs.configured == 'true'
+        run: npm run build:site
+        env:
+          VITE_ASSET_BASE: ${{ vars.VITE_ASSET_BASE }}
+
+      - name: Deploy to Cloudflare Pages
+        if: steps.guard.outputs.configured == 'true'
+        run: |
+          npx wrangler@3 pages deploy dist \
+            --project-name=remove-photo-bg \
+            --branch="${{ github.ref_name }}"

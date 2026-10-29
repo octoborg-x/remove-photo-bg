@@ -1,0 +1,22 @@
+# Cloudflare Pages header rules (see HARDWARE_TESTING.md §5).
+#
+# The service worker (public/sw.js) is the primary persistence layer for the
+# model and WASM runtime; these headers are the complementary HTTP-cache layer so
+# that even without a service worker (unsupported browser, or the very first
+# registration) the artifacts are not re-fetched from the origin every visit.
+
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+
+# Immutable artifacts: filenames are versioned, so cache them hard.
+/models/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/wasm/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The service worker itself must never be cached, or clients get stuck on an
+# old cache version.
+/sw.js
+  Cache-Control: no-cache

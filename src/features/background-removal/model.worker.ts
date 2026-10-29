@@ -1,7 +1,7 @@
 // Inference worker. Runs onnxruntime-web (WASM/WebGPU) inside a Web Worker so
 // inference never blocks the main thread.
 import * as ort from 'onnxruntime-web';
-import type { MainToWorkerMessage, WorkerProgressMessage } from './types';
+import type { LoadStage, MainToWorkerMessage, WorkerProgressMessage } from './types';
 
 ort.env.wasm.wasmPaths = '/wasm/';
 // On battery-saver laptops the default adapter is often the integrated GPU, which
@@ -52,6 +52,29 @@ let adapterLabel = '';
 
 function post(msg: WorkerProgressMessage): void {
   self.postMessage(msg);
+}
+
+// Mirrors the live worker (public/inference-worker.js): a shared clock plus a
+// helper so every checkpoint carries a consistent elapsed time. NOTE: this
+// module is currently unreferenced — the app uses the classic worker in
+// public/inference-worker.js. Kept in sync so the two do not drift.
+const loadStartedAt = performance.now();
+let lastPercent = -1;
+
+function reportProgress(
+  stage: LoadStage,
+  percent: number,
+  extra: { bytes?: number; totalBytes?: number; detail?: string } = {},
+): void {
+  if (stage === 'downloading' && percent === lastPercent) return;
+  lastPercent = percent;
+  post({
+    kind: 'loading-progress',
+    stage,
+    percent,
+    elapsedMs: performance.now() - loadStartedAt,
+    ...extra,
+  });
 }
 
 let MODEL_SIZE = 512;
@@ -120,12 +143,12 @@ async function createSession(
   for (const ep of providers) {
     try {
       if (!modelBytes) {
-        post({ kind: 'loading-model', at: 5, bytes: 0 });
+        reportProgress('cache-check', 15);
         modelBytes = await downloadModel(modelUrl!, (f, bytes) => {
-          post({ kind: 'loading-model', at: Math.round(5 + 85 * f), bytes });
+          reportProgress(f >= 1 ? 'downloaded' : 'downloading', Math.round(15 + 75 * f), { bytes });
         });
       }
-      post({ kind: 'loading-model', at: 90 });
+      reportProgress('creating-session', 90);
       session = await ort.InferenceSession.create(
         // Pass the bytes directly so a provider retry doesn't re-download.
         modelBytes!,
@@ -259,7 +282,7 @@ self.onmessage = async (e: MessageEvent<MainToWorkerMessage>) => {
       if (typeof msg.outputIsProbability === 'boolean') {
         outputIsProbability = msg.outputIsProbability;
       }
-      post({ kind: 'loading-model', at: 10 });
+      reportProgress('queued', 0);
       // Only attempt WebGPU if the browser exposes it AND the adapter is one we
       // have validated. An unvalidated GPU can silently produce a wrong mask, so
       // the WASM fallback would never fire. `?provider=webgpu` still forces it.
@@ -282,8 +305,8 @@ self.onmessage = async (e: MessageEvent<MainToWorkerMessage>) => {
             'WebGPU will be slow or may stall; use ?provider=wasm to force the CPU.',
         });
       }
-      post({ kind: 'loading-model', at: 90 });
-      post({ kind: 'load-time', ms: 0, provider: lastProvider, adapter: adapterLabel });
+      reportProgress('ready', 100, { detail: lastProvider });
+      post({ kind: 'load-time', ms: performance.now() - loadStartedAt, provider: lastProvider, adapter: adapterLabel });
       return;
     }
     if (msg.kind === 'run') {

@@ -17,7 +17,7 @@ product are goals, verified in PRIVACY.md updates when reached._
 The only network requests a client makes are:
 
 1. The app shell (HTML/JS/CSS) from its own origin.
-2. The pinned ONNX segmentation model (`public/models/model_fp16.onnx`).
+2. The pinned ONNX segmentation model (`public/models/model_512.onnx`).
 3. The ONNX Runtime Web WASM binaries and loader (`public/wasm/…`).
 4. **Test images only in the Phase‑1 harness** (`public/test-images/…`),
    which ship with the repo for validation and are not part of the product.
@@ -45,6 +45,17 @@ Phase-1 result is recorded in `PHASE1_REPORT.md` together with the raw
 - No server exists, so nothing is stored server-side.
 - The app does not log filenames, image content, EXIF, or raw user input.
 - File objects and buffers are released after processing.
+
+## On-device storage (asset cache)
+
+- To avoid re-downloading the model (~185 MB) and the ONNX Runtime WASM binaries
+  (~42 MB) on every visit, a service worker stores them in the browser's Cache
+  API under `remove-bg-assets-<version>`.
+- Only those two artifact types are stored. No image pixels, filenames, EXIF, or
+  other user data are ever written to the cache.
+- The cache is first-party and stays on the device. It can be cleared at any time
+  through the browser's site-data settings; the next visit then re-downloads the
+  artifacts once.
 
 ## Browser requirements
 

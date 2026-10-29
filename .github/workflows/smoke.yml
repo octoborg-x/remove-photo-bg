@@ -4,7 +4,7 @@ name: smoke
 # Software rendering is NOT a GPU: this never produces real WebGPU timings.
 on:
   push:
-    branches: [main]
+    branches: [main, staging, production]
   pull_request:
 
 jobs:

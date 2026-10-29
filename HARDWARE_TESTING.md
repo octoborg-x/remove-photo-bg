@@ -192,20 +192,27 @@ unavoidable manual step.
    `scripts/benchmark-pipelines.py --providers CUDAExecutionProvider` on a free
    Google Colab T4 (or local CPU) whenever a new model export is considered.
    This gives a reproducible GPU baseline at $0.
-3. **Before release — deploy to Cloudflare Pages (app + wasm) and put
-   `model_512.onnx` in a public Cloudflare R2 bucket (CORS +
-   `Cache-Control: immutable`, long `max-age`).** Rationale: $0 recurring, R2
-   egress is explicitly free (so the 185 MB model costs **$0 bandwidth**),
-   Pages is fine for a static SPA, and Cloudflare's `_headers` concisely
-   expresses `Cross-Origin-Embedder-Policy: require-corp`, which the
-   threaded-WASM runtime needs. Headers to set on hosting: COOP/COEP as in
-   `vite.config.ts`, plus `Cache-Control: immutable` on `/models/*` and
-   `/wasm/*`.
+3. **Before release — deploy to Cloudflare Pages and put the binaries in a
+   public Cloudflare R2 bucket.** This is implemented; see `DEPLOY.md`. The
+   split is forced by two verified constraints:
+   - **The threaded WASM runtime must be same-origin.** onnxruntime-web's pthread
+     workers fetch their own subresources directly, bypassing the service worker,
+     so a cross-origin `.wasm` never gets the `Cross-Origin-Resource-Policy`
+     header a COEP page needs and `InferenceSession.create` hangs forever.
+   - **Pages caps a single static file at 25 MiB**, below the 26.5 MiB
+     `ort-wasm-simd-threaded.jsep.wasm` the runtime loads even with WebGPU off.
+
+   So: the **model** is fetched straight from R2 by the service worker (proxied
+   and cached same-origin), and the **WASM runtime** is served by a Pages Function
+   (`functions/wasm/[[path]].js`) that streams it from R2 on the site's own
+   origin. The site itself stays ~400 KB.
+   Rationale: $0 recurring, R2 egress is explicitly free (so the 185 MB model
+   costs **$0 bandwidth**), Pages is fine for a static SPA, and Cloudflare's
+   `_headers` concisely expresses `Cross-Origin-Embedder-Policy: require-corp`,
+   which the threaded-WASM runtime needs.
    - Alternative model rails that cost $0 but cache worse or live off-origin:
-     Cloudflare R2 (must be a separate public bucket because Pages caps files
-     at 25 MiB), GitHub Releases (`curl -L` redirect to
-     `objects.githubusercontent.com`), Hugging Face (`no-store` cache header,
-     third-party domain — verified above).
+     GitHub Releases (`curl -L` redirect to `objects.githubusercontent.com`),
+     Hugging Face (`no-store` cache header, third-party domain — verified above).
 4. **CI regression (free on the public repo):** GitHub Actions job running
    `npm ci && npm run build && node scripts/run-smoke.mjs` with system
    Chromium software rendering (class-2/memory gate). Do **not** publish

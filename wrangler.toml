@@ -1,0 +1,16 @@
+# Cloudflare Pages project configuration (Direct Upload + Pages Functions).
+#
+# The Pages Function at functions/wasm/[[path]].js reads the onnxruntime-web WASM
+# runtime from this bucket, because those files exceed Pages' 25 MiB static-file
+# cap (ort-wasm-simd-threaded.jsep.wasm is 26.5 MiB) and must be same-origin for
+# the threaded runtime to work.
+#
+# Create the bucket once:  npx wrangler r2 bucket create remove-bg-assets
+name = "remove-photo-bg"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "dist"
+
+[[r2_buckets]]
+binding = "ASSETS_BUCKET"
+bucket_name = "remove-bg-assets"
+preview_bucket_name = "remove-bg-assets"

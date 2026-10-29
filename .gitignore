@@ -33,3 +33,7 @@ smoke-results/benchmark-t4/masks/
 
 # Agent working memory (local only)
 .openhands/
+.vercel
+
+# Cloudflare local state
+.wrangler/

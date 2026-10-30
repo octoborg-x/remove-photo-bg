@@ -7,15 +7,16 @@ const READY_TIMEOUT_MS = 5000;
 
 /**
  * Origin that serves the heavy binaries (model + WASM), or '' when this origin
- * serves them itself. Configured at build time with `VITE_ASSET_BASE` so the
- * static site can stay small while the ~230 MB of artifacts live on R2.
+ * serves them themselves. Configured at build time with `VITE_ASSET_BASE` so the
+ * static site can stay small while the artifacts live on Hugging Face. Kept with
+ * a trailing slash so relative paths resolve against it as a directory.
  */
-export const ASSET_BASE: string = (import.meta.env.VITE_ASSET_BASE ?? '').replace(/\/+$/, '');
+export const ASSET_BASE: string = (import.meta.env.VITE_ASSET_BASE ?? '').replace(/\/+$/, '') + '/';
 
 /** Full URL for a persistent asset path (e.g. 'models/model_512.onnx'). */
 export function assetUrl(path: string): string {
   const clean = path.replace(/^\/+/, '');
-  return ASSET_BASE ? `${ASSET_BASE}/${clean}` : `/${clean}`;
+  return ASSET_BASE ? `${ASSET_BASE}${clean}` : `/${clean}`;
 }
 
 export type AssetCacheStatus = 'controlling' | 'unsupported' | 'timeout' | 'failed';

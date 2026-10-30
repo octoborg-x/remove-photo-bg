@@ -24,7 +24,7 @@
 // (e.g. after a model or ORT upgrade). Each artifact is otherwise keyed by its
 // full URL, so a changed filename is picked up automatically.
 
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = `remove-bg-assets-${CACHE_VERSION}`;
 
 // Where the heavy binaries actually live. Empty means "same origin" (local dev,
@@ -70,9 +70,14 @@ function persistentRelativePath(url) {
 async function fetchAsset(request, relativePath) {
   const remote = ASSET_BASE && REMOTE_DIRS.some((dir) => relativePath.startsWith(dir));
   if (!remote) return fetch(request);
-  const target = new URL(relativePath, ASSET_BASE).toString();
+  // Join with a slash even if the base was passed without a trailing slash: a
+  // trailing-slash-less base makes `new URL()` treat its last path segment as a
+  // file, producing a wrong URL (`.../resolve/models/...` instead of
+  // `.../resolve/main/models/...`).
+  const base = ASSET_BASE.endsWith('/') ? ASSET_BASE : `${ASSET_BASE}/`;
+  const target = new URL(relativePath, base).toString();
   // `cors` mode is required so the worker can read the body (to cache it) and so
-  // the response is not opaque. The bucket must allow this origin via CORS.
+  // the response is not opaque. The origin must allow this via CORS.
   return fetch(target, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
 }
 

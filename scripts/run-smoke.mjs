@@ -20,7 +20,8 @@ const image = imgIdx >= 0 ? process.argv[imgIdx + 1] : null;
 const outIdx = process.argv.indexOf('--out');
 const outDir = outIdx >= 0 ? process.argv[outIdx + 1] : './smoke-results';
 const runsIdx = process.argv.indexOf('--runs');
-const runs = runsIdx >= 0 ? Number(process.argv[runsIdx + 1]) : 1;
+const requestedRuns = runsIdx >= 0 ? Number(process.argv[runsIdx + 1]) : 1;
+const runs = Number.isFinite(requestedRuns) && requestedRuns >= 1 ? Math.floor(requestedRuns) : 1;
 
 const CHROME = process.env.CHROME_BIN || '/usr/bin/chromium';
 
@@ -119,10 +120,13 @@ if (results.outputPngDataUrl) {
 writeFileSync(`${outDir}/requests.json`, JSON.stringify(requests, null, 2));
 
 // Measures index: 0-100 reliability score for the timing measurements.
-// It rewards more runs and penalizes dispersion (coefficient of variation).
+// It rewards more runs and penalizes spread (coefficient of variation).
+// A single run can never exceed 60, so the low-index suggestion fires for
+// the exact case it targets: one jittery measurement with no dispersion data.
 const timings = Array.isArray(results.run?.timings) ? results.run.timings : [];
 const measuresIndex = (() => {
-  if (!timings.length) return 0;
+  if (timings.length === 1) return 40; // one sample: no spread evidence, low trust
+  if (timings.length === 0) return 0;
   const mean = timings.reduce((a, b) => a + b, 0) / timings.length;
   const sd = Math.sqrt(
     timings.reduce((a, b) => a + (b - mean) ** 2, 0) / timings.length,
@@ -138,7 +142,7 @@ const measureSuggestion =
   measuresIndex < 50 && timings.length === 1
     ? 'Single run carries high variance. Run `--runs 5` for a reliable average and spread.'
     : measuresIndex < 50
-      ? `Dispersion is high (${timings.length} runs, max/min check the timings above). Consider \`--runs ${Math.min(10, timings.length + 4)}\` for a tighter estimate.`
+      ? `Dispersion is high (${timings.length} runs; see timings). Consider \`--runs ${Math.min(10, timings.length + 4)}\` for a tighter estimate.`
       : '';
 
 writeFileSync(

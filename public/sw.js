@@ -38,7 +38,11 @@ const CACHE_NAME = `remove-bg-assets-${CACHE_VERSION}`;
 // inside the worker this service worker controls, so it proxies cleanly.
 const ASSET_BASE = (() => {
   try {
-    return new URL(self.location.href).searchParams.get('base') || '';
+    const base = new URL(self.location.href).searchParams.get('base') || '';
+    // A bare '/' means "no remote origin" (the page build had no
+    // VITE_ASSET_BASE): keep model/WASM requests same-origin rather than
+    // resolving them against a pathless base.
+    return base.trim() && base !== '/' ? base : '';
   } catch {
     return '';
   }

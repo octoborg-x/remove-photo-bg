@@ -5,11 +5,13 @@
   "type": "module",
   "description": "Browser-first background remover for marketplace/product photos (Phase 1: model feasibility smoke test).",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --port 12000 --strictPort",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "fetch-models": "node scripts/fetch-models.mjs"
+    "fetch-models": "node scripts/fetch-models.mjs",
+    "dev:local": "vite",
+    "build:site": "npm run build && node scripts/strip-large-assets.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "1.29.0"

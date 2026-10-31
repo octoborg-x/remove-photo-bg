@@ -87,18 +87,26 @@ function post(msg) {
 // consistent elapsed time for the UI. Stages and percentages are emitted from the
 // worker (which knows the real byte counts) rather than inferred on the page.
 const loadStartedAt = performance.now();
-let lastPercent = -1;
+const PROGRESS_INTERVAL_MS = 250;
+let lastStage = null;
+let lastReportAt = 0;
 
 function reportProgress(stage, percent, extra) {
-  // Suppress duplicate percentages during a download to avoid flooding the UI;
-  // stage changes always go through.
-  if (stage === 'downloading' && percent === lastPercent) return;
-  lastPercent = percent;
+  const now = performance.now();
+  // Stage changes always go through: a new stage describes new work, even when
+  // its percentage equals the previous stage's (the download starts at the same
+  // 15% the cache probe ended on, and suppressing that left the UI stuck on
+  // "Checking on-device storage…" for the whole download).
+  if (stage === lastStage && stage === 'downloading' && now - lastReportAt < PROGRESS_INTERVAL_MS) {
+    return;
+  }
+  lastStage = stage;
+  lastReportAt = now;
   post({
     kind: 'loading-progress',
     stage,
     percent,
-    elapsedMs: performance.now() - loadStartedAt,
+    elapsedMs: now - loadStartedAt,
     ...(extra || {}),
   });
 }
@@ -124,32 +132,121 @@ function isProviderFailure(err) {
 // mobile/cellular links (ORT's own fetch has no progress callback). Returns an
 // ArrayBuffer; the session is built from those bytes so a provider retry
 // doesn't re-download the 185 MB over the network.
+// A stalled transfer is indistinguishable from a slow one from the outside: the
+// response headers arrive, the request sits "pending" in the network panel, and
+// no bytes ever come (a proxy buffering the whole 185 MB before forwarding it
+// looks exactly like this). Without a watchdog the page waits forever with a
+// frozen progress line, so fail loudly instead.
+const STALL_TIMEOUT_MS = 30000;
+
+function humanBytes(n) {
+  if (!n) return '0 B';
+  if (n < 1048576) return Math.round(n / 1024) + ' KB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+// One retry on a stall: a proxy that wedged one connection usually serves a
+// fresh request fine, and a second attempt is worth 30 s when the alternative is
+// telling the user the app does not work.
 async function downloadModel(url, onProgress) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Failed to download model: HTTP ' + res.status);
-  const total = Number(res.headers.get('content-length')) || 0;
-  if (!res.body) {
-    const buf = await res.arrayBuffer();
-    onProgress(1, buf.byteLength, total || buf.byteLength);
-    return buf;
+  try {
+    return await downloadAttempt(url, onProgress);
+  } catch (err) {
+    if (!err || err.name !== 'StallError') throw err;
+    post({
+      kind: 'loading-progress',
+      stage: 'downloading',
+      percent: PCT.CACHE_DONE,
+      elapsedMs: performance.now() - loadStartedAt,
+      bytes: 0,
+      detail: 'retrying after a stall',
+    });
+    return downloadAttempt(url, onProgress);
   }
-  const reader = res.body.getReader();
-  const chunks = [];
+}
+
+async function downloadAttempt(url, onProgress) {
+  const controller = new AbortController();
+  let stallReason = null;
+  let timer = null;
+  const armStallTimer = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      stallReason =
+        `The model download stalled: no data for ${STALL_TIMEOUT_MS / 1000}s ` +
+        `(received ${humanBytes(received)} of ${totalKnown ? humanBytes(totalKnown) : 'an unknown total'}). ` +
+        'The asset origin, or a proxy in front of it, is not streaming the file.';
+      controller.abort();
+    }, STALL_TIMEOUT_MS);
+  };
   let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    received += value.length;
-    onProgress(total > 0 ? Math.min(1, received / total) : 0, received, total);
+  let totalKnown = 0;
+
+  armStallTimer();
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error('Failed to download model: HTTP ' + res.status);
+    assertIsModel(res, url);
+    const total = Number(res.headers.get('content-length')) || 0;
+    totalKnown = total;
+    if (!res.body) {
+      const buf = await res.arrayBuffer();
+      assertModelSize(buf.byteLength, url);
+      onProgress(1, buf.byteLength, total || buf.byteLength);
+      return buf;
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      armStallTimer();
+      chunks.push(value);
+      received += value.length;
+      onProgress(total > 0 ? Math.min(1, received / total) : 0, received, total);
+    }
+    const out = new Uint8Array(received);
+    let offset = 0;
+    for (const c of chunks) {
+      out.set(c, offset);
+      offset += c.length;
+    }
+    assertModelSize(received, url);
+    return out.buffer;
+  } catch (err) {
+    if (!stallReason) throw err;
+    const stall = new Error(stallReason);
+    stall.name = 'StallError';
+    throw stall;
+  } finally {
+    clearTimeout(timer);
   }
-  const out = new Uint8Array(received);
-  let offset = 0;
-  for (const c of chunks) {
-    out.set(c, offset);
-    offset += c.length;
+}
+
+// A missing model file does not always 404: dev servers and SPAs answer unknown
+// paths with their index.html (HTTP 200), so without this check the page
+// "downloads" a few KB of HTML and ORT reports the opaque
+// "Failed to load model because protobuf parsing failed".
+const MIN_MODEL_BYTES = 1024 * 1024; // the smallest real export is ~15 MB
+
+function assertIsModel(res, url) {
+  const type = (res.headers.get('content-type') || '').toLowerCase();
+  if (type.includes('text/html')) {
+    throw new Error(
+      `The model URL returned an HTML page, not the model (HTTP ${res.status} from ${url}). ` +
+        'The model file is missing from the server. Run "npm run fetch-models" ' +
+        '(or set VITE_ASSET_BASE to the origin that hosts it).',
+    );
   }
-  return out.buffer;
+}
+
+function assertModelSize(bytes, url) {
+  if (bytes < MIN_MODEL_BYTES) {
+    throw new Error(
+      `The model URL returned ${bytes} bytes, which is far too small for an ONNX model ` +
+        `(${url}). The file is missing from the server. Run "npm run fetch-models".`,
+    );
+  }
 }
 
 let modelBytes = null;

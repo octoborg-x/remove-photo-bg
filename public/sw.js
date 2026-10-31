@@ -24,7 +24,7 @@
 // (e.g. after a model or ORT upgrade). Each artifact is otherwise keyed by its
 // full URL, so a changed filename is picked up automatically.
 
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const CACHE_NAME = `remove-bg-assets-${CACHE_VERSION}`;
 
 // Where the heavy binaries actually live. Empty means "same origin" (local dev,
@@ -113,34 +113,51 @@ self.addEventListener('fetch', (event) => {
   const relativePath = persistentRelativePath(request.url);
   if (!relativePath) return;
 
-  event.respondWith(
-    (async () => {
-      const cache = await caches.open(CACHE_NAME);
-      // `ignoreVary` is required: static hosts (and the Vite dev server) send
-      // `Vary: Origin`, and the Origin header differs between the ESM loader
-      // fetch and a plain fetch. The artifacts are same-origin and immutable, so
-      // Vary must not decide cache membership. The URL is the only cache key.
-      const cached = await cache.match(request, { ignoreVary: true });
-      if (cached) {
-        notifyClient({ kind: 'asset-cache-hit', url: request.url });
-        return cached;
-      }
+  const cacheWrite = (async () => {
+    const cache = await caches.open(CACHE_NAME);
+    // `ignoreVary` is required: static hosts (and the Vite dev server) send
+    // `Vary: Origin`, and the Origin header differs between the ESM loader
+    // fetch and a plain fetch. The artifacts are same-origin and immutable, so
+    // Vary must not decide cache membership. The URL is the only cache key.
+    const cached = await cache.match(request, { ignoreVary: true });
+    if (cached) {
+      notifyClient({ kind: 'asset-cache-hit', url: request.url });
+      return { response: cached };
+    }
 
-      const remote = ASSET_BASE && REMOTE_DIRS.some((dir) => relativePath.startsWith(dir));
-      const response = await fetchAsset(request, relativePath);
-      if (!response.ok || response.status !== 200) return response;
-      // Normalise before returning as well as before caching: on the very first
-      // load the page receives this response directly, and a COEP page rejects a
-      // cross-origin asset that lacks CORP.
-      const normalized = normalizeForStore(response, remote);
-      cache.put(request, normalized.clone()).catch(() => {
-        // A full quota must not break the load; the response still reaches the caller.
-      });
-      notifyClient({ kind: 'asset-cached', url: request.url });
-      return normalized;
-    })(),
-  );
+    const remote = ASSET_BASE && REMOTE_DIRS.some((dir) => relativePath.startsWith(dir));
+    const response = await fetchAsset(request, relativePath);
+    if (!response.ok || response.status !== 200) return { response };
+    // A missing artifact often comes back as the host's index.html with HTTP
+    // 200 (SPA fallback), not a 404. Caching that would pin a few KB of HTML
+    // under the model's cache key and quietly break every later visit.
+    if (isFallbackPage(response)) return { response };
+    // Normalise before returning as well as before caching: on the very first
+    // load the page receives this response directly, and a COEP page rejects a
+    // cross-origin asset that lacks CORP.
+    const normalized = normalizeForStore(response, remote);
+    // Report the artifact as cached only once it is actually stored: the write
+    // takes far longer than the response for a 185 MB file, and claiming success
+    // up front made a stalled/abandoned download look successful.
+    const store = cache
+      .put(request, normalized.clone())
+      .then(() => notifyClient({ kind: 'asset-cached', url: request.url }))
+      .catch(() => {});
+    return { response: normalized, store };
+  })();
+
+  event.respondWith(cacheWrite.then((r) => r.response));
+  // Writing a 185 MB body outlives the response; without waitUntil the worker can
+  // be terminated mid-write and the cache entry never appears.
+  event.waitUntil(cacheWrite.then((r) => r.store).catch(() => {}));
 });
+
+// True when the host answered a missing artifact with its app shell instead of
+// the artifact itself (dev-server and SPA fallbacks serve index.html).
+function isFallbackPage(response) {
+  const type = (response.headers.get('content-type') || '').toLowerCase();
+  return type.includes('text/html');
+}
 
 function notifyClient(message) {
   // Best-effort: the page may already be gone (that is exactly the case this
@@ -152,16 +169,18 @@ function notifyClient(message) {
 
 // Returns a storable copy of the response with any `Vary` header removed and, for
 // remote-origin bytes, a `Cross-Origin-Resource-Policy: cross-origin` header so a
-// COEP page accepts the response as if it were same-origin. Clones first, so the
-// caller's copy of the body stays readable.
+// COEP page accepts the response as if it were same-origin.
+//
+// The original body is transferred into the new Response rather than cloned: a
+// clone here would leave a third, never-read branch of a 185 MB stream tee'd off,
+// and that branch buffers the whole file in memory.
 function normalizeForStore(response, remote) {
-  const clone = response.clone();
-  const headers = new Headers(clone.headers);
+  const headers = new Headers(response.headers);
   headers.delete('Vary');
   if (remote) headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
-  return new Response(clone.body, {
-    status: clone.status,
-    statusText: clone.statusText,
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
     headers,
   });
 }

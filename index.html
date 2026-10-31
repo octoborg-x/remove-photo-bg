@@ -31,7 +31,7 @@
   <body>
     <h1>BiRefNet_lite — browser smoke test</h1>
     <p class="stage" id="stage">Starting…</p>
-    <p class="hint">Build <code>__BUILD_ID__</code> — if this does not match the build you just made, the page is stale; reload with Ctrl+Shift+R.</p>
+    <p class="hint" id="buildHint">Build <code id="buildStamp">__BUILD_ID__</code> — if this does not match the build you just made, the page is stale; reload with Ctrl+Shift+R.</p>
     <button id="pickFile">Choose image</button>
     <button id="runAll" disabled>Run smoke test</button>
     <button id="copyReport">Copy device report</button>
@@ -48,15 +48,36 @@
     <!-- The worker is loaded as a module worker via Vite. -->
     <script type="module" src="/src/main.ts"></script>
     <script>
-      // If the module entry never executes (404 on main.ts, or a module that
-      // throws while evaluating), the page would sit on "Starting…" with no clue.
-      setTimeout(() => {
-        const log = document.getElementById('log');
-        if (log && !log.textContent) {
+      // A page served without Vite's transform (`index.html` opened directly, or
+      // through an IDE/static file preview) still contains the literal
+      // `__BUILD_ID__` placeholder and cannot load `/src/main.ts`. Say that plainly
+      // instead of showing a raw token and a generic "script did not run".
+      (function () {
+        // The token is assembled at runtime so the transform that substitutes it
+        // cannot also substitute this copy.
+        var placeholder = '__BUILD' + '_ID__';
+        var stamp = document.getElementById('buildStamp');
+        var untransformed = stamp && stamp.textContent.indexOf(placeholder) !== -1;
+        if (untransformed) {
+          stamp.textContent = 'none';
           document.getElementById('stage').textContent =
-            'App script did not run — open the browser console and check that /src/main.ts is served';
+            'This page was opened without the dev server';
+          document.getElementById('buildHint').textContent =
+            'index.html was served as a plain file, so the TypeScript entry point cannot load. ' +
+            'Start the dev server and use that URL: npm run dev (or npx vite --port 12000), ' +
+            'then open http://localhost:12000/ — not index.html itself.';
+          return;
         }
-      }, 8000);
+        // If the module entry never executes (404 on main.ts, or a module that
+        // throws while evaluating), the page would sit on "Starting…" with no clue.
+        setTimeout(function () {
+          var log = document.getElementById('log');
+          if (log && !log.textContent) {
+            document.getElementById('stage').textContent =
+              'App script did not run — open the browser console and check that /src/main.ts is served';
+          }
+        }, 8000);
+      })();
     </script>
   </body>
 </html>

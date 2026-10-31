@@ -89,9 +89,10 @@ can show e.g. `Downloading model… 42% (78.1 MB / 185.0 MB, 12.3s)`. On a cache
 visit the whole load takes ~1–2 s instead of the first-visit download time.
 
 To force a re-download after changing the model or upgrading ONNX Runtime, bump
-`CACHE_VERSION` in `public/sw.js`. For production, `public/_headers` (Cloudflare
-Pages syntax) also sets `Cache-Control: immutable` on `/models/*` and `/wasm/*`
-as a second layer for browsers where a service worker is unavailable.
+`CACHE_VERSION` in `public/sw.js`. For hosts that honor it, `public/_headers`
+(Cloudflare Pages syntax) also sets `Cache-Control: immutable` on `/models/*`
+and `/wasm/*` as a second layer for browsers where a service worker is
+unavailable.
 
 ## Browser smoke test (headless)
 
@@ -121,17 +122,18 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 |---|---|
 | `npm run dev` | Vite dev server |
 | `npm run build` | typecheck + production build |
-| `npm run build:site` | build + strip the large binaries (for Cloudflare Pages; see [`DEPLOY.md`](./DEPLOY.md)) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run fetch-models` | download + verify model/WASM artifacts (also prepares `public/wasm/` for local dev) |
 | `node scripts/run-smoke.mjs <url> [--image …] [--runs n] [--out dir]` | headless browser smoke test |
 
 ## Deployment
 
-The app deploys to Cloudflare Pages with the model on Hugging Face. See
-[`DEPLOY.md`](./DEPLOY.md) for the architecture (free tiers, no credit card — and
-why the assets are split the way they are), the branch model (`production`
-deploys, `staging` previews, `main` does not deploy), and the required secrets.
+There is no automated deploy pipeline in this repository anymore (the previous
+Cloudflare Pages pipeline was removed after its worker was deleted). The app is
+a static site where the app shell comes from any static host and the heavy
+artifacts (model + WASM runtime) are fetched and cached at runtime — see
+[`DEPLOY.md`](./DEPLOY.md) for the architecture and how to re-enable a deploy
+if you want one.
 
 ## Privacy
 

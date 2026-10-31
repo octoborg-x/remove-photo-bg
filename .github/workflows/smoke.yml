@@ -2,10 +2,36 @@ name: smoke
 
 # Free CPU/WASM regression gate (class-2 "no WebGPU device" proxy).
 # Software rendering is NOT a GPU: this never produces real WebGPU timings.
+#
+# Fires only when the change can influence the runtime pipeline it exercises
+# (model fetch/load, WASM runtime, in-browser inference, the smoke harness
+# itself, or build/dependency config). Doc-only and CI-only edits skip it.
 on:
   push:
     branches: [main, staging, production]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'scripts/**'
+      - 'test-images/**'
+      - 'index.html'
+      - 'vite.config.ts'
+      - 'tsconfig.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/smoke.yml'
   pull_request:
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'scripts/**'
+      - 'test-images/**'
+      - 'index.html'
+      - 'vite.config.ts'
+      - 'tsconfig.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/smoke.yml'
 
 jobs:
   wasm-smoke:

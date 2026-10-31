@@ -31,6 +31,7 @@
   <body>
     <h1>BiRefNet_lite — browser smoke test</h1>
     <p class="stage" id="stage">Starting…</p>
+    <p class="hint">Build <code>__BUILD_ID__</code> — if this does not match the build you just made, the page is stale; reload with Ctrl+Shift+R.</p>
     <button id="pickFile">Choose image</button>
     <button id="runAll" disabled>Run smoke test</button>
     <button id="copyReport">Copy device report</button>
@@ -46,5 +47,16 @@
 
     <!-- The worker is loaded as a module worker via Vite. -->
     <script type="module" src="/src/main.ts"></script>
+    <script>
+      // If the module entry never executes (404 on main.ts, or a module that
+      // throws while evaluating), the page would sit on "Starting…" with no clue.
+      setTimeout(() => {
+        const log = document.getElementById('log');
+        if (log && !log.textContent) {
+          document.getElementById('stage').textContent =
+            'App script did not run — open the browser console and check that /src/main.ts is served';
+        }
+      }, 8000);
+    </script>
   </body>
 </html>

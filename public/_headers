@@ -10,6 +10,12 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
 
+# The app shell is tiny and its markup carries the build stamp, so serves must
+# revalidate every time: `no-cache` still permits reusing a 304'd body, which is
+# how a browser ends up showing an old harness after an edit.
+/index.html
+  Cache-Control: no-store
+
 # The service worker itself must never be cached, or clients get stuck on an
 # old cache version.
 /sw.js

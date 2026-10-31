@@ -42,37 +42,44 @@ export async function ensureAssetCache(onLog?: (msg: string) => void): Promise<A
     return 'unsupported';
   }
 
-  // Pass the remote asset origin on the registration URL: the worker reads it
-  // synchronously at startup, before the first fetch it must handle.
-  const swUrl = ASSET_BASE ? `/sw.js?base=${encodeURIComponent(ASSET_BASE)}` : '/sw.js';
-  try {
-    await navigator.serviceWorker.register(swUrl, { scope: '/' });
-  } catch (err) {
-    onLog?.(`Asset cache registration failed: ${err instanceof Error ? err.message : String(err)}`);
-    return 'failed';
-  }
-
   // A first-ever registration activates but does not control the current page
   // until the next navigation; `clients.claim()` in the worker's activate handler
-  // closes that gap. If it does not arrive in time, fall back to loading without
-  // the cache rather than blocking startup.
-  const controlled = navigator.serviceWorker.controller
-    ? Promise.resolve()
-    : new Promise<void>((resolve) => {
-        const onChange = () => {
-          if (navigator.serviceWorker.controller) {
-            navigator.serviceWorker.removeEventListener('controllerchange', onChange);
-            resolve();
-          }
-        };
-        navigator.serviceWorker.addEventListener('controllerchange', onChange);
-      });
+  // closes that gap. If that does not arrive in time, load without the cache
+  // rather than blocking startup. Registration itself is inside the timeout too:
+  // a stalled `/sw.js` fetch would otherwise hang the app before it ever starts
+  // the inference worker (the page would sit at "Starting…" forever).
+  let registerError: unknown = null;
+  const claimed = (async () => {
+    const swUrl = ASSET_BASE ? `/sw.js?base=${encodeURIComponent(ASSET_BASE)}` : '/sw.js';
+    try {
+      await navigator.serviceWorker.register(swUrl, { scope: '/' });
+    } catch (err) {
+      registerError = err;
+      return;
+    }
+    if (navigator.serviceWorker.controller) return;
+    await new Promise<void>((resolve) => {
+      const onChange = () => {
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.removeEventListener('controllerchange', onChange);
+          resolve();
+        }
+      };
+      navigator.serviceWorker.addEventListener('controllerchange', onChange);
+    });
+  })();
 
   const ready = await Promise.race([
-    controlled.then(() => true),
+    claimed.then(() => true),
     new Promise<boolean>((resolve) => setTimeout(() => resolve(false), READY_TIMEOUT_MS)),
   ]);
 
+  if (registerError) {
+    onLog?.(
+      `Asset cache registration failed: ${registerError instanceof Error ? registerError.message : String(registerError)}`,
+    );
+    return 'failed';
+  }
   if (!ready) {
     onLog?.('Asset cache is still starting; this first load may not be cached.');
     return 'timeout';

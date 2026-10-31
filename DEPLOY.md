@@ -1,14 +1,12 @@
 # Deploying the static site (no credit card)
 
-There is **no automated deploy pipeline** in this repository anymore. The
-previous Cloudflare Pages pipeline (`.github/workflows/deploy-pages.yml`) was
-removed after the Cloudflare worker was deleted, so pushing to `staging` or
-`production` no longer deploys anything. `staging`/`production` branches still
-exist for the release flow, but the site itself must be hosted manually if you
-want it reachable.
+Pushing to `staging` or `production` runs `.github/workflows/deploy-pages.yml`,
+which builds the site (`npm run build:site` — Vite build + model stripped from
+`dist/`) and uploads it to Cloudflare Pages. The job no-ops with a notice until
+the `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` secrets are set.
 
 This doc explains the asset architecture (why the app is a small static shell
-+ remote heavy artifacts) and how to re-enable a deploy if you want one.
++ remote heavy artifacts) and the branch model.
 
 ## Asset architecture
 
@@ -29,6 +27,18 @@ This doc explains the asset architecture (why the app is a small static shell
   threaded binary). Runtime provider is `wasm`; WebGPU is no longer attempted
   (see `scripts/fetch-models.mjs` for the reasoning). Cross-origin WASM would
   hang anyway.
+
+## Deploy flow (automated)
+
+`.github/workflows/deploy-pages.yml` deploys on push to `staging`/`production`:
+
+- `staging` -> Cloudflare Pages preview deployment
+- `production` -> production deployment (only this branch)
+
+`main` pushes do **not** deploy. The workflow reads `VITE_ASSET_BASE` from the
+repo's actions **variable** (displayed value, not a secret) so the built site
+can fetch the model from Hugging Face; leave it unset to serve model/WASM
+same-origin (only useful when the model fits under the host's per-file cap).
 
 ## Hosting the site manually
 
@@ -91,12 +101,16 @@ network for it.
 Add a workflow that uploads `dist/` to a static host of your choice. If you go
 back to Cloudflare Pages:
 
-- `npm run build` (no `build:site` anymore — the model-stripping script was
-  removed with the pipeline).
-- Set `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets and a
-  `VITE_ASSET_BASE` variable.
+- `npm run build:site` (Vite build + the model-stripping script) produces the
+  uploadable `dist/`.
+- Set `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets and, when the
+  model lives on Hugging Face, a `VITE_ASSET_BASE` variable.
 - `npx wrangler@3 pages deploy dist --project-name=remove-photo-bg --branch=<branch>`.
 
 The model is **not** fetched during a deploy — it lives on HF. To re-upload it
 after a change, push to the HF repo (or run `npm run fetch-models` locally and
 `hf upload` the file).
+
+`.github/workflows/deploy-pages.yml` now does all of this automatically on
+push to `staging` (preview) or `production`. The job refuses to fail the build
+when the secrets are missing — it emits a notice and exits green.

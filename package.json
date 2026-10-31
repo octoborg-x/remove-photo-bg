@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "fetch-models": "node scripts/fetch-models.mjs",
-    "dev:local": "vite"
+    "dev:local": "vite",
+    "build:site": "npm run build && node scripts/strip-large-assets.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "1.29.0"

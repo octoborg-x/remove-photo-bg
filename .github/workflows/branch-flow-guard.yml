@@ -1,0 +1,47 @@
+name: branch-flow-guard
+
+# Enforces the release flow by rejecting pull requests that merge into
+# staging/production from a disallowed source branch:
+#   main       -> staging      (preview)
+#   main,staging -> production (prod)
+# It is a required status check on staging and production via a ruleset.
+
+on:
+  pull_request:
+    branches: [staging, production]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source branch against target
+        shell: bash
+        env:
+          SOURCE: ${{ github.head_ref }}
+          TARGET: ${{ github.base_ref }}
+        run: |
+          allowed=""
+          case "$TARGET" in
+            production)
+              allowed="main staging"
+              ;;
+            staging)
+              # staging only receives from main (or a branch derived from it)
+              allowed="main"
+              ;;
+            *)
+              # not a protected target: allow
+              echo "Target $TARGET not protected; passing."
+              exit 0
+              ;;
+          esac
+          ok=no
+          for a in $allowed; do
+            if [ "$SOURCE" = "$a" ]; then ok=yes; fi
+          done
+          if [ "$ok" = yes ]; then
+            echo "Allowed: $TARGET may receive from $SOURCE (wanted [$allowed])."
+          else
+            echo "Blocked: $TARGET may only receive from [$allowed]; got PR from $SOURCE."
+            exit 1
+          fi

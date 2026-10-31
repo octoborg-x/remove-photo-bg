@@ -18,9 +18,14 @@ jobs:
           cache: npm
       - run: npm ci
       # Fetch the pinned model into public/ BEFORE build, so vite copies it
-      # into dist/ for preview to serve.
+      # into dist/ for preview to serve. The model is 193 MB and gitignored, so
+      # every fresh checkout starts without it.
       - run: npm run fetch-models
       - run: npm run build
+      # Fail fast if the model did not survive the build; the preview can't
+      # serve what isn't in dist/.
+      - name: Verify model artifact
+        run: test -s dist/models/model_512.onnx
       # puppeteer-core needs an executable at run-smoke's default CHROME_BIN.
       - run: |
           sudo apt-get update

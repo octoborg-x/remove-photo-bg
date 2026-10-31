@@ -9,13 +9,23 @@ const READY_TIMEOUT_MS = 5000;
  * Origin that serves the heavy binaries (model + WASM), or '' when this origin
  * serves them itself. Configured at build time with `VITE_ASSET_BASE` so the
  * static site can stay small while the ~230 MB of artifacts live on R2.
+ *
+ * A trailing slash is kept so that relative paths resolve against the base as a
+ * directory (a slash-less base makes `new URL()` treat the last path segment as
+ * a file). When VITE_ASSET_BASE is empty the result must stay '' — never '/',
+ * which would be truthy and make the service worker treat same-origin
+ * model/WASM requests as remote.
  */
-export const ASSET_BASE: string = (import.meta.env.VITE_ASSET_BASE ?? '').replace(/\/+$/, '');
+export const ASSET_BASE: string = (() => {
+  const base = (import.meta.env.VITE_ASSET_BASE ?? '').trim();
+  if (!base) return '';
+  return base.replace(/\/+$/, '') + '/';
+})();
 
 /** Full URL for a persistent asset path (e.g. 'models/model_512.onnx'). */
 export function assetUrl(path: string): string {
   const clean = path.replace(/^\/+/, '');
-  return ASSET_BASE ? `${ASSET_BASE}/${clean}` : `/${clean}`;
+  return ASSET_BASE ? `${ASSET_BASE}${clean}` : `/${clean}`;
 }
 
 export type AssetCacheStatus = 'controlling' | 'unsupported' | 'timeout' | 'failed';

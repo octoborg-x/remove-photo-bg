@@ -2,9 +2,12 @@ name: branch-flow-guard
 
 # Enforces the release flow by rejecting pull requests that merge into
 # staging/production from a disallowed source branch:
-#   main       -> staging      (preview)
-#   main,staging -> production (prod)
-# It is a required status check on staging and production via a ruleset.
+#   main          -> staging      (preview; ONLY main is accepted)
+#   main, staging -> production   (prod)
+#
+# The check is deliberately strict on branch NAME: a PR must come from the
+# literal `main` branch, not from a feature branch or a prepared merge branch
+# derived from it, so that staging/production always receive exactly main.
 
 on:
   pull_request:
@@ -14,16 +17,6 @@ jobs:
   guard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          # The guard compares branch ancestry, so the allowed and source
-          # branches must be present locally.
-          ref: ${{ github.head_ref }}
-      - name: Fetch allowed branches
-        shell: bash
-        run: |
-          git fetch origin --depth=1 main staging production
       - name: Check source branch against target
         shell: bash
         env:
@@ -36,7 +29,7 @@ jobs:
               allowed="main staging"
               ;;
             staging)
-              # staging only receives from main (or a branch derived from it)
+              # staging only receives from the literal main branch
               allowed="main"
               ;;
             *)
@@ -47,16 +40,7 @@ jobs:
           esac
           ok=no
           for a in $allowed; do
-            if [ "$SOURCE" = "$a" ]; then ok=yes; fi
-            # A branch derived from an allowed branch (e.g. a prepared merge or
-            # a feature branch based on it) keeps the flow enforced while
-            # letting the usual promote/backport branches through.
-            # checkout fetched the head with fetch-depth: 0, so origin/$SOURCE
-            # exists for any real PR; skip ancestry if it is somehow missing so
-            # a non-derived branch is not accidentally let through.
-            src_ref="origin/$SOURCE"
-            if git rev-parse --verify "$src_ref" >/dev/null 2>&1 &&
-               git merge-base --is-ancestor "origin/$a" "$src_ref" 2>/dev/null; then
+            if [ "$SOURCE" = "$a" ]; then
               ok=yes
             fi
           done

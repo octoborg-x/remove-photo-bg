@@ -121,8 +121,6 @@ writeFileSync(`${outDir}/requests.json`, JSON.stringify(requests, null, 2));
 
 // Measures index: 0-100 reliability score for the timing measurements.
 // It rewards more runs and penalizes spread (coefficient of variation).
-// A single run can never exceed 60, so the low-index suggestion fires for
-// the exact case it targets: one jittery measurement with no dispersion data.
 const timings = Array.isArray(results.run?.timings) ? results.run.timings : [];
 const measuresIndex = (() => {
   if (timings.length === 1) return 40; // one sample: no spread evidence, low trust
@@ -138,13 +136,6 @@ const measuresIndex = (() => {
   return Math.round(100 * Math.sqrt(runScore * stableScore));
 })();
 
-const measureSuggestion =
-  measuresIndex < 50 && timings.length === 1
-    ? 'Single run carries high variance. Run `--runs 5` for a reliable average and spread.'
-    : measuresIndex < 50
-      ? `Dispersion is high (${timings.length} runs; see timings). Consider \`--runs ${Math.min(10, timings.length + 4)}\` for a tighter estimate.`
-      : '';
-
 writeFileSync(
   `${outDir}/summary.json`,
   JSON.stringify(
@@ -154,14 +145,13 @@ writeFileSync(
       provider: results.provider,
       run: results.run,
       measuresIndex,
-      measureSuggestion,
       pageLog: results.log,
     },
     null,
     2,
   ),
 );
-console.log(JSON.stringify({ ...results.run, measuresIndex, measureSuggestion }, null, 2));
+console.log(JSON.stringify({ ...results.run, measuresIndex }, null, 2));
 console.log(`Saved summary to ${outDir}/summary.json`);
 
 // Report whether any request could carry image pixels.

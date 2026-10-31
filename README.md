@@ -52,8 +52,13 @@ still forces the GPU path. Evidence recorded in
 ```bash
 npm install
 npm run fetch-models   # downloads model + WASM into public/ with SHA-256 checks
-npm run dev            # http://localhost:5173
+npm run dev            # http://localhost:12000 (dev:local keeps the Vite default 5173)
 ```
+
+Open the URL the dev server prints, not `index.html` itself: the page needs Vite
+to compile `src/main.ts`, so opening the file directly (or through an editor's
+file preview) renders a page that cannot start. On a remote sandbox, use the
+https URL that forwards port 12000.
 
 ## Persistent model loading
 
@@ -120,7 +125,8 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 
 | Command | Purpose |
 |---|---|
-| `npm run dev` | Vite dev server |
+| `npm run dev` | Vite dev server on port 12000 (the port remote sandboxes forward) |
+| `npm run dev:local` | Vite dev server on its default port 5173 |
 | `npm run build` | typecheck + production build |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run fetch-models` | download + verify model/WASM artifacts (also prepares `public/wasm/` for local dev) |

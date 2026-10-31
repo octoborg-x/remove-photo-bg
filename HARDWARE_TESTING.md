@@ -192,25 +192,27 @@ unavoidable manual step.
    `scripts/benchmark-pipelines.py --providers CUDAExecutionProvider` on a free
    Google Colab T4 (or local CPU) whenever a new model export is considered.
    This gives a reproducible GPU baseline at $0.
-3. **Before release — deploy the small site to Cloudflare Pages, keep the model
-   on Hugging Face.** This is implemented; see `DEPLOY.md`. The split is forced
-   by two verified constraints:
+3. **Before release — host the small static site anywhere; keep the model on Hugging
+   Face.** The architecture is unchanged (see `DEPLOY.md`); only the automated
+   Cloudflare Pages pipeline was removed (the worker was deleted). The split is
+   forced by two verified constraints:
    - **The threaded WASM runtime must be same-origin.** onnxruntime-web's pthread
      workers fetch their own subresources directly, bypassing the service worker,
      so a cross-origin `.wasm` never gets the `Cross-Origin-Resource-Policy`
      header a COEP page needs and `InferenceSession.create` hangs forever.
-   - **Pages caps a single static file at 25 MiB**, below the 26.5 MiB
+   - **A static host caps a single file at 25 MiB** (Cloudflare Pages limit, the
+     host used before the pipeline was removed), below the 26.5 MiB
      `ort-wasm-simd-threaded.jsep.wasm` the runtime loads for the WebGPU backend
      even with WebGPU off.
 
    So: the **model** is fetched straight from Hugging Face by the service worker
    (proxied and cached same-origin; HF serves CORS + no size cap, verified), and
    the **WASM runtime** is the **CPU-only bundle** (`ort.wasm.min.js`, 13.3 MiB)
-   shipped as a same-origin Pages static file. The site itself stays ~400 KB.
+   shipped as a same-origin static file. The site itself stays ~400 KB.
    WebGPU is not attempted in this configuration (the `jsep` binary cannot fit on
-   Pages without a card-billing feature like R2); `?provider=wasm` is the only
-   provider. Rationale: $0 recurring and no credit card anywhere; HF has no
-   per-file cap and a public repo costs nothing.
+   a 25 MiB static host without a card-billing feature like R2); `?provider=wasm`
+   is the only provider. Rationale: $0 recurring and no credit card anywhere; HF
+   has no per-file cap and a public repo costs nothing.
    - Alternative model rails that cost $0 but cache worse or live off-origin:
      GitHub Releases (`curl -L` redirect to `objects.githubusercontent.com`,
      native CORS unsupported — the SW must have CORS headers, so this needs a

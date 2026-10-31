@@ -50,10 +50,15 @@ jobs:
           fi
 
       # The model is stripped from dist/ (it lives on Hugging Face and exceeds
-      # the 25 MiB single-file cap); the WASM runtime stays.
+      # the 25 MiB single-file cap); the WASM runtime stays. VITE_ASSET_BASE
+      # must reach `vite build` or the app compiles ASSET_BASE to '' and tries
+      # to fetch /models/model_512.onnx same-origin (which Pages serves as an
+      # HTML 404). It comes from a repo Actions variable so it stays visible.
       - name: Build site
         if: steps.guard.outputs.configured == 'true'
         run: npm run build:site
+        env:
+          VITE_ASSET_BASE: ${{ vars.VITE_ASSET_BASE }}
 
       # Create the Pages project if it does not exist yet (the first deploy
       # fails with "Project not found" otherwise). `pages project create` errors

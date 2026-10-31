@@ -1,7 +1,21 @@
 import { defineConfig } from 'vite';
 
+// Stamped into the page at build/serve time so a stale document is obvious: the
+// label, copy and behaviour of this harness change often, and a browser holding
+// an old copy silently shows old text with no way to tell.
+const BUILD_ID = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '');
+
 export default defineConfig({
   base: './',
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
+  plugins: [
+    {
+      name: 'build-stamp',
+      transformIndexHtml(html) {
+        return html.replaceAll('__BUILD_ID__', BUILD_ID);
+      },
+    },
+  ],
   worker: {
     format: 'es',
   },
@@ -14,12 +28,18 @@ export default defineConfig({
     allowedHosts: [
       'work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev',
       'work-2-aybthnpldbthpfgf.prod-runtime.all-hands.dev',
+      '.prod-runtime.all-hands.dev',
     ],
     headers: {
       // Cross-origin isolation enables SharedArrayBuffer, which onnxruntime-web
       // requires for its threaded WASM runtime (SIMD + multithreading).
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
+      // `no-cache` still lets a browser reuse a 304'd body, so an edited harness
+      // can show old markup after a reload. `no-store` makes every load fetch the
+      // current document. Fine in dev: the heavy artifacts are cached by the
+      // service worker, not by the HTTP cache.
+      'Cache-Control': 'no-store',
     },
   },
   preview: {

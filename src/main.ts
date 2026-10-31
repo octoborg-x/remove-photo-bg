@@ -19,6 +19,9 @@ import {
 import { describeProgress } from './features/background-removal/load-progress';
 import type { LoadStage, WorkerProgressMessage } from './features/background-removal/types';
 
+// Replaced at build/serve time by the build-stamp plugin in vite.config.ts.
+declare const __BUILD_ID__: string;
+
 // The model lives at a same-origin path; when a remote asset origin is
 // configured the service worker transparently proxies this to R2, so the path
 // here stays origin-relative.
@@ -40,9 +43,13 @@ let currentObjectUrl: string | null = null;
 let worker: Worker | null = null;
 let modelReady = false;
 let modelError: string | null = null;
+// Set as soon as the worker posts anything at all; distinguishes "never started"
+// from "working on a long download".
+let workerResponded = false;
 const modelWaiters: Array<{ resolve: () => void; reject: (e: Error) => void }> = [];
 
 const WARM_RUNS = 1;
+const WORKER_START_TIMEOUT_MS = 15000;
 const timings: number[] = [];
 let loadTimeMs = 0;
 
@@ -190,8 +197,19 @@ async function initWorker(): Promise<void> {
   // Classic worker (plain JS in /public) so onnxruntime-web's wasm loaders are
   // fetched as static files instead of being transformed by Vite.
   worker = new Worker('/inference-worker.js', { type: 'classic' });
+  // Without these a worker that fails to start (404 on the script, a failed
+  // importScripts of the ORT runtime) posts nothing at all and the page waits on
+  // its initial "Starting…" text forever.
+  worker.onerror = (e) => {
+    error(`Inference worker failed to start: ${e.message || 'unknown worker error'}`);
+    settleModel('worker failed to start');
+  };
+  worker.onmessageerror = () => {
+    error('Inference worker sent a message that could not be deserialized');
+  };
   worker.onmessage = (e: MessageEvent<WorkerProgressMessage>) => {
     const msg = e.data;
+    workerResponded = true;
     if (msg.kind === 'loading-progress') {
       updateLoadProgress(msg);
     } else if (msg.kind === 'load-time') {
@@ -285,6 +303,18 @@ async function initWorker(): Promise<void> {
     outputIsProbability: MODEL_OUTPUT_IS_PROBABILITY,
     forceProvider: forced || undefined,
   });
+
+  // The worker answers a set-model with a 'queued' progress message immediately,
+  // so silence here means it never started. Say so instead of leaving the stage
+  // line on "Starting…" with nothing in the log.
+  setTimeout(() => {
+    if (workerResponded || modelReady || modelError) return;
+    setStage('No response from the inference worker');
+    log(
+      `WARNING: the inference worker has not responded in ${WORKER_START_TIMEOUT_MS / 1000}s. ` +
+        'Its script or the ONNX Runtime files may have failed to load; check the browser console.',
+    );
+  }, WORKER_START_TIMEOUT_MS);
 }
 
 type PendingRun = { resolve: (ms: number) => void; reject: (err: Error) => void };
@@ -418,6 +448,16 @@ let adapterReport = '';
 let modelDownloadBytes = 0;
 let modelTotalBytes = 0;
 let lastLoadStage: LoadStage | null = null;
+let lastProgress: {
+  stage: LoadStage;
+  percent: number;
+  bytes?: number;
+  totalBytes?: number;
+  detail?: string;
+} | null = null;
+// The worker measures elapsed time from its own start; this offset maps that
+// timeline onto the page's clock so the ticker below can keep counting.
+let progressClockOffset = 0;
 const downloadStart = performance.now();
 
 // Renders a checkpoint to the stage line and logs each new stage exactly once,
@@ -433,6 +473,8 @@ function updateLoadProgress(msg: {
 }): void {
   if (msg.bytes !== undefined) modelDownloadBytes = msg.bytes;
   if (msg.totalBytes) modelTotalBytes = msg.totalBytes;
+  if (!lastProgress) progressClockOffset = performance.now() - msg.elapsedMs;
+  lastProgress = msg;
   setStage(describeProgress(msg));
   if (msg.stage !== lastLoadStage) {
     lastLoadStage = msg.stage;
@@ -440,6 +482,18 @@ function updateLoadProgress(msg: {
     log(`Load stage: ${msg.stage}${extra}`);
   }
 }
+
+// Re-render the last checkpoint on a timer. Progress messages only arrive when
+// something changes, so a stalled download previously froze the whole line at
+// "(0.0s)" — indistinguishable from a hang, and the reason a stuck model fetch
+// looked like a dead page. With the clock running, a stall is visible: the byte
+// count stops while the elapsed time keeps climbing.
+setInterval(() => {
+  if (!lastProgress || modelReady || modelError) return;
+  setStage(
+    describeProgress({ ...lastProgress, elapsedMs: performance.now() - progressClockOffset }),
+  );
+}, 500);
 
 copyReportBtn.addEventListener('click', () => {
   const isolation = window.crossOriginIsolated
@@ -452,6 +506,7 @@ copyReportBtn.addEventListener('click', () => {
   const dlSecs = modelDownloadBytes ? ((performance.now() - downloadStart) / 1000).toFixed(1) : 'n/a';
   const lines = [
     '== BiRefNet_lite Phase 1 device report ==',
+    `Build: ${__BUILD_ID__}`,
     `Page: ${location.origin}${location.pathname}`,
     `Provider: ${window.smokeProvider || 'not loaded'}`,
     `Adapter: ${adapterReport || 'n/a (not webgpu)'}`,
@@ -477,6 +532,7 @@ copyReportBtn.addEventListener('click', () => {
 // Start: init the worker. No model binary is committed; the user must run the
 // fetch script first.
 setStage('Starting worker…');
+log(`Build ${__BUILD_ID__}`);
 log('Worker initializing…');
 initWorker().catch((e) => error(e.message));
 log('If the model is not downloaded, run: npm run fetch-models');

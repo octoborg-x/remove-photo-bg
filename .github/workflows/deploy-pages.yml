@@ -58,6 +58,15 @@ jobs:
         env:
           VITE_ASSET_BASE: ${{ vars.VITE_ASSET_BASE }}
 
+      # Create the Pages project if it does not exist yet (the first deploy
+      # fails with "Project not found" otherwise). `pages project create` errors
+      # if it already exists, so tolerate that.
+      - name: Ensure Pages project
+        if: steps.guard.outputs.configured == 'true'
+        run: |
+          npx wrangler@3 pages project create remove-photo-bg \
+            --production-branch=production || true
+
       - name: Deploy to Cloudflare Pages
         if: steps.guard.outputs.configured == 'true'
         run: |

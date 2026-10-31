@@ -70,7 +70,7 @@ the on-page device report is composed and copied entirely in the browser.
 
 ```bash
 node scripts/run-smoke.mjs "https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/" \
-  --image test-images/glass-wine.jpg --runs 5 --out smoke-results/device-laptop-wasm
+  --image test-images/glass-wine.jpg --out smoke-results/device-laptop-wasm
 ```
 
 That writes provider, timings, the output PNG, and `requests.json` (privacy:

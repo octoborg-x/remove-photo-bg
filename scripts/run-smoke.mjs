@@ -1,12 +1,13 @@
 // Headless smoke-test driver for the Phase 1 harness.
 //
 // Usage:
-//   node scripts/run-smoke.mjs <page-url> [--image <path-or-url>] [--out <dir>]
+//   node scripts/run-smoke.mjs <page-url> [--image <path-or-url>] [--out <dir>] [--runs <n>]
 //
 // Launches the system Chromium, opens the Phase 1 page, waits for the model to
-// load, runs WARM_RUNS inferences, collects results (timings, provider), the
-// output PNG data URL (saved to <out>/), and a log of network requests made
-// during processing (to verify no image pixels leave the page).
+// load, runs n inferences (default 1), collects results (timings, provider,
+// measures index), the output PNG data URL (saved to <out>/), and a log of
+// network requests made during processing (to verify no image pixels leave the
+// page).
 import puppeteer from 'puppeteer-core';
 
 const argUrl = process.argv[2];
@@ -19,7 +20,7 @@ const image = imgIdx >= 0 ? process.argv[imgIdx + 1] : null;
 const outIdx = process.argv.indexOf('--out');
 const outDir = outIdx >= 0 ? process.argv[outIdx + 1] : './smoke-results';
 const runsIdx = process.argv.indexOf('--runs');
-const runs = runsIdx >= 0 ? Number(process.argv[runsIdx + 1]) : 5;
+const runs = runsIdx >= 0 ? Number(process.argv[runsIdx + 1]) : 1;
 
 const CHROME = process.env.CHROME_BIN || '/usr/bin/chromium';
 
@@ -116,6 +117,30 @@ if (results.outputPngDataUrl) {
   console.log(`Saved output PNG to ${outDir}/output.png`);
 }
 writeFileSync(`${outDir}/requests.json`, JSON.stringify(requests, null, 2));
+
+// Measures index: 0-100 reliability score for the timing measurements.
+// It rewards more runs and penalizes dispersion (coefficient of variation).
+const timings = Array.isArray(results.run?.timings) ? results.run.timings : [];
+const measuresIndex = (() => {
+  if (!timings.length) return 0;
+  const mean = timings.reduce((a, b) => a + b, 0) / timings.length;
+  const sd = Math.sqrt(
+    timings.reduce((a, b) => a + (b - mean) ** 2, 0) / timings.length,
+  );
+  const cv = mean > 0 ? sd / mean : 1; // coefficient of variation
+  // Base: runs help (log scale up to ~10); dispersion caps the score.
+  const runScore = Math.min(1, Math.log2(timings.length + 1) / Math.log2(11));
+  const stableScore = Math.max(0, 1 - cv); // 1.0 = perfectly stable
+  return Math.round(100 * Math.sqrt(runScore * stableScore));
+})();
+
+const measureSuggestion =
+  measuresIndex < 50 && timings.length === 1
+    ? 'Single run carries high variance. Run `--runs 5` for a reliable average and spread.'
+    : measuresIndex < 50
+      ? `Dispersion is high (${timings.length} runs, max/min check the timings above). Consider \`--runs ${Math.min(10, timings.length + 4)}\` for a tighter estimate.`
+      : '';
+
 writeFileSync(
   `${outDir}/summary.json`,
   JSON.stringify(
@@ -124,13 +149,15 @@ writeFileSync(
       image: target,
       provider: results.provider,
       run: results.run,
+      measuresIndex,
+      measureSuggestion,
       pageLog: results.log,
     },
     null,
     2,
   ),
 );
-console.log(JSON.stringify(results.run, null, 2));
+console.log(JSON.stringify({ ...results.run, measuresIndex, measureSuggestion }, null, 2));
 console.log(`Saved summary to ${outDir}/summary.json`);
 
 // Report whether any request could carry image pixels.

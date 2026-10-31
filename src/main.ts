@@ -1,6 +1,6 @@
 // Main thread: orchestrates the Phase 1 smoke test.
 // - loads a local test image
-// - sends it to the worker for 5 warm inferences
+// - sends it to the worker for a warm inference
 // - composites the mask and renders/downloads a transparent PNG
 // - reports timings and the execution provider
 import { imageDataToTensor, MODEL_SIZE } from './features/background-removal/image-preprocess';
@@ -42,7 +42,7 @@ let modelReady = false;
 let modelError: string | null = null;
 const modelWaiters: Array<{ resolve: () => void; reject: (e: Error) => void }> = [];
 
-const WARM_RUNS = 5;
+const WARM_RUNS = 1;
 const timings: number[] = [];
 let loadTimeMs = 0;
 
@@ -324,7 +324,7 @@ function finishedRun(): void {
   setStage('Done');
   const avg = timings.reduce((a, b) => a + b, 0) / timings.length;
   log(`--- Summary ---`);
-  log(`Warm inference timings (${timings.length} runs): ${timings.map((t) => t.toFixed(1)).join(', ')} ms`);
+  log(`Warm inference timings (${timings.length} run${timings.length === 1 ? '' : 's'}): ${timings.map((t) => t.toFixed(1)).join(', ')} ms`);
   log(`Average: ${avg.toFixed(1)} ms`);
   log(`Provider: ${window.smokeProvider || '<reported above>'}`);
   log(`Model download size: ~185 MB (model_512.onnx)`);

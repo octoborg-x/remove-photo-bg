@@ -7,7 +7,6 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "build:site": "npm run build && node scripts/strip-large-assets.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "fetch-models": "node scripts/fetch-models.mjs"

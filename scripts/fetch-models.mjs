@@ -31,7 +31,8 @@ const MODELS = [
 //
 // CPU-only bundle (`ort.wasm.min.js`), not the full `ort.all.min.js`: the full
 // bundle pulls `ort-wasm-simd-threaded.jsep.wasm` (26.5 MiB) for the WebGPU
-// backend, which exceeds Cloudflare Pages' 25 MiB per-file cap. (A cross-origin
+// backend, which is too large for a typical static host's per-file cap (e.g.
+// Cloudflare Pages' 25 MiB). (A cross-origin
 // copy wouldn't work anyway — ORT's pthread workers bypass the service worker, so
 // they never get the `Cross-Origin-Resource-Policy` header a COEP page needs.)
 // The CPU bundle loads `ort-wasm-simd-threaded.wasm` (13.3 MiB), small enough to

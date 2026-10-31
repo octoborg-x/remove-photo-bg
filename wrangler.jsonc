@@ -1,0 +1,8 @@
+{
+  // Set this to today's date
+  "compatibility_date": "2026-10-31",
+  "assets": {
+    "directory": "./dist"
+  },
+  "previews": {}
+}

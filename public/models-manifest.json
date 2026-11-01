@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "c5_best",
+      "file": "models/c5_best.onnx",
+      "size": 98799684,
+      "sha256": "099c89de1d9a3da27af3d5329460f543e5d9390fc45e7ba7d0e7360b378d5f97",
+      "label": "c5_best (fast, ~94 MB)",
+      "description": "Newer distilled student, weight-only fp16 (~94 MB download). Default model when no other criterion applies.",
+      "inputSize": 512,
+      "outputIsProbability": true,
+      "default": true,
+      "url": "/models/c5_best.onnx"
+    },
+    {
+      "id": "model_512",
+      "file": "models/model_512.onnx",
+      "size": 193514682,
+      "sha256": "eaafaa10f19c63b77e2bae77bf4b2f59054c208ea08b8c6648f95ef36a3b6b87",
+      "label": "model_512 (full, ~184 MB)",
+      "description": "Phase-1 fp32 export of BiRefNet_lite at 512x512 (earlier generation, larger download).",
+      "inputSize": 512,
+      "outputIsProbability": true,
+      "default": false,
+      "url": "/models/model_512.onnx"
+    }
+  ]
+}

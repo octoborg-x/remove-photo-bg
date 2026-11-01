@@ -1,18 +1,18 @@
-// Headless smoke-test driver for the Phase 1 harness.
+// Headless smoke-test driver for the Phase 2 harness.
 //
 // Usage:
-//   node scripts/run-smoke.mjs <page-url> [--image <path-or-url>] [--out <dir>] [--runs <n>]
+//   node scripts/run-smoke.mjs <page-url> [--image <path-or-url>] [--out <dir>] [--runs <n>] [--model <id>] [--provider <wasm|webgpu>]
 //
-// Launches the system Chromium, opens the Phase 1 page, waits for the model to
-// load, runs n inferences (default 1), collects results (timings, provider,
-// measures index), the output PNG data URL (saved to <out>/), and a log of
-// network requests made during processing (to verify no image pixels leave the
-// page).
+// Launches the system Chromium, opens the page, waits for the auto-loaded model
+// (or first changes the selection via ?model= / ?provider= then waits), runs n
+// inferences (default 1), collects results (timings, provider, measures index),
+// the output PNG data URL (saved to <out>/), and a log of network requests made
+// during processing (to verify no image pixels leave the page).
 import puppeteer from 'puppeteer-core';
 
 const argUrl = process.argv[2];
 if (!argUrl) {
-  console.error('Usage: node scripts/run-smoke.mjs <page-url> [--image <path-or-url>] [--out <dir>]');
+  console.error('Usage: node scripts/run-smoke.mjs <page-url> [--image <path-or-url>] [--out <dir>] [--runs <n>] [--model <id>] [--provider <wasm|webgpu>]');
   process.exit(1);
 }
 const imgIdx = process.argv.indexOf('--image');
@@ -22,6 +22,20 @@ const outDir = outIdx >= 0 ? process.argv[outIdx + 1] : './smoke-results';
 const runsIdx = process.argv.indexOf('--runs');
 const requestedRuns = runsIdx >= 0 ? Number(process.argv[runsIdx + 1]) : 1;
 const runs = Number.isFinite(requestedRuns) && requestedRuns >= 1 ? Math.floor(requestedRuns) : 1;
+const modelIdx = process.argv.indexOf('--model');
+const wantedModel = modelIdx >= 0 ? process.argv[modelIdx + 1] : null;
+const providerIdx = process.argv.indexOf('--provider');
+const wantedProvider = providerIdx >= 0 ? process.argv[providerIdx + 1] : null;
+
+// ?model=/?provider= drive the app's own overrides (same path a tester would
+// use); unknown values are ignored by the app, so the smoke run would then test
+// whatever the default is. Fail loudly instead so a typo is never "green".
+function injectOverrides(url) {
+  const u = new URL(url);
+  if (wantedModel) u.searchParams.set('model', wantedModel);
+  if (wantedProvider) u.searchParams.set('provider', wantedProvider);
+  return u.toString();
+}
 
 const CHROME = process.env.CHROME_BIN || '/usr/bin/chromium';
 
@@ -55,7 +69,7 @@ page.on('pageerror', (err) => console.error('[pageerror]', err.message));
 const results = {};
 page.on('dialog', async (d) => d.dismiss());
 
-await page.goto(argUrl, { waitUntil: 'load', timeout: 120000 });
+await page.goto(injectOverrides(argUrl), { waitUntil: 'load', timeout: 120000 });
 
 // Wait for the model to be ready (poll; the model download + WASM init can take
 // several minutes on first load).
@@ -68,6 +82,7 @@ const modelReady = await page
       log: document.getElementById('log')?.textContent,
       ready: window.smokeModelReady,
       provider: window.smokeProvider,
+      model: window.smokeModelId,
     }));
     console.error('Model did not become ready. Page state:', JSON.stringify(st, null, 2));
     return false;
@@ -77,7 +92,21 @@ if (!modelReady) {
   await browser.close();
   process.exit(1);
 }
-console.log('Model ready. Provider:', await page.evaluate(() => window.smokeProvider));
+const readyInfo = await page.evaluate(() => ({
+  provider: window.smokeProvider,
+  model: window.smokeModelId,
+}));
+console.log('Model ready. Provider:', readyInfo.provider, '| Model:', readyInfo.model);
+if (wantedProvider && readyInfo.provider !== wantedProvider) {
+  console.error(`Expected provider ${wantedProvider}, got ${readyInfo.provider}`);
+  await browser.close();
+  process.exit(1);
+}
+if (wantedModel && readyInfo.model !== wantedModel) {
+  console.error(`Expected model ${wantedModel}, got ${readyInfo.model}`);
+  await browser.close();
+  process.exit(1);
+}
 
 const target = image || 'test-images/glass-wine.jpg';
 console.log(`Running smoke test on image: ${target} (${runs} run${runs > 1 ? 's' : ''})`);
@@ -143,6 +172,7 @@ writeFileSync(
       pageUrl: argUrl,
       image: target,
       provider: results.provider,
+      model: results.run?.modelId ?? readyInfo.model,
       run: results.run,
       measuresIndex,
       pageLog: results.log,

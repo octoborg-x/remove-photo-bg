@@ -1,13 +1,15 @@
-// Downloads the pinned BiRefNet_lite ONNX artifact and verifies its SHA-256.
+// Downloads the pinned ground-truth/background-removal ONNX artifacts and
+// verifies their SHA-256 before writing the model manifest.
 //
-// The model is the official BiRefNet_lite backbone exported at a 512x512 fixed
-// input. The 1024x1024 export peaks at ~1.5 GB of transient activation memory,
-// which no browser WASM heap or mobile GPU could satisfy (std::bad_alloc on
-// OrtRun). At 512 the peak is ~1.1 GB and the same model runs everywhere.
+// Both models are served from the Octoborg/remove-photo-bg Hugging Face space
+// (free hosting, CORS-enabled), which is exactly what the deployed service
+// worker proxies (VITE_ASSET_BASE). The shipped Phase-2 default is
+// `c5_best.onnx` — a weight-only-fp16 distilled student (~94 MiB download while
+// keeping fp32 compute); `model_512.onnx` is the Phase-1 fp32 export and stays
+// selectable. Every artifact is pinned by URL and SHA-256; the generated
+// `public/models-manifest.json` is the single source of truth the UI, the
+// service worker, and the smoke harness read.
 //
-// Provenance: every backbone tensor in this file is bit-identical to
-// ZhengPeng7/BiRefNet_lite (model.safetensors), and the decoder convolutions
-// are that checkpoint with BatchNorm folded in (float32 rounding only).
 // Also copies the onnxruntime-web WASM files we need into public/wasm.
 //
 // Usage: node scripts/fetch-models.mjs
@@ -19,11 +21,37 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
+// All model files live under `models/` in the HF space so the deployed service
+// worker (which only proxies `models/` and `wasm/`) serves them the same way
+// the local build does.
+const HF_SPACE = 'https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve/main';
+
 const MODELS = [
   {
-    url: 'https://huggingface.co/Phoenix-ActuallyFree/BiRefNet_lite_512-ONNX/resolve/main/onnx/model.onnx',
-    out: 'public/models/model_512.onnx',
+    id: 'c5_best',
+    file: 'models/c5_best.onnx',
+    url: `${HF_SPACE}/models/c5_best.onnx`,
+    size: 98799684,
+    sha256: '099c89de1d9a3da27af3d5329460f543e5d9390fc45e7ba7d0e7360b378d5f97',
+    label: 'c5_best (fast, ~94 MB)',
+    description:
+      'Newer distilled student, weight-only fp16 (~94 MB download). Default model when no other criterion applies.',
+    inputSize: 512,
+    outputIsProbability: true,
+    default: true,
+  },
+  {
+    id: 'model_512',
+    file: 'models/model_512.onnx',
+    url: `${HF_SPACE}/models/model_512.onnx`,
+    size: 193514682,
     sha256: 'eaafaa10f19c63b77e2bae77bf4b2f59054c208ea08b8c6648f95ef36a3b6b87',
+    label: 'model_512 (full, ~184 MB)',
+    description:
+      'Phase-1 fp32 export of BiRefNet_lite at 512x512 (earlier generation, larger download).',
+    inputSize: 512,
+    outputIsProbability: true,
+    default: false,
   },
 ];
 
@@ -44,19 +72,38 @@ const WASM_FILES = [
   'ort-wasm-simd-threaded.wasm',
 ];
 
+// The manifest is the runtime source of truth: the UI builds the model
+// selector from it, the service worker seeds one cache bucket per model from
+// it, and the smoke harness reads it to know which models exist. It is written
+// by this script so pinning (file, url, sha256, size, contract) and
+// distribution stay in one place. The URL stored here is the relative path the
+// app fetches through the asset service worker; the absolute `url` in the table
+// above is only used to download at build time.
+const manifest = MODELS.map(({ url: _downloadUrl, ...entry }) => ({
+  ...entry,
+  url: `/${entry.file}`,
+}));
+
 for (const m of MODELS) {
-  const dest = resolve(ROOT, m.out);
+  // Artifacts land in public/ so `vite build` copies them into dist/ the same
+  // way the deployed SW expects them (`/models/<leaf>`). The absolute URL in
+  // the table above is only the download source.
+  const dest = resolve(ROOT, 'public', m.file);
   mkdirSync(dirname(dest), { recursive: true });
   const res = await fetch(m.url);
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${m.url}`);
   const buf = Buffer.from(await res.arrayBuffer());
   const h = createHash('sha256').update(buf).digest('hex');
   if (h !== m.sha256) {
-    throw new Error(`SHA-256 mismatch for ${m.out}: expected ${m.sha256}, got ${h}`);
+    throw new Error(`SHA-256 mismatch for ${m.file}: expected ${m.sha256}, got ${h}`);
   }
   writeFileSync(dest, buf);
-  console.log(`OK  ${m.out}  ${buf.length} bytes  sha256=${h}`);
+  console.log(`OK  ${m.file}  ${buf.length} bytes  sha256=${h}`);
 }
+
+const manifestPath = resolve(ROOT, 'public/models-manifest.json');
+writeFileSync(manifestPath, JSON.stringify({ version: 1, models: manifest }, null, 2) + '\n');
+console.log(`OK  public/models-manifest.json  (${manifest.length} model(s))`);
 
 mkdirSync(resolve(ROOT, 'public/wasm'), { recursive: true });
 for (const f of WASM_FILES) {

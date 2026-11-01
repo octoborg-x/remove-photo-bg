@@ -105,14 +105,15 @@ export function onAssetCacheMessage(
 /**
  * Reports whether the large artifacts are already persisted, so the UI can say
  * "first download" versus "loading from device". Returns the count of cached
- * model/WASM entries.
+ * model/WASM entries. Model buckets (per-model, see sw.js) are counted too, so
+ * a visit that cached a different model still reports the real on-device state.
  */
 export async function cachedAssetCount(): Promise<number> {
   if (!('caches' in window)) return 0;
   const names = await caches.keys();
   let count = 0;
   for (const name of names) {
-    if (!name.startsWith('remove-bg-assets-')) continue;
+    if (!name.startsWith('remove-bg-assets-') && !name.startsWith('remove-bg-model-')) continue;
     const cache = await caches.open(name);
     count += (await cache.keys()).length;
   }

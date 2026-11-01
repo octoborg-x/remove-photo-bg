@@ -20,12 +20,60 @@
 // (`/sw.js?base=https://huggingface.co/.../resolve/main/`), so it is available
 // before the first fetch is handled.
 //
-// Versioning: bump CACHE_VERSION to invalidate every cached artifact at once
-// (e.g. after a model or ORT upgrade). Each artifact is otherwise keyed by its
-// full URL, so a changed filename is picked up automatically.
+// Versioning: the WASM runtime cache is one shared bucket keyed by CACHE_VERSION;
+// bump it to invalidate all wasm artifacts at once (e.g. after an ORT upgrade).
+// Models are instead bucketed PER MODEL by manifest identity + content hash
+// (`remove-bg-model-<id>-<sha8>`), so switching or upgrading a model never
+// touches another model's cached bytes and a working model stays cached while a
+// new one downloads. A changed model revision is picked up automatically: new
+// sha256 -> new bucket, and the stale bucket is pruned on the next activate.
 
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const CACHE_NAME = `remove-bg-assets-${CACHE_VERSION}`;
+const MODEL_BUCKET_PREFIX = 'remove-bg-model-';
+
+// leaf name (e.g. 'c5_best.onnx') -> { id, sha256, file } read from
+// /models-manifest.json (the generated source of truth; see
+// scripts/fetch-models.mjs). Loaded on activate and lazily on demand, so a
+// first-ever load with a slow manifest still works.
+let modelsByLeaf = null;
+
+async function loadModelManifest() {
+  if (modelsByLeaf) return modelsByLeaf;
+  const map = {};
+  try {
+    // Bound the fetch so a stalled manifest can never block install/activate;
+    // unknown models fall back to the shared asset bucket until the next load.
+    const res = await Promise.race([
+      fetch('/models-manifest.json', { cache: 'no-store' }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('manifest timeout')), 3000)),
+    ]);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const manifest = await res.json();
+    for (const m of manifest.models || []) {
+      const leaf = (m.file || '').split('/').pop();
+      if (leaf && typeof m.sha256 === 'string') {
+        map[leaf] = { id: m.id, sha256: m.sha256, file: m.file };
+      }
+    }
+  } catch {
+    // Manifest unreachable (offline first load, stale preview): fall through
+    // with an empty map; unknown models cache under the shared asset bucket.
+  }
+  modelsByLeaf = map;
+  return map;
+}
+
+function modelBucketName(relativePath) {
+  const leaf = relativePath.split('/').pop();
+  const info = modelsByLeaf?.[leaf];
+  const tag = info ? `${info.id}-${info.sha256.slice(0, 8)}` : `unknown-${leaf}`;
+  return MODEL_BUCKET_PREFIX + tag;
+}
+
+function isKnownModelBucket(name, known) {
+  return known.has(name);
+}
 
 // Where the heavy binaries actually live. Empty means "same origin" (local dev,
 // or a host that can serve the files itself).
@@ -81,6 +129,7 @@ async function fetchAsset(request, relativePath) {
 }
 
 self.addEventListener('install', () => {
+  event.waitUntil(loadModelManifest());
   // Take over as soon as possible; there is no stale app shell to protect
   // because only model/WASM artifacts are cached.
   self.skipWaiting();
@@ -89,14 +138,28 @@ self.addEventListener('install', () => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      // Drop caches from older versions so an upgrade does not pin ~235 MB of
-      // dead artifacts on the device.
+      // Compute which model buckets are still current so the prune below keeps
+      // only the live revision of each shipped model.
+      const byLeaf = await loadModelManifest();
+      const manifestLoaded = Object.keys(byLeaf).length > 0;
+      const current = new Set();
+      for (const info of Object.values(byLeaf)) {
+        current.add(MODEL_BUCKET_PREFIX + `${info.id}-${info.sha256.slice(0, 8)}`);
+      }
+      // Drop caches from older versions so an upgrade does not pin hundreds of
+      // MB of dead artifacts on the device: stale wasm buckets (old
+      // CACHE_VERSION) and stale model buckets (old/replaced revisions).
+      // Model buckets are only pruned when the manifest actually loaded: with
+      // an empty map every bucket would look stale, and re-downloading 200 MB
+      // because of a transient manifest failure is worse than keeping a valid
+      // cached model.
       const names = await caches.keys();
-      await Promise.all(
-        names
-          .filter((name) => name.startsWith('remove-bg-assets-') && name !== CACHE_NAME)
-          .map((name) => caches.delete(name)),
-      );
+      const stale = names.filter((name) => {
+        if (name === CACHE_NAME) return false;
+        if (name.startsWith(MODEL_BUCKET_PREFIX)) return manifestLoaded && !isKnownModelBucket(name, current);
+        return name.startsWith('remove-bg-assets-');
+      });
+      await Promise.all(stale.map((name) => caches.delete(name)));
       await self.clients.claim();
     })(),
   );
@@ -108,8 +171,11 @@ self.addEventListener('fetch', (event) => {
   const relativePath = persistentRelativePath(request.url);
   if (!relativePath) return;
 
+  const isModel = relativePath.startsWith('models/');
+  const cacheName = isModel ? modelBucketName(relativePath) : CACHE_NAME;
+
   const cacheWrite = (async () => {
-    const cache = await caches.open(CACHE_NAME);
+    const cache = await caches.open(cacheName);
     // `ignoreVary` is required: static hosts (and the Vite dev server) send
     // `Vary: Origin`, and the Origin header differs between the ESM loader
     // fetch and a plain fetch. The artifacts are same-origin and immutable, so

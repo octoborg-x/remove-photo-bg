@@ -36,37 +36,11 @@ if (ort.env.webgpu) {
 // correct mask. BiRefNet on onnxruntime-web is precision- and layout-sensitive;
 // on Adreno-6xx it silently returned a wrong result (missing foreground, opaque
 // rails left on the subject) with no error, so the WASM fallback never fired.
-// Until an adapter is verified end-to-end (correct mask + acceptable latency,
-// see the laptop test), default to WASM. `?provider=webgpu` still opts in.
-//
-// Each entry is a lowercase substring of `adapter.info.device ||
-// adapter.info.architecture || adapter.info.vendor || adapter.info.description`.
-// Keep the list empty until an adapter passes validation.
-const VALIDATED_WEBGPU_SUBSTRINGS = [
-  // e.g. 'radeon 780m', 'apple m2', 'intel iris xe — validated <date>'
-];
-
-function adapterSubstrings() {
-  try {
-    const a = ort.env.webgpu?.adapter;
-    if (!a) return '';
-    const info = a.info ?? {};
-    return [info.device, info.architecture, info.vendor, info.description]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-// Do NOT call navigator.gpu inside the worker before importScripts has run:
-// `adapterSubstrings()` is only meaningful once ort has enumerated the adapter.
-function webgpuValidated() {
-  const blob = adapterSubstrings();
-  if (!blob) return false;
-  return VALIDATED_WEBGPU_SUBSTRINGS.some((s) => blob.includes(s));
-}
+// The main thread runs the adapter gate (src/features/background-removal/
+// provider-gate.ts, shared @ VALIDATED_WEBGPU_SUBSTRINGS) and passes
+// `gpuValidated` on set-model; until an adapter is verified end-to-end
+// (correct mask + acceptable latency, see the laptop test) the list stays empty
+// and only WASM is offered. `?provider=webgpu` still opts in.
 
 let session = null;
 let lastProvider = 'none';
@@ -74,9 +48,10 @@ let modelUrl = null;
 let lastError = null;
 let adapterLabel = '';
 let MODEL_SIZE = 512;
-// The shipped BiRefNet_lite_512 export applies sigmoid internally and returns
-// probabilities; the older 1024 export returned raw logits.
+// The shipped exports apply sigmoid internally and return probabilities; the
+// older 1024 export returned raw logits.
 let outputIsProbability = true;
+let currentModelId = null;
 
 function post(msg) {
   self.postMessage(msg);
@@ -86,7 +61,7 @@ function post(msg) {
 // A single wall-clock origin for the whole load, so every checkpoint carries a
 // consistent elapsed time for the UI. Stages and percentages are emitted from the
 // worker (which knows the real byte counts) rather than inferred on the page.
-const loadStartedAt = performance.now();
+let loadStartedAt = performance.now();
 const PROGRESS_INTERVAL_MS = 250;
 let lastStage = null;
 let lastReportAt = 0;
@@ -392,14 +367,27 @@ self.onmessage = async (e) => {
   const msg = e.data;
   try {
     if (msg.kind === 'set-model') {
+      // A new set-model means a different model artefact: drop the previous
+      // session and its bytes so memory from one model never leaks into the
+      // next, and reset the load timeline/progress so the UI reports a fresh
+      // load (not a continuation of the previous model's).
+      await session?.release?.();
+      session = null;
+      modelBytes = null;
+      lastProvider = 'none';
+      lastError = null;
+      currentModelId = msg.modelId || null;
       modelUrl = msg.modelUrl;
       if (msg.inputSize) MODEL_SIZE = msg.inputSize;
       if (typeof msg.outputIsProbability === 'boolean') {
         outputIsProbability = msg.outputIsProbability;
       }
+      loadStartedAt = performance.now();
+      lastStage = null;
+      lastReportAt = 0;
       reportProgress('queued', PCT.START);
-      // Only attempt WebGPU if the browser actually exposes it AND the adapter
-      // is one we have validated (see VALIDATED_WEBGPU_SUBSTRINGS). An
+      // Only attempt WebGPU if the browser actually exposes it AND the main
+      // thread validated this device's adapter (provider-gate.ts). An
       // unvalidated GPU can silently produce a wrong mask, so the WASM fallback
       // wouldn't fire. `?provider=webgpu` still forces it as an opt-in.
       const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
@@ -407,7 +395,7 @@ self.onmessage = async (e) => {
       let candidates;
       if (forced) {
         candidates = [forced];
-      } else if (hasWebGPU && webgpuValidated()) {
+      } else if (hasWebGPU && msg.gpuValidated) {
         candidates = ['webgpu', 'wasm'];
       } else {
         candidates = ['wasm'];
@@ -428,7 +416,13 @@ self.onmessage = async (e) => {
       }
       const totalMs = performance.now() - loadStartedAt;
       reportProgress('ready', 100, { detail: ep });
-      post({ kind: 'load-time', ms: totalMs, provider: ep, adapter: adapterLabel });
+      post({
+        kind: 'load-time',
+        ms: totalMs,
+        provider: ep,
+        adapter: adapterLabel,
+        modelId: currentModelId,
+      });
       return;
     }
     if (msg.kind === 'run') {
@@ -454,7 +448,13 @@ self.onmessage = async (e) => {
       }
       // result-ready first: the main thread renders the image before the promise
       // for this run settles, so the output is on screen before the summary.
-      post({ kind: 'result-ready', mask: result.mask, width: msg.width, height: msg.height });
+      post({
+        kind: 'result-ready',
+        mask: result.mask,
+        width: msg.width,
+        height: msg.height,
+        inputSize: MODEL_SIZE,
+      });
       post({ kind: 'inference-time', ms: result.timeMs, runId: msg.runId });
       return;
     }

@@ -1,3 +1,28 @@
+// A model as published by the generated manifest (public/models-manifest.json;
+// see scripts/fetch-models.mjs). Single source of truth for the selector, the
+// download URL, and the service worker's per-model cache bucket.
+export interface ModelManifestEntry {
+  id: string;
+  /** Path served by this origin through the asset service worker, e.g. '/models/c5_best.onnx'. */
+  file: string;
+  /** Relative URL the inference worker fetches. */
+  url: string;
+  size: number;
+  sha256: string;
+  label: string;
+  description?: string;
+  inputSize: number;
+  /** True when the graph applies its own sigmoid and the output is already [0,1]. */
+  outputIsProbability: boolean;
+  /** True when this is the default selection when no other criterion applies. */
+  default?: boolean;
+}
+
+export interface ModelsManifest {
+  version: number;
+  models: ModelManifestEntry[];
+}
+
 // Shared message types between the main thread and the inference worker.
 // Worker -> main
 
@@ -29,7 +54,14 @@ export type WorkerProgressMessage =
       /** Optional human-readable detail, e.g. "from cache" or the provider. */
       detail?: string;
     }
-  | { kind: 'load-time'; ms: number; provider: string; adapter?: string }
+  | {
+      kind: 'load-time';
+      ms: number;
+      provider: string;
+      adapter?: string;
+      /** The manifest id the session was built for (e.g. 'c5_best' or 'model_512'). */
+      modelId?: string;
+    }
   | { kind: 'provider-fallback'; from: string; to: string; reason: string }
   | { kind: 'adapter-warning'; message: string }
   | { kind: 'inference-time'; ms: number; runId: number }
@@ -38,6 +70,8 @@ export type WorkerProgressMessage =
       mask: Float32Array; // 1 x N x N probability mask [0,1]
       width: number; // original image width
       height: number; // original image height
+      /** The model's square input size, so the main thread can upscale the mask correctly. */
+      inputSize?: number;
     }
   | { kind: 'error'; message: string; runId?: number; fatal?: boolean };
 
@@ -49,6 +83,16 @@ export type MainToWorkerMessage =
       inputSize?: number;
       outputIsProbability?: boolean;
       forceProvider?: string;
+      /**
+       * Whether the main thread validated this device's adapter (see
+       * provider-gate.ts VALIDATED_WEBGPU_SUBSTRINGS). The worker may still
+       * fall back to WASM if a validated GPU fails at runtime.
+       */
+      gpuValidated?: boolean;
+      /**
+       * Manifest id of the model being loaded (for reporting + session reuse).
+       */
+      modelId?: string;
     }
   | {
       kind: 'run';

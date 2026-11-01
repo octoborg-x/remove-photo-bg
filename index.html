@@ -3,15 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BiRefNet_lite Phase 1 — browser smoke test</title>
+    <title>Remove Photo BG — browser background remover</title>
     <style>
-      /* Minimal, plain styling for the Phase 1 smoke-test harness. */
+      /* Minimal, plain styling for the Phase 2 product/harness page. */
       body { font-family: system-ui, sans-serif; margin: 2rem; }
       pre { background: #f4f4f4; padding: 1rem; white-space: pre-wrap; }
       img { max-width: 45%; display: inline-block; margin: 0.5rem 0.5rem 0 0; }
       .stage { font-size: 0.9rem; color: #333; }
       canvas { max-width: 45%; border: 1px solid #ccc; }
       button { margin-right: 0.5rem; }
+      .controls { margin: 0.75rem 0; display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: baseline; }
+      .controls label { font-weight: 600; }
+      .controls select { min-width: 14rem; padding: 0.2rem 0.4rem; }
+      .controls .hint { color: #666; font-size: 0.8rem; }
+      #downloadJpg { margin-left: 0.5rem; }
       /* A transparent PNG on a white page looks blank, so show transparency
          against a checkerboard instead. */
       #outputBox img {
@@ -29,19 +34,36 @@
     </style>
   </head>
   <body>
-    <h1>BiRefNet_lite — browser smoke test</h1>
+    <h1>Remove Photo BG — browser background remover</h1>
     <p class="stage" id="stage">Starting…</p>
     <p class="hint" id="buildHint">Build <code id="buildStamp">__BUILD_ID__</code> — if this does not match the build you just made, the page is stale; reload with Ctrl+Shift+R.</p>
-    <button id="pickFile">Choose image</button>
-    <button id="runAll" disabled>Run smoke test</button>
-    <button id="copyReport">Copy device report</button>
+    <div class="controls">
+      <div>
+        <label for="modelSelect">Model</label>
+        <select id="modelSelect" disabled></select>
+      </div>
+      <div>
+        <label for="providerToggle">Runtime</label>
+        <select id="providerToggle" disabled></select>
+        <span class="hint" id="providerHint"></span>
+      </div>
+      <div>
+        <button id="loadModel" disabled>Load model</button>
+      </div>
+    </div>
+    <p>
+      <button id="pickFile">Choose image</button>
+      <button id="runAll" disabled>Remove background</button>
+      <button id="copyReport">Copy device report</button>
+    </p>
     <div>
       <strong>Input image</strong>
       <div id="inputBox"></div>
     </div>
     <div>
-      <strong>Output (transparent PNG)</strong>
+      <strong>Output (transparent PNG / white-background JPG)</strong>
       <div id="outputBox"></div>
+      <a id="downloadJpg" style="display:none" download>Download white-background JPG</a>
     </div>
     <pre id="log"></pre>
 

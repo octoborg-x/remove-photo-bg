@@ -28,7 +28,9 @@ import csv
 import hashlib
 import json
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 
@@ -84,13 +86,15 @@ def _get(url: str, **kw) -> requests.Response:
 
 _MIN_INTERVAL = 0.4
 _last_req = [0.0]
+_pace_lock = threading.Lock()
 
 
 def _pace() -> None:
-    dt = time.time() - _last_req[0]
-    if dt < _MIN_INTERVAL:
-        time.sleep(_MIN_INTERVAL - dt)
-    _last_req[0] = time.time()
+    with _pace_lock:
+        dt = time.time() - _last_req[0]
+        if dt < _MIN_INTERVAL:
+            time.sleep(_MIN_INTERVAL - dt)
+        _last_req[0] = time.time()
 
 
 def sha256_file(path: Path) -> str:
@@ -127,6 +131,15 @@ def object_info(oid: int) -> dict:
             "object_url": j.get("objectURL") or f"https://www.metmuseum.org/art/collection/search/{oid}"}
 
 
+def _safe_object_info(oid: int, log: dict, query: str) -> dict | None:
+    try:
+        return object_info(oid)
+    except Exception as ex:
+        log["rejections"].append({"id": oid, "query": query,
+                                  "reject_reason": f"api-error:{ex}"})
+        return None
+
+
 def normalize_image(path: Path) -> None:
     img = ImageOps.exif_transpose(Image.open(path))
     img = img.convert("RGB")
@@ -161,14 +174,15 @@ def main() -> int:
 
     for query in args.queries.split(","):
         got = 0
-        for oid in search_ids(query, args.per_query):
+        ids = search_ids(query, args.per_query)
+        # Object detail is one HTTP call each; a small thread pool cuts wall
+        # time ~4x while the global pacer still bounds the request rate.
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            infos = list(pool.map(lambda oid: (oid, _safe_object_info(oid, log, query)), ids))
+        for oid, info in infos:
             if got >= args.per_query:
                 break
-            try:
-                info = object_info(oid)
-            except Exception as ex:
-                log["rejections"].append({"id": oid, "query": query,
-                                          "reject_reason": f"api-error:{ex}"})
+            if info is None:
                 continue
             if not info["public_domain"]:
                 log["rejections"].append({"id": oid, "query": query,

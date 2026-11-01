@@ -163,12 +163,40 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 
 ## Deployment
 
-There is no automated deploy pipeline in this repository anymore (the previous
-Cloudflare Pages pipeline was removed after its worker was deleted). The app is
-a static site where the app shell comes from any static host and the heavy
-artifacts (model + WASM runtime) are fetched and cached at runtime — see
-[`DEPLOY.md`](./DEPLOY.md) for the architecture and how to re-enable a deploy
-if you want one.
+### Recommended: Vercel (free, no credit card, WebGPU-capable)
+
+The app is a static site with one hard requirement: the WebGPU ORT runtime must
+be served same-origin, and its jsep binary is **26.5 MiB** — above Cloudflare
+Pages' 25 MiB static-file cap (and a CF Pages Function proxying it would exceed
+the free tier's CPU quota). **Vercel Hobby** has no per-file cap relevant here
+(~100 MB), **no credit card required**, ~100 GB/mo transfer, and honors
+COOP/COEP via `vercel.json` at the CDN layer — so it's the only free host that
+can actually serve WebGPU.
+
+Deploy (one-time manual steps in the dashboard):
+
+1. Sign up at vercel.com with GitHub (**Hobby, no card**).
+2. **Add New → Project → import `octoborg-x/remove-photo-bg`**.
+3. Framework preset: **Vite** (or leave auto-detect). Build command will be
+   `npm run vercel:build` (from `vercel.json`), output `dist`.
+4. **Add an environment variable**: `VITE_ASSET_BASE =
+   https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve/main/`.
+   Without it the app compiles `ASSET_BASE=''` and tries to fetch
+   `/models/*.onnx` same-origin, which fails — see `src/asset-cache.ts`.
+5. **Deploy**; the build runs `fetch-models --webgpu --no-models` (bakes the
+   jsep runtime, skips the hundreds-of-MB model bodies — models come from HF at
+   runtime via the service worker) then `vite build` then strips `dist/models/`.
+
+That produces a WebGPU-capable site. Verify with the Colab T4 notebook
+(`notebooks/colab-webgpu-smoke.ipynb`).
+
+### Alternatives
+
+- Any static host can serve the **CPU-only** build (`npm run build:site`);
+  WebGPU will simply not be offered (probe finds no jsep → graceful WASM).
+  This is what the old Cloudflare Pages setup did.
+- See [`DEPLOY.md`](./DEPLOY.md) for the architecture (app shell vs remote
+  asset origin) and the HF/worker interplay.
 
 ## Privacy
 

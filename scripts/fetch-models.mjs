@@ -12,7 +12,9 @@
 //
 // Also copies the onnxruntime-web WASM files we need into public/wasm.
 //
-// Usage: node scripts/fetch-models.mjs
+// Usage: node scripts/fetch-models.mjs [--webgpu]
+//   --webgpu additionally copies the WebGPU-capable ORT runtime (37+ MiB of
+//   files) into public/wasm for hosts that can serve it same-origin.
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -65,12 +67,20 @@ const MODELS = [
 // they never get the `Cross-Origin-Resource-Policy` header a COEP page needs.)
 // The CPU bundle loads `ort-wasm-simd-threaded.wasm` (13.3 MiB), small enough to
 // deploy as a same-origin static file.
+//
+// A host that CAN serve the jsep binary (no 25 MiB cap, same-origin — e.g. a
+// local Vite preview, a self-hosted server, or a bigger static host) can enable
+// the WebGPU path with `node scripts/fetch-models.mjs --webgpu`, which also
+// copies the full bundle + jsep wasm into public/wasm. The app probes for the
+// jsep file and only requests the webgpu bundle when it is actually served.
 const SOURCE_WASM_DIR = resolve(ROOT, 'node_modules/onnxruntime-web/dist');
 const WASM_FILES = [
   'ort.wasm.min.js',
   'ort-wasm-simd-threaded.mjs',
   'ort-wasm-simd-threaded.wasm',
 ];
+const WEBGPU_WASM_FILES = ['ort.all.min.js', 'ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm'];
+const WITH_WEBGPU = process.argv.includes('--webgpu');
 
 // The manifest is the runtime source of truth: the UI builds the model
 // selector from it, the service worker seeds one cache bucket per model from
@@ -106,7 +116,8 @@ writeFileSync(manifestPath, JSON.stringify({ version: 1, models: manifest }, nul
 console.log(`OK  public/models-manifest.json  (${manifest.length} model(s))`);
 
 mkdirSync(resolve(ROOT, 'public/wasm'), { recursive: true });
-for (const f of WASM_FILES) {
+const allWasmFiles = WITH_WEBGPU ? WASM_FILES.concat(WEBGPU_WASM_FILES) : WASM_FILES;
+for (const f of allWasmFiles) {
   const src = resolve(SOURCE_WASM_DIR, f);
   const dest = resolve(ROOT, 'public/wasm', f);
   const data = await import('node:fs/promises').then(({ readFile }) => readFile(src));

@@ -10,7 +10,7 @@
 // tensor directly. For Phase 1 the tensor layout correctness matters more than
 // matching torch's exact Resize rounding; pixel differences of a few units are
 // acceptable for a smoke test, but the pipeline (inference + mask + alpha) must
-// be validated end-to-end.
+// be checked end-to-end (see scripts/run-smoke.mjs + HARDWARE_TESTING.md).
 
 // The model's input is square and fixed by its export. BiRefNet_lite is
 // exported at 1024x1024 and _lite_512 at 512x512; the smaller input needs ~4x

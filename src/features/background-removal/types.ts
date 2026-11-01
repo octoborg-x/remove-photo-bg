@@ -84,12 +84,6 @@ export type MainToWorkerMessage =
       outputIsProbability?: boolean;
       forceProvider?: string;
       /**
-       * Whether the main thread validated this device's adapter (see
-       * provider-gate.ts VALIDATED_WEBGPU_SUBSTRINGS). The worker may still
-       * fall back to WASM if a validated GPU fails at runtime.
-       */
-      gpuValidated?: boolean;
-      /**
        * Manifest id of the model being loaded (for reporting + session reuse).
        */
       modelId?: string;

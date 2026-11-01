@@ -95,8 +95,14 @@ if (!modelReady) {
 const readyInfo = await page.evaluate(() => ({
   provider: window.smokeProvider,
   model: window.smokeModelId,
+  maskThreshold: document.getElementById('maskThreshold')?.value ?? null,
+  maskFeather: document.getElementById('maskFeather')?.value ?? null,
+  runtimeOptions: Array.from(document.querySelectorAll('#modelSelect option'))
+    .filter((o) => o.value.startsWith('runtime:'))
+    .map((o) => o.value),
 }));
 console.log('Model ready. Provider:', readyInfo.provider, '| Model:', readyInfo.model);
+if (readyInfo.runtimeOptions?.length) console.log('Runtime options in model list:', readyInfo.runtimeOptions.join(', '));
 if (wantedProvider && readyInfo.provider !== wantedProvider) {
   console.error(`Expected provider ${wantedProvider}, got ${readyInfo.provider}`);
   await browser.close();

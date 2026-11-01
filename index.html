@@ -50,6 +50,16 @@
       <div>
         <button id="loadModel" disabled>Load model</button>
       </div>
+      <div>
+        <label for="maskThreshold">Mask threshold</label>
+        <input type="range" id="maskThreshold" min="0" max="100" step="1" value="0" title="Forces alpha to 0 below this cut-off (0 = off)">
+        <span class="hint" id="maskThresholdValue">off</span>
+      </div>
+      <div>
+        <label for="maskFeather">Mask feather (px)</label>
+        <input type="range" id="maskFeather" min="0" max="64" step="1" value="0" title="Softens the mask edge by this many output pixels (0 = off)">
+        <span class="hint" id="maskFeatherValue">off</span>
+      </div>
     </div>
     <p>
       <button id="pickFile">Choose image</button>

@@ -10,6 +10,10 @@ import {
   probabilityToMask,
   upscaleMask,
   applyMaskToImage,
+  applyMaskAdjust,
+  DEFAULT_MASK_ADJUST,
+  isMaskAdjust,
+  type MaskAdjust,
 } from './features/background-removal/mask-postprocess';
 import { canvasToPngDataUrl, canvasToJpegDataUrl } from './features/background-removal/export-image';
 import {
@@ -19,7 +23,12 @@ import {
   ASSET_BASE,
 } from './features/background-removal/asset-cache';
 import { describeProgress } from './features/background-removal/load-progress';
-import { detectWebGpu, isProviderChoice } from './features/background-removal/provider-gate';
+import {
+  detectWebGpu,
+  isProviderChoice,
+  PROVIDER_LABELS,
+  webGpuRuntimeHosted,
+} from './features/background-removal/provider-gate';
 import {
   fetchModelsManifest,
   defaultModelId,
@@ -46,11 +55,16 @@ const providerToggle = document.getElementById('providerToggle')! as HTMLSelectE
 const loadModelBtn = document.getElementById('loadModel')! as HTMLButtonElement;
 const downloadJpgBtn = document.getElementById('downloadJpg')! as HTMLAnchorElement;
 const providerHint = document.getElementById('providerHint')!;
+const maskThresholdInput = document.getElementById('maskThreshold')! as HTMLInputElement;
+const maskThresholdValue = document.getElementById('maskThresholdValue')!;
+const maskFeatherInput = document.getElementById('maskFeather')! as HTMLInputElement;
+const maskFeatherValue = document.getElementById('maskFeatherValue')!;
 
-// Persisted user preferences: model id and provider. Scrubbed to safe values on
-// read so stale/corrupt entries are ignored.
+// Persisted user preferences: model id, provider, and mask adjustments.
+// Scrubbed to safe values on read so stale/corrupt entries are ignored.
 const LS_MODEL = 'remove-bg:model';
 const LS_PROVIDER = 'remove-bg:provider';
+const LS_MASK_ADJUST = 'remove-bg:mask-adjust';
 
 function loadPref<T>(key: string, guard: (v: unknown) => v is T): T | null {
   try {
@@ -91,13 +105,45 @@ let loadTimeMs = 0;
 let models: ModelManifestEntry[] = [];
 let selectedModel: ModelManifestEntry | null = null;
 let selectedProvider: 'webgpu' | 'wasm' = 'wasm';
-// GPU is only *offered* when detected and validated; this is the app's actual
-// decision, recorded so the device report can say why.
+// GPU availability is the app's actual decision; recorded so the device report
+// can say why. webGpuRuntimeHosted distinguishes "browser has WebGPU" from
+// "this host can actually serve the WebGPU-capable ORT bundle".
 let gpuState: Awaited<ReturnType<typeof detectWebGpu>> | null = null;
+let runtimeHasWebGpuBundle = false;
+let maskAdjust: MaskAdjust = { ...DEFAULT_MASK_ADJUST };
 const urlParams = new URLSearchParams(location.search);
-// ?provider= and ?model= keep overriding for testing even with a saved pref.
+// ?provider=, ?model= and the mask controls keep overriding for testing even
+// with a saved pref.
 const forcedProvider = urlParams.get('provider');
 const forcedModel = urlParams.get('model');
+
+// Mask adjust prefs: read once, persisted on change. The URL params
+// ?maskThreshold= and ?maskFeather= override for automated/headless runs.
+function initMaskAdjust(): MaskAdjust {
+  const raw = loadPref<MaskAdjust>(LS_MASK_ADJUST, isMaskAdjust);
+  const fromUrl = (name: string): number => {
+    const v = Number(urlParams.get(name));
+    return Number.isFinite(v) ? v : NaN;
+  };
+  const threshold = Number.isFinite(fromUrl('maskThreshold'))
+    ? Math.min(100, Math.max(0, fromUrl('maskThreshold')))
+    : raw?.threshold ?? DEFAULT_MASK_ADJUST.threshold;
+  const feather = Number.isFinite(fromUrl('maskFeather'))
+    ? Math.min(64, Math.max(0, fromUrl('maskFeather')))
+    : raw?.feather ?? DEFAULT_MASK_ADJUST.feather;
+  return { threshold, feather };
+}
+
+function saveMaskAdjust(): void {
+  savePref(LS_MASK_ADJUST, maskAdjust);
+}
+
+function applyMaskUi(): void {
+  maskThresholdInput.value = String(maskAdjust.threshold);
+  maskThresholdValue.textContent = maskAdjust.threshold > 0 ? `${maskAdjust.threshold}%` : 'off';
+  maskFeatherInput.value = String(maskAdjust.feather);
+  maskFeatherValue.textContent = maskAdjust.feather > 0 ? `${maskAdjust.feather}px` : 'off';
+}
 
 function setOutputStatus(text: string): void {
   outputBox.innerHTML = '';
@@ -241,8 +287,13 @@ async function initWorker(): Promise<void> {
   if (ASSET_BASE) log(`Assets served from: ${ASSET_BASE}`);
 
   // Classic worker (plain JS in /public) so onnxruntime-web's wasm loaders are
-  // fetched as static files instead of being transformed by Vite.
-  worker = new Worker('/inference-worker.js', { type: 'classic' });
+  // fetched as static files instead of being transformed by Vite. The runtime
+  // bundle is chosen here: a usable GPU adapter means the WebGPU-capable ORT
+  // bundle (a ~26.5 MiB jsep wasm that hosts with a per-file cap cannot serve);
+  // the worker degrades a webgpu request to WASM with a clear message when that
+  // bundle is absent.
+  const runtimeQuery = webGpuUsable() ? '?runtime=webgpu' : '';
+  worker = new Worker('/inference-worker.js' + runtimeQuery, { type: 'classic' });
   // Without these a worker that fails to start (404 on the script, a failed
   // importScripts of the ORT runtime) posts nothing at all and the page waits on
   // its initial "Starting…" text forever.
@@ -306,7 +357,15 @@ async function initWorker(): Promise<void> {
       const inputSize = msg.inputSize ?? MODEL_SIZE;
       const maskU8 = probabilityToMask(mask);
       const upscaled = upscaleMask(maskU8, inputSize, inputSize, currentImageData.width, currentImageData.height);
-      const out = applyMaskToImage(currentImageData, upscaled);
+      // Apply the user's mask threshold/feather at full destination resolution
+      // (the values are percentages/pixels of the *output* mask).
+      const adjusted = applyMaskAdjust(
+        upscaled,
+        currentImageData.width,
+        currentImageData.height,
+        maskAdjust,
+      );
+      const out = applyMaskToImage(currentImageData, adjusted);
       const canvas = document.createElement('canvas');
       canvas.width = out.width;
       canvas.height = out.height;
@@ -365,7 +424,7 @@ function setSelectorsDisabled(disabled: boolean): void {
 
 // What to send as the worker's `forceProvider` for a UI-selected provider.
 // A UI 'wasm' choice is explicit (skip the GPU entirely). A UI 'webgpu' choice
-// (only offered on a validated adapter) lets the worker try GPU with its safe
+// (only offered when a GPU adapter exists) lets the worker try GPU with its safe
 // automatic WASM fallback. Only the ?provider= override forces a single
 // provider with no fallback.
 function providerForce(provider: 'webgpu' | 'wasm'): string | undefined {
@@ -398,7 +457,6 @@ function loadSelectedModel(): void {
     inputSize: selectedModel.inputSize,
     outputIsProbability: selectedModel.outputIsProbability,
     forceProvider: force,
-    gpuValidated: gpuState?.available === true && gpuState.validated === true,
     modelId: selectedModel.id,
   });
 
@@ -418,20 +476,67 @@ function loadSelectedModel(): void {
 }
 
 // ——— Model/provider selection UI ———
+// Pseudo-values in the model dropdown that select a runtime instead of a model.
+// The optgroup separates them from the actual model artifacts; picking one keeps
+// the current model and switches the provider (persisted). The separate
+// provider toggle stays in sync.
+const RUNTIME_OPT_PREFIX = 'runtime:';
+const RUNTIME_WASM = RUNTIME_OPT_PREFIX + 'wasm';
+const RUNTIME_GPU = RUNTIME_OPT_PREFIX + 'webgpu';
+
+// The browser can run WebGPU AND this host serves the WebGPU-capable ORT
+// bundle. Both gates matter: exposing an adapter means nothing if the worker
+// can't import a runtime that knows the webgpu backend.
+function webGpuUsable(): boolean {
+  return gpuState?.available === true && runtimeHasWebGpuBundle;
+}
+
+function isRuntimeOptionAvailable(v: string): boolean {
+  return v === RUNTIME_WASM || (v === RUNTIME_GPU && webGpuUsable());
+}
+
+// After a one-shot runtime switch the dropdown returns to showing the current
+// model, so the value column always names an actual artifact (the provider has
+// its own control + hint).
+function snapModelSelectToModel(): void {
+  if (selectedModel) modelSelect.value = selectedModel.id;
+}
+
 function populateModelSelect(): void {
+  const previous = modelSelect.value;
   modelSelect.innerHTML = '';
+  const modelGroup = document.createElement('optgroup');
+  modelGroup.label = 'Models';
   for (const m of models) {
     const opt = document.createElement('option');
     opt.value = m.id;
     opt.textContent = m.label;
     if (m.description) opt.title = m.description;
-    modelSelect.appendChild(opt);
+    modelGroup.appendChild(opt);
   }
-  if (selectedModel) modelSelect.value = selectedModel.id;
+  modelSelect.appendChild(modelGroup);
+  const runtimeGroup = document.createElement('optgroup');
+  runtimeGroup.label = 'Runtime (model stays the same)';
+  const wasm = document.createElement('option');
+  wasm.value = RUNTIME_WASM;
+  wasm.textContent = 'CPU (WASM)';
+  runtimeGroup.appendChild(wasm);
+  if (webGpuUsable()) {
+    const gpu = document.createElement('option');
+    gpu.value = RUNTIME_GPU;
+    gpu.textContent = 'GPU (WebGPU)';
+    runtimeGroup.appendChild(gpu);
+  }
+  modelSelect.appendChild(runtimeGroup);
+  modelSelect.value = previous && (resolveModelParam(models, previous) || previous === RUNTIME_WASM || previous === RUNTIME_GPU)
+    ? previous
+    : selectedModel ? selectedModel.id : '';
 }
 
 function applyProviderUi(): void {
-  const offerWebGpu = gpuState?.available === true && gpuState.validated === true;
+  // WebGPU is offered whenever the browser exposes an adapter AND this host
+  // serves the WebGPU-capable bundle (no allowlist).
+  const offerWebGpu = webGpuUsable();
   providerToggle.innerHTML = '';
   if (offerWebGpu) providerToggle.append(new Option('GPU (WebGPU)', 'webgpu'));
   const wasm = new Option('CPU (WASM)', 'wasm');
@@ -440,7 +545,11 @@ function applyProviderUi(): void {
   providerToggle.disabled = !offerWebGpu && !forcedProvider;
   providerHint.textContent = gpuState
     ? gpuState.reason +
-      (selectedProvider === 'webgpu' ? ' — GPU selected.' : '')
+      (gpuState.available && !runtimeHasWebGpuBundle
+        ? ' — host cannot serve the WebGPU runtime, using CPU.'
+        : selectedProvider === 'webgpu'
+          ? ' — GPU selected.'
+          : ' — CPU selected.')
     : 'GPU status unknown — using CPU.';
 }
 
@@ -451,8 +560,9 @@ function resolveProvider(): 'webgpu' | 'wasm' {
   }
   const pref = loadPref<unknown>(LS_PROVIDER, isProviderChoice);
   if (pref === 'wasm') return 'wasm';
-  if (pref === 'webgpu' && gpuState?.available && gpuState.validated) return 'webgpu';
-  return gpuState?.available && gpuState.validated ? 'webgpu' : 'wasm';
+  if (pref === 'webgpu' && webGpuUsable()) return 'webgpu';
+  // Default: prefer the GPU when it is usable, else CPU.
+  return webGpuUsable() ? 'webgpu' : 'wasm';
 }
 
 function resolveModel(): ModelManifestEntry {
@@ -470,7 +580,26 @@ function resolveModel(): ModelManifestEntry {
 }
 
 modelSelect.addEventListener('change', () => {
-  const next = resolveModelParam(models, modelSelect.value);
+  const value = modelSelect.value;
+  // A runtime pseudo-option: keep the model, switch the runtime.
+  if (value === RUNTIME_WASM || value === RUNTIME_GPU) {
+    const nextProvider: 'webgpu' | 'wasm' = value === RUNTIME_GPU ? 'webgpu' : 'wasm';
+    if (nextProvider === 'webgpu' && !isRuntimeOptionAvailable(value)) {
+      log('GPU (WebGPU) is not available on this device; keeping current provider.');
+      snapModelSelectToModel();
+      return;
+    }
+    if (nextProvider !== selectedProvider) {
+      selectedProvider = nextProvider;
+      savePref(LS_PROVIDER, selectedProvider);
+      log(`Runtime selected: ${PROVIDER_LABELS[selectedProvider]}`);
+      applyProviderUi();
+      loadSelectedModel();
+    }
+    snapModelSelectToModel();
+    return;
+  }
+  const next = resolveModelParam(models, value);
   if (!next || next.id === selectedModel?.id) return;
   selectedModel = next;
   savePref(LS_MODEL, next.id);
@@ -482,13 +611,36 @@ providerToggle.addEventListener('change', () => {
   if (!isProviderChoice(providerToggle.value) || providerToggle.value === selectedProvider) return;
   selectedProvider = providerToggle.value;
   savePref(LS_PROVIDER, selectedProvider);
-  log(`Provider selected: ${selectedProvider}`);
+  log(`Provider selected: ${PROVIDER_LABELS[selectedProvider]}`);
+  applyProviderUi();
   loadSelectedModel();
 });
 
 loadModelBtn.addEventListener('click', () => {
   if (selectedModel) loadSelectedModel();
 });
+
+// ——— Mask adjust controls ———
+function setMaskAdjust(adjust: MaskAdjust): void {
+  maskAdjust = adjust;
+  saveMaskAdjust();
+  applyMaskUi();
+  log(`Mask adjust: threshold ${adjust.threshold || 'off'}, feather ${adjust.feather || 'off'}`);
+}
+
+function bindMaskControl(input: HTMLInputElement, valueEl: Element, kind: 'threshold' | 'feather'): void {
+  input.addEventListener('input', () => {
+    const clamped = Math.min(kind === 'threshold' ? 100 : 64, Math.max(0, Math.round(Number(input.value))));
+    if (!Number.isFinite(clamped)) return;
+    setMaskAdjust(kind === 'threshold' ? { ...maskAdjust, threshold: clamped } : { ...maskAdjust, feather: clamped });
+    const label = clamped > 0 ? (kind === 'threshold' ? clamped + '%' : clamped + 'px') : 'off';
+    valueEl.textContent = label;
+    log(`Mask ${kind}: ${label}`);
+  });
+}
+
+bindMaskControl(maskThresholdInput, maskThresholdValue, 'threshold');
+bindMaskControl(maskFeatherInput, maskFeatherValue, 'feather');
 
 type PendingRun = { resolve: (ms: number) => void; reject: (err: Error) => void };
 const pendingRuns = new Map<number, PendingRun>();
@@ -697,7 +849,7 @@ copyReportBtn.addEventListener('click', () => {
   const totalMb = modelTotalBytes ? (modelTotalBytes / 1048576).toFixed(1) + ' MB' : 'unknown';
   const dlSecs = modelDownloadBytes ? ((performance.now() - downloadStart) / 1000).toFixed(1) : 'n/a';
   const gpuGate = gpuState
-    ? `${gpuState.available ? 'available' : 'unavailable'}${gpuState.adapter ? ` (${gpuState.adapter})` : ''}${gpuState.validated ? ', validated' : ''}`
+    ? `${gpuState.available ? 'available' : 'unavailable'}${gpuState.adapter ? ` (${gpuState.adapter})` : ''}`
     : 'not checked';
   const lines = [
     '== BiRefNet_lite Phase 2 device report ==',
@@ -706,6 +858,7 @@ copyReportBtn.addEventListener('click', () => {
     `Model: ${window.smokeModelId || 'not loaded'}`,
     `Provider: ${window.smokeProvider || 'not loaded'}`,
     `GPU gate: ${gpuGate}`,
+    `GPU runtime served by host: ${runtimeHasWebGpuBundle ? 'yes' : gpuState?.available === false ? 'n/a (no GPU)' : 'no (CPU only)'}`,
     `Adapter: ${adapterReport || 'n/a (not webgpu)'}`,
     `Cross-origin isolated: ${isolation}`,
     `Adapter f16: ${/shader-f16=yes/.test(adapterReport) ? 'yes' : adapterReport ? 'no' : 'n/a'}`,
@@ -740,6 +893,13 @@ async function boot(): Promise<void> {
   // GPU gate first: it decides which provider is offered and the default.
   gpuState = await detectWebGpu();
   log(gpuState.reason + (gpuState.adapter ? ` (${gpuState.adapter})` : ''));
+  if (gpuState.available) {
+    // Only request the WebGPU-capable ORT bundle when this host can actually
+    // serve it (see webGpuRuntimeHosted). Probed before the worker starts so a
+    // host without the jsep binary never 404s the worker's importScripts.
+    runtimeHasWebGpuBundle = await webGpuRuntimeHosted();
+    log(runtimeHasWebGpuBundle ? 'WebGPU runtime files are served by this host.' : 'This host does not serve the WebGPU runtime; CPU (WASM) will be used.');
+  }
 
   try {
     const manifest = await fetchModelsManifest();
@@ -751,6 +911,12 @@ async function boot(): Promise<void> {
     return;
   }
 
+  // Mask adjustments: from localStorage, with ?maskThreshold= / ?maskFeather=
+  // overriding for automated runs. The UI always offers them (defaults off).
+  maskAdjust = initMaskAdjust();
+  applyMaskUi();
+  log(`Mask adjust: threshold ${maskAdjust.threshold || 'off'}, feather ${maskAdjust.feather || 'off'}`);
+
   // Resolve defaults: provider can come from ?provider=, then localStorage,
   // then the GPU gate; model likewise from ?model=, then localStorage, then the
   // manifest default (newest = c5_best.onnx).
@@ -759,7 +925,6 @@ async function boot(): Promise<void> {
 
   populateModelSelect();
   applyProviderUi();
-  if (gpuState.reason) providerHint.textContent = gpuState.reason;
   log(`Provider default: ${selectedProvider}`);
   log(`Model default: ${selectedModel.id}`);
 

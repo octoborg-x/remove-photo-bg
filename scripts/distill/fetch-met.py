@@ -36,8 +36,9 @@ from pathlib import Path
 
 from _bootstrap import *  # noqa: F401, E402  (sys.path fix; MUST precede 3rd-party)
 import requests  # noqa: E402
-from PIL import Image, ImageOps  # noqa: E402
-from scripts.distill.manifest_io import merge_write  # noqa: E402
+from PIL import Image  # noqa: E402
+from scripts.distill.image_ops import normalize_image  # noqa: E402
+from scripts.distill.manifest_io import ManifestWriter  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
@@ -141,13 +142,6 @@ def _safe_object_info(oid: int, log: dict, query: str) -> dict | None:
         return None
 
 
-def normalize_image(path: Path) -> None:
-    img = ImageOps.exif_transpose(Image.open(path))
-    img = img.convert("RGB")
-    img.thumbnail((1536, 1536), Image.LANCZOS)
-    img.save(path, "JPEG", quality=90, optimize=True)
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--queries", default=",".join(DEFAULT_QUERIES))
@@ -205,8 +199,7 @@ def main() -> int:
             })
             got += 1
 
-    def write_manifest() -> None:
-        merge_write(args.manifest, HEADERS_CSV, rows)
+    writer = ManifestWriter(args.manifest, HEADERS_CSV, rows)
 
     for e in collected:
         if args.dry_run:
@@ -222,7 +215,13 @@ def main() -> int:
                 continue
             dst = IMGDIR / f"{h}.jpg"
             tmp.rename(dst)
-            normalize_image(dst)
+            try:
+                normalize_image(dst)
+            except Exception:
+                dst.unlink(missing_ok=True)
+                log["rejections"].append({"url": e["url"],
+                                          "reject_reason": "too-large"})
+                continue
             with Image.open(dst) as im:
                 w, hh = im.size
             e["id"] = f"met-{e['category']}-{h[:10]}"
@@ -231,13 +230,14 @@ def main() -> int:
             seen.add(h)
             log["fetches"].append({"url": e["url"], "status": "ok",
                                    "sha256": h, "query": e["query"]})
-            write_manifest()
+            writer.mark()
+            writer.maybe_flush()
             time.sleep(0.1)
         except Exception as ex:
             log["fetches"].append({"url": e["url"], "status": "error",
                                    "err": str(ex)})
 
-    write_manifest()
+    writer.flush()
     (LOGDIR / f"met-{date.today()}.json").write_text(json.dumps(log, indent=2))
 
     ok = len([x for x in log["fetches"] if x["status"] == "ok"])

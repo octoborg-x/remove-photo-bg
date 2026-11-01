@@ -34,7 +34,8 @@ from pathlib import Path
 
 from _bootstrap import *  # noqa: F401, E402  (sys.path fix; MUST precede 3rd-party)
 import requests  # noqa: E402
-from PIL import Image, ImageOps  # noqa: E402
+from PIL import Image  # noqa: E402
+from scripts.distill.image_ops import normalize_image  # noqa: E402
 from scripts.distill.manifest_io import ManifestWriter, merge_write  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,7 +52,9 @@ HEADERS = {"User-Agent": UA}
 
 # Product-like CC0 types with meaningful totals (verified 2026-11-01).
 DEFAULT_TYPES = ["Ceramic", "Metalwork", "Jewelry", "Silver", "Glass",
-                 "Furniture and woodwork", "Lacquer", "Sculpture"]
+                 "Furniture and woodwork", "Lacquer", "Sculpture",
+                 "Arms and Armor", "Textile", "Coins", "Miscellaneous",
+                 "Jade", "Enamel", "Ivory", "Musical Instrument"]
 
 HEADERS_CSV = ["id", "source", "url", "licence", "licence_url", "author",
                "attribution_text", "date_checked", "sha256", "width", "height",
@@ -127,13 +130,6 @@ def author_of(rec: dict) -> str:
     return (creators[0].get("description") or "").strip() if creators else ""
 
 
-def normalize_image(path: Path) -> None:
-    img = ImageOps.exif_transpose(Image.open(path))
-    img = img.convert("RGB")
-    img.thumbnail((1536, 1536), Image.LANCZOS)
-    img.save(path, "JPEG", quality=90, optimize=True)
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--types", default=",".join(DEFAULT_TYPES))
@@ -187,7 +183,14 @@ def main() -> int:
                 seen.add(h)
             dst = IMGDIR / f"{h}.jpg"
             tmp.rename(dst)
-            normalize_image(dst)
+            try:
+                normalize_image(dst)
+            except Exception:
+                dst.unlink(missing_ok=True)
+                with lock:
+                    log["rejections"].append({"id": rec.get("id"), "type": atype,
+                                              "reject_reason": "too-large"})
+                return
             with Image.open(dst) as im:
                 w, hh = im.size
             acc = rec.get("accession_number") or rec.get("id")

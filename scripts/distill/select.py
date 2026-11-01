@@ -60,6 +60,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest", required=True, type=Path)
     ap.add_argument("--out", default="data/manifest-selected.csv", type=Path)
+    ap.add_argument("--rejected-out", default="data/manifest-rejected.csv",
+                    type=Path)
     ap.add_argument("--min-short-side", type=int, default=768)
     ap.add_argument("--max-hashes", type=int, default=6)
     ap.add_argument("--seed", type=int, default=42)
@@ -70,8 +72,9 @@ def main() -> None:
     rejected = []
 
     def rej(row, reason):
-        row["reject_reason"] = reason
-        rejected.append(row)
+        r = dict(row)
+        r["reject_reason"] = reason
+        rejected.append(r)
 
     hashes: list[str] = []
     kept: list[dict] = []
@@ -132,8 +135,17 @@ def main() -> None:
         for r in kept:
             w.writerow(r)
 
+    if rejected:
+        args.rejected_out.parent.mkdir(parents=True, exist_ok=True)
+        with open(args.rejected_out, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(rejected[0].keys()))
+            w.writeheader()
+            w.writerows(rejected)
+
     print(f"manifest-selected -> {args.out}: {len(kept)} kept, "
           f"{len(rejected)} rejected")
+    if rejected:
+        print(f"manifest-rejected -> {args.rejected_out}")
     by = {}
     for r in rejected:
         by[r["reject_reason"]] = by.get(r["reject_reason"], 0) + 1

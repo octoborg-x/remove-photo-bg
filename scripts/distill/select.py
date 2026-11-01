@@ -56,7 +56,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest", required=True, type=Path)
     ap.add_argument("--out", default="data/manifest-selected.csv", type=Path)
-    ap.add_argument("--min-short-side", type=int, default=512)
+    ap.add_argument("--min-short-side", type=int, default=768)
     ap.add_argument("--max-hashes", type=int, default=6)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--images", type=Path, default=Path("data/images"))

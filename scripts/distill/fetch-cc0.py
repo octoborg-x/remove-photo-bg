@@ -41,6 +41,7 @@ from pathlib import Path
 from _bootstrap import *  # noqa: F401, E402  (sys.path fix; MUST precede 3rd-party)
 import requests  # noqa: E402
 from PIL import Image, ImageOps  # noqa: E402
+from scripts.distill.manifest_io import merge_write  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]            # repo root
 DATA = ROOT / "data"
@@ -236,11 +237,7 @@ def main() -> int:
     log = {"date": str(date.today()), "fetches": [], "rejections": []}
 
     def write_manifest() -> None:
-        with open(args.manifest, "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=headers)
-            w.writeheader()
-            for r in rows:
-                w.writerow({k: r.get(k, "") for k in headers})
+        merge_write(args.manifest, headers, rows)
 
     for cat in args.categories.split(","):
         got = 0

@@ -35,6 +35,7 @@ from pathlib import Path
 from _bootstrap import *  # noqa: F401, E402  (sys.path fix; MUST precede 3rd-party)
 import requests  # noqa: E402
 from PIL import Image, ImageOps  # noqa: E402
+from scripts.distill.manifest_io import ManifestWriter, merge_write  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
@@ -157,13 +158,7 @@ def main() -> int:
     log = {"date": str(date.today()), "source": "cleveland-maa",
            "fetches": [], "rejections": []}
     lock = threading.Lock()
-
-    def write_manifest() -> None:
-        with open(args.manifest, "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=HEADERS_CSV)
-            w.writeheader()
-            for r in rows:
-                w.writerow({k: r.get(k, "") for k in HEADERS_CSV})
+    writer = ManifestWriter(args.manifest, HEADERS_CSV, rows)
 
     def handle(atype: str, rec: dict) -> None:
         if (rec.get("share_license_status") or "").upper() != "CC0":
@@ -213,7 +208,8 @@ def main() -> int:
                 rows.append(row)
                 log["fetches"].append({"url": url, "status": "ok", "sha256": h,
                                        "type": atype})
-                write_manifest()
+                writer.mark()
+                writer.maybe_flush()
         except Exception as ex:
             with lock:
                 log["fetches"].append({"url": url, "status": "error",
@@ -224,7 +220,7 @@ def main() -> int:
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
             list(pool.map(lambda rec: handle(atype, rec), recs))
 
-    write_manifest()
+    writer.flush()
     (LOGDIR / f"cleveland-{date.today()}.json").write_text(json.dumps(log, indent=2))
 
     ok = len([x for x in log["fetches"] if x["status"] == "ok"])

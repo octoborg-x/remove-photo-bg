@@ -37,6 +37,7 @@ from pathlib import Path
 from _bootstrap import *  # noqa: F401, E402  (sys.path fix; MUST precede 3rd-party)
 import requests  # noqa: E402
 from PIL import Image, ImageOps  # noqa: E402
+from scripts.distill.manifest_io import merge_write  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
@@ -205,11 +206,7 @@ def main() -> int:
             got += 1
 
     def write_manifest() -> None:
-        with open(args.manifest, "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=HEADERS_CSV)
-            w.writeheader()
-            for r in rows:
-                w.writerow({k: r.get(k, "") for k in HEADERS_CSV})
+        merge_write(args.manifest, HEADERS_CSV, rows)
 
     for e in collected:
         if args.dry_run:

@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-01",
+  "purpose": "Colab GPU session metadata per audit.md section 3.1",
+  "connection": {
+    "method": "cloudflared access ssh ProxyCommand",
+    "host": "temple-voted-blacks-stem.trycloudflare.com",
+    "port": 2222,
+    "user": "root",
+    "key": "~/.ssh/colab_ed25519 (ED25519) \u2014 NOTE: the sandbox was reset on 2026-11-01 and the key file was wiped; a fresh copy is needed to reconnect.",
+    "host_history": [
+      "beauty-dom-cuts-stockings.trycloudflare.com (NO GPU - STOP per 3.1)",
+      "night-italic-genesis-picnic.trycloudflare.com (GPU Tesla T4 - verified)",
+      "tunnel-believe-hardcover-shadows.trycloudflare.com (up, key missing)",
+      "reflection-infinite-hope-patio.trycloudflare.com (up, key missing)",
+      "temple-voted-blacks-stem.trycloudflare.com (current; up, key missing)"
+    ]
+  },
+  "gpu": {
+    "visible": true,
+    "name": "Tesla T4",
+    "driver": "580.82.07",
+    "cuda": "13.0",
+    "memory_total_mib": 15360,
+    "compute_capability": "7.5"
+  },
+  "host": {
+    "hostname": "ee1ecf2fbd06",
+    "python": "3.13.16",
+    "torch": "2.11.0+cu130",
+    "torch_cuda_available": true,
+    "onnxruntime": "not installed",
+    "onnx": "not installed",
+    "cpu": "Intel(R) Xeon(R) CPU @ 2.00GHz",
+    "cpu_count": 2,
+    "mem_total_gb": 12,
+    "disk_overlay_total_gb": 113,
+    "disk_overlay_used_gb": 43,
+    "disk_overlay_free_gb": 70,
+    "tmux": "/usr/bin/tmux",
+    "drive_mounted": false,
+    "repo_at": "/content/remove-photo-bg",
+    "repo_head": "68e6a6c Update agent-init-prompt.md"
+  },
+  "outcome": "GPU visible; proceeding to Phase 1 per audit.md. onnxruntime-gpu to be installed before Phase 2 labeling (section 3.7 requires 1.31.1 + CUDAExecutionProvider)."
+}

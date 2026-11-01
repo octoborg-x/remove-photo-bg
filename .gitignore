@@ -40,3 +40,18 @@ smoke-results/benchmark-t4/masks/
 
 # Cloudflare local state
 .wrangler/
+
+# Colab SSH keys (never commit private keys)
+.ssh/
+*.key
+colab_ed25519*
+
+# Distill: generated data, labels, manifests, checkpoints, eval artifacts
+data/
+data/**/*.jpg
+data/**/*.png
+data/**/*.csv
+data/**/*.json
+data/**/*.tar
+smoke-results/distill/
+DISTILL_RESULTS.md

@@ -208,5 +208,6 @@ if you want one.
   Both default to 0/off so the raw model mask is unchanged; they persist in
   `localStorage` and can be driven from URLs for testing
   (`?maskThreshold=30&maskFeather=8`).
-- The full product UI (Phase 2), legal docs (Phase 3), and test suite (Phase 4)
-  are not built yet per the Phase-1 prompt.
+- The full product UI ships with Phase 2 (model/provider selectors, auto-load,
+  mask threshold/feather); legal docs (Phase 3) and the test suite (Phase 4)
+  are not built yet per the phase-1 prompt.

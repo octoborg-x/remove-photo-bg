@@ -1,6 +1,10 @@
 # remove-bg-photo — MVP Build Specification for OpenHands
 
-**Updated:** 2026-10-24  
+**Updated:** 2026-10-31  
+**Status:** Phase 1 (model feasibility) is **DONE** — see `PHASE1_REPORT.md`.  
+Phase 2 (product workflow) is **IN PROGRESS**; proceed autonomously through the
+end of Phase 2, then stop and report. See §11 for the expanded Phase 2 scope,
+including the model/runtime selector added on 2026-10-31.  
 **Goal:** Build a browser-first background remover for marketplace/product photos.  
 **Budget:** $0 during development; target under $50/month after validation.  
 **Agent:** OpenHands.
@@ -288,16 +292,46 @@ Use static hosting if the free tier fits. Verify current asset-size limits, band
 - Discover installed skills/MCPs.
 - Report a short plan and real blockers, then continue without waiting unless a destructive action or paid resource is required.
 
-### Phase 1 — Model feasibility
-- Verify official model page, licence, source revision, and exact artifact.
-- Establish a compatible ONNX path and record SHA-256.
-- Create a minimal browser smoke test with one local image.
-- Confirm tensor semantics and export a valid transparent PNG.
-- Verify no image-pixel network requests.
-- Fix model/runtime compatibility before building the full UI.
+### Phase 1 — Model feasibility — ✅ DONE
+All six items verified and recorded in `PHASE1_REPORT.md` (provenance, ONNX
+path + SHA-256, browser smoke test, tensor semantics + transparent PNG,
+no image-pixel network requests, model/runtime compatibility). Phase 1 is
+closed; Phase 2 may start.
 
-### Phase 2 — Product workflow
+### Phase 2 — Product workflow (IN PROGRESS — expanded 2026-10-31)
 Implement validation, worker lifecycle, model load, status/progress, preview, PNG/JPG exports, and error states.
+
+Expanded Phase 2 scope added on 2026-10-31 (model + runtime selector):
+
+- **Model selector (UI):** a dropdown listing all served model artifacts.
+  Source of truth is the `public/models/` directory and/or the HF repo
+  (`Octoborg/remove-photo-bg`, `models/`); the list must match what the asset
+  cache actually serves. Current known models:
+  - `c5_best.onnx` — returned by HF as `models/c5_best.onnx`, 98,799,684 B
+    (≈ 94.2 MiB). Newer generation; **default** selection when no other
+    criteria apply.
+  - `model_512.onnx` — 193,514,682 B (≈ 184.5 MiB). The Phase-1 model.
+  - Wire the exact per-model download URL + Cache-API path through the worker;
+    the service worker must version the cache buckets per model.
+- **Provider selector (UI):** a switch between **GPU (WebGPU)** and **CPU (WASM)**.
+  - Feature-detect: only offer GPU when `navigator.gpu` is present AND the
+    adapter passes the project's verified-provider gate
+    (`VALIDATED_WEBGPU_SUBSTRINGS`). Do not offer GPU otherwise.
+  - Default selection: if a verified GPU is detected, default to **webgpu**;
+    otherwise default to **wasm**.
+  - Persist the choice as a sticky user preference (e.g. `localStorage`), and
+    let the `?provider=` query param still override for testing.
+- **Default-load on page start:**
+  - Detect GPU availability as above and set the provider default accordingly
+    (webgpu when verified, else wasm).
+  - Detect which models exist (`fetch` the models manifest or query the cache);
+    if there is no applicable selection criterion, default to the **newest**
+    model (`c5_best.onnx`).
+  - **Load the default-selected model automatically** on page start (i.e. the
+    smoke run uses the default model+provider immediately, no manual first
+    pick), matching how the deployed page currently auto-loads.
+- Keep the existing network/privacy guarantees (no pixels off-device) and the
+  worker/session/error-state lifecycle from Phase 1 test harness.
 
 ### Phase 3 — Notices/privacy
 Create `MODEL_CARD.md`, `THIRD_PARTY_LEGAL_NOTICES.md`, and `PRIVACY.md` from verified sources. Add footer links and CSP. Preserve required notices. Document the MIT declaration as the project basis without claiming every training-data question is definitively resolved.
@@ -327,7 +361,13 @@ Update README with install/run/test/build, model-download instructions, browser 
 
 Passing means technically ready for a private demo, not a guarantee of legal certainty.
 
-## 13. OpenHands first prompt
+## 13. OpenHands phase prompts
+
+**Phase 1 is DONE** — the prompt below is retained for historical record. Do
+not re-run Phase 1; continue to Phase 2.
+
+<details>
+<summary>Phase 1 prompt (historical — completed)</summary>
 
 Read MVP_OPENHANDS.md, but for this run implement ONLY Phase 0 and Phase 1 of section 11. This prompt replaces the first prompt in section 13. Ignore Phases 2-5, the full UI, the test suite, MODEL_CARD.md, THIRD_PARTY_LEGAL_NOTICES.md, PRIVACY.md, LICENSE_AUDIT.md and the token/MCP sections unless something blocks you. Stop after Phase 1 and report. Do not start Phase 2.
 
@@ -348,6 +388,33 @@ Pass/fail (defaults, tell me if you think they're wrong):
 - State whether the graph is fixed-1024 or dynamic. If a smaller-input fallback is needed, name candidates but don't adopt one without the same provenance checks.
 
 Deliver: PHASE1_REPORT.md (provenance table, semantics, what ran where, measured results, verdict GO / GO-WITH-FALLBACK / NO-GO, blockers, recommended next step) plus the smoke-test code. Never invent results, hashes or licence clearances.
+
+</details>
+
+**Phase 2 prompt (active — use this now):**
+
+Read MVP_OPENHANDS.md. Implement **Phase 2 (Product workflow)** only.
+- **Phase 1 is complete** (`PHASE1_REPORT.md`); do not re-run or re-write its
+  provenance/semantics work unless a Phase 2 task requires re-verification.
+- Implement the expanded Phase 2 from §11 (validation, worker lifecycle, model
+  load, status/progress, preview, PNG/JPG exports, error states) **plus** the
+  §11 "Expanded Phase 2 scope" items added 2026-10-31:
+  - **Model selector (UI)** listing all served models (`c5_best.onnx` default
+    when no other criterion, `model_512.onnx` also selectable), with per-model
+    download URL + cache path wired through.
+  - **CPU/GPU switch (UI)**: offer GPU only when `navigator.gpu` AND the adapter
+    passes `VALIDATED_WEBGPU_SUBSTRINGS`; default = webgpu if verified GPU,
+    else wasm; persist choice.
+  - **Default-load on page start**: auto-detect GPU + newest model, select the
+    defaults, and load the default-selected model automatically.
+- Continue autonomously through the **end of Phase 2**, stopping at Phase 3.
+  Report before starting Phase 3. Do not do Phase 3–5 work (notices/privacy,
+  full test suite, delivery) unless something in Phase 2 blocks you.
+- Keep the existing guarantees: no image pixels off-device, worker lifecycle,
+  no invented results/hashes/URLs, no secrets, no paid resources, no cloud
+  inference, feature branch, don't commit model binaries.
+- Record all new model provenance (file, size, SHA-256, source URL) for any
+  artifact Phase 2 adds (currently `c5_best.onnx` + `model_512.onnx`).
 
 === End of 13 ===
 

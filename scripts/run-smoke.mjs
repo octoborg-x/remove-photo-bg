@@ -2,6 +2,9 @@
 //
 // Usage:
 //   node scripts/run-smoke.mjs <page-url> [--image <path-or-url>] [--out <dir>] [--runs <n>] [--model <id>] [--provider <wasm|webgpu>]
+//   RUN_GPU=1 node scripts/run-smoke.mjs <page-url> ...  # optional: do NOT pass
+//     --disable-gpu/--disable-webgpu (use on a real GPU, e.g. Colab T4 — see
+//     notebooks/colab-webgpu-smoke.ipynb; the sandbox/CI must keep the default)
 //
 // Launches the system Chromium, opens the page, waits for the auto-loaded model
 // (or first changes the selection via ?model= / ?provider= then waits), runs n
@@ -39,10 +42,17 @@ function injectOverrides(url) {
 
 const CHROME = process.env.CHROME_BIN || '/usr/bin/chromium';
 
+// Default: run CPU-only (sandbox/CI Chromium has no GPU). Set RUN_GPU=1 when the
+// browser really has a usable GPU (Colab T4 headless recipe — see
+// notebooks/colab-webgpu-smoke.ipynb) to drop the disable flags and let WebGPU
+// engage.
+const args = ['--no-sandbox', '--disable-dev-shm-usage', '--enable-logging=stderr'];
+if (process.env.RUN_GPU !== '1') args.push('--disable-gpu', '--disable-webgpu');
+
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: 'shell' /* new headless supports WebGPU; shell is resize-able but no WebGPU */,
-  args: ['--no-sandbox', '--disable-gpu', '--disable-webgpu', '--disable-dev-shm-usage', '--enable-logging=stderr'],
+  args,
   protocolTimeout: 3600000,
   timeout: 3600000,
 });

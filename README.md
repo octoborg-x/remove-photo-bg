@@ -116,6 +116,31 @@ Outputs to `--out`:
 - `requests.json` — every network request made during processing (privacy: must all be first-party)
 - `summary.json` — provider, timings, page log
 
+## WebGPU on a real GPU (Google Colab, free T4)
+
+The sandbox and CI have no GPU, so the app's WebGPU path could never be
+exercised against the real product — until now. `notebooks/colab-webgpu-smoke.ipynb`
+runs Google's official headless-Chrome-with-Vulkan recipe on a free Colab T4,
+opens the deployed app, forces `?provider=webgpu`, and asserts the provider
+comes back as `webgpu` (plus logs timings, the adapter report, and every network
+request for the privacy check). Cost: $0.
+
+The GPU path needs the host to actually serve the WebGPU-capable ORT bundle
+(the 26.5 MiB `ort-wasm-simd-threaded.jsep.wasm` exceeds Cloudflare Pages' 25 MiB
+per-file cap, so the deployed `/wasm/` only has the CPU bundle). Bake it in
+before starting the tunnel on the machine that serves the page:
+
+```bash
+npm run fetch-models -- --webgpu   # also copies ort.all.min.js + jsep wasm
+npm run build                      # or: vite preview after fetch-models --webgpu
+npx vite preview --port 4173 &
+npx cloudflared tunnel --url http://localhost:4173   # gives the notebook a HTTPS URL
+```
+
+Then paste the returned URL into the notebook's `PAGE_URL` cell and run all cells.
+The driver honors `RUN_GPU=1 node scripts/run-smoke.mjs …` for a local GPU too,
+but the notebook is the supported path (correct Vulkan/WebGPU flags for Colab).
+
 ## Reference inference (native CPU, fast)
 
 ```bash

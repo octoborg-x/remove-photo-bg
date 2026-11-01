@@ -28,7 +28,7 @@
 // new one downloads. A changed model revision is picked up automatically: new
 // sha256 -> new bucket, and the stale bucket is pruned on the next activate.
 
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v8';
 const CACHE_NAME = `remove-bg-assets-${CACHE_VERSION}`;
 const MODEL_BUCKET_PREFIX = 'remove-bg-model-';
 

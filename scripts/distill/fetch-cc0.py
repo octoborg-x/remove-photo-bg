@@ -149,22 +149,47 @@ def category_files(cat: str, limit: int) -> list[str]:
 
 def file_info(title: str) -> dict:
     """Machine-readable licence + URL + author for one Commons file title."""
-    d = _api({"action": "query", "titles": title, "prop": "imageinfo",
-              "iiprop": "url|mime|extmetadata", "iiurlwidth": "1536"})
-    for pg in d.get("query", {}).get("pages", {}).values():
-        for ii in pg.get("imageinfo", []) or []:
+    return file_info_batch([title]).get(title, _empty_info(title))
+
+
+def _empty_info(title: str) -> dict:
+    return {"title": title, "licence": "", "licence_name": "", "licence_url": "",
+            "author": "", "mime": "", "url": "", "page": ""}
+
+
+def file_info_batch(titles: list[str]) -> dict[str, dict]:
+    """Licence/URL/author for up to 50 titles in ONE API call.
+
+    The Commons API caps `titles` at 50; batching cuts the request count ~50x
+    versus one call per file, which is the difference between a multi-hour and
+    a multi-minute fetch (and avoids hammering the API into 429s).
+    """
+    out: dict[str, dict] = {}
+    for i in range(0, len(titles), 50):
+        chunk = titles[i:i + 50]
+        d = _api({"action": "query", "titles": "|".join(chunk),
+                  "prop": "imageinfo",
+                  "iiprop": "url|mime|extmetadata", "iiurlwidth": "1536"})
+        pages = d.get("query", {}).get("pages", {})
+        # The API may normalise/redirect titles; map back via the requested name.
+        by_title = {p.get("title", ""): p for p in pages.values()}
+        for t in chunk:
+            pg = by_title.get(t) or by_title.get(t.replace("_", " "))
+            if pg is None:
+                out[t] = _empty_info(t)
+                continue
+            ii = (pg.get("imageinfo") or [{}])[0]
             em = ii.get("extmetadata", {})
             tag = ((em.get("License", {}) or {}).get("value", "") or "").strip().lower()
             name = (em.get("LicenseShortName", {}) or {}).get("value", "") or ""
             licurl = (em.get("LicenseUrl", {}) or {}).get("value", "") or ""
             artist = (em.get("Artist", {}) or {}).get("value", "") or ""
-            return {"title": title, "licence": tag, "licence_name": name,
-                    "licence_url": licurl, "author": _strip_html(artist),
-                    "mime": ii.get("mime", ""), "url": ii.get("url", ""),
-                    "page": "https://commons.wikimedia.org/wiki/"
-                            + urllib.parse.quote(title.replace(" ", "_"))}
-    return {"title": title, "licence": "", "licence_name": "", "licence_url": "",
-            "author": "", "mime": "", "url": "", "page": ""}
+            out[t] = {"title": t, "licence": tag, "licence_name": name,
+                      "licence_url": licurl, "author": _strip_html(artist),
+                      "mime": ii.get("mime", ""), "url": ii.get("url", ""),
+                      "page": "https://commons.wikimedia.org/wiki/"
+                              + urllib.parse.quote(t.replace(" ", "_"))}
+    return out
 
 
 def is_approved(lic: str) -> bool:
@@ -209,25 +234,29 @@ def main() -> int:
                     seen.add(r["sha256"])
 
     log = {"date": str(date.today()), "fetches": [], "rejections": []}
-    collected: list[dict] = []
+
+    def write_manifest() -> None:
+        with open(args.manifest, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=headers)
+            w.writeheader()
+            for r in rows:
+                w.writerow({k: r.get(k, "") for k in headers})
 
     for cat in args.categories.split(","):
         got = 0
         for source in CATEGORY_SOURCES.get(cat, CATEGORY_SOURCES["object"]):
             if got >= args.count:
                 break
-            # oversample: many category files are SVGs / diagrams we will drop
-            for title in category_files(source, args.count * 6):
+            # Oversample: many category files are SVGs/diagrams we drop.
+            titles = [t for t in category_files(source, args.count * 6)
+                      if not any(k in t.lower() for k in EXCLUDED_CATEGORY_HINTS)]
+            # Batch metadata (50 titles/call) instead of one call per file.
+            infos = file_info_batch(titles)
+            batch: list[dict] = []
+            for title in titles:
                 if got >= args.count:
                     break
-                if any(k in title.lower() for k in EXCLUDED_CATEGORY_HINTS):
-                    continue
-                try:
-                    info = file_info(title)
-                except Exception as ex:
-                    log["rejections"].append(
-                        {"title": title, "reject_reason": f"api-error:{ex}"})
-                    continue
+                info = infos.get(title) or _empty_info(title)
                 if not info["mime"].startswith("image/"):
                     continue
                 if not is_approved(info["licence"]):
@@ -236,10 +265,9 @@ def main() -> int:
                          "reject_reason": f"licence={info['licence']!r}"})
                     continue
                 if info["mime"] in ("image/svg+xml", "image/tiff"):
-                    log["rejections"].append(
-                        {"title": title, "reject_reason": "mime"})
+                    log["rejections"].append({"title": title, "reject_reason": "mime"})
                     continue
-                collected.append({
+                batch.append({
                     "id": None, "source": "wikimedia-commons", "url": info["url"],
                     "licence": info["licence_name"] or info["licence"],
                     "licence_url": info["licence_url"], "author": info["author"],
@@ -250,44 +278,44 @@ def main() -> int:
                 })
                 got += 1
 
-    for e in collected:
-        if args.dry_run:
-            continue
-        try:
-            r = _get(e["url"])
-            tmp = IMGDIR / "tmp_dl.bin"
-            tmp.write_bytes(r.content)
-            h = sha256_file(tmp)
-            if h in seen:
-                tmp.unlink(missing_ok=True)
-                log["fetches"].append({"url": e["url"], "status": "dup"})
-                continue
-            dst = IMGDIR / f"{h}.jpg"
-            tmp.rename(dst)
-            normalize_image(dst)
-            with Image.open(dst) as im:
-                w, hh = im.size
-            e["id"] = f"{e['source']}-{e['category']}-{h[:10]}"
-            e["width"], e["height"], e["sha256"] = w, hh, h
-            rows.append(e)
-            seen.add(h)
-            log["fetches"].append({"url": e["url"], "status": "ok", "sha256": h})
-            time.sleep(0.2)
-        except Exception as ex:  # never kill the whole run on one image
-            log["fetches"].append({"url": e["url"], "status": "error",
-                                   "err": str(ex)})
+            # Download this batch, writing the manifest after each image so a
+            # disconnect never loses more than one image (spec §3.5 resumable).
+            for e in batch:
+                if args.dry_run:
+                    continue
+                try:
+                    r = _get(e["url"])
+                    tmp = IMGDIR / "tmp_dl.bin"
+                    tmp.write_bytes(r.content)
+                    h = sha256_file(tmp)
+                    if h in seen:
+                        tmp.unlink(missing_ok=True)
+                        log["fetches"].append({"url": e["url"], "status": "dup"})
+                        continue
+                    dst = IMGDIR / f"{h}.jpg"
+                    tmp.rename(dst)
+                    normalize_image(dst)
+                    with Image.open(dst) as im:
+                        w, hh = im.size
+                    e["id"] = f"{e['source']}-{e['category']}-{h[:10]}"
+                    e["width"], e["height"], e["sha256"] = w, hh, h
+                    rows.append(e)
+                    seen.add(h)
+                    log["fetches"].append({"url": e["url"], "status": "ok", "sha256": h})
+                    write_manifest()
+                    time.sleep(0.2)
+                except Exception as ex:  # never kill the whole run on one image
+                    log["fetches"].append({"url": e["url"], "status": "error",
+                                           "err": str(ex)})
 
-    with open(args.manifest, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=headers)
-        w.writeheader()
-        for r in rows:
-            w.writerow({k: r.get(k, "") for k in headers})
+    write_manifest()
     (LOGDIR / f"{date.today()}.json").write_text(json.dumps(log, indent=2))
 
     ok = len([x for x in log["fetches"] if x["status"] == "ok"])
-    print(f"manifest: {len(rows)} rows | this run: {ok} ok, "
-          f"{len(log['rejections'])} rejected, "
-          f"{len([x for x in log['fetches'] if x['status'] != 'ok'])} errors")
+    dups = len([x for x in log["fetches"] if x["status"] == "dup"])
+    errs = len([x for x in log["fetches"] if x["status"] == "error"])
+    print(f"manifest: {len(rows)} rows | this run: {ok} ok, {dups} dup, "
+          f"{errs} error, {len(log['rejections'])} rejected")
     print(f"manifest -> {args.manifest}")
     return 0
 

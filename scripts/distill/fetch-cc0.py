@@ -38,9 +38,9 @@ import urllib.parse
 from datetime import date
 from pathlib import Path
 
-import requests
-from _bootstrap import *  # noqa: F401, E402  (sys.path fix)
-from PIL import Image, ImageOps
+from _bootstrap import *  # noqa: F401, E402  (sys.path fix; MUST precede 3rd-party)
+import requests  # noqa: E402
+from PIL import Image, ImageOps  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]            # repo root
 DATA = ROOT / "data"

@@ -54,13 +54,16 @@ button on the page.
    model size, and the UA — no hand-typing and no photo required.
 5. _Optionally_, also capture:
    - page `#stage` text during the first run (shader-compile note prints only
-     on the `webgpu` path — which is **off by default**; append
-     `?provider=webgpu` to test it)
+     on the `webgpu` path; append `?provider=webgpu` to force it, or open the
+     page on a GPU machine — WebGPU is the default there)
    - `performance.memory` or `/proc` peak if convenient (class 4)
    - whether a fallback message ever appears
-6. The default provider is now **WASM**, so a default run is the CPU probe.
-   To exercise the WebGPU path on a not-yet-validated adapter, append
-   `?provider=webgpu`. To rule the GPU out explicitly, append `?provider=wasm`.
+6. WebGPU is offered whenever the browser exposes an adapter; on a machine with
+   a GPU the default run is therefore the **WebGPU probe**. To rule the GPU out
+   explicitly (CPU/WASM probe), append `?provider=wasm`. To force the GPU on a
+   machine where it was detected but not defaulted, append `?provider=webgpu`.
+   Headless CI always exercises the WASM path (`run-smoke.mjs` forces
+   software rendering).
 
 **Privacy:** the harness never uploads anything. `run-smoke.mjs` additionally
 records every network request and fails the summary if any is non-first-party;

@@ -31,7 +31,12 @@ for (const dir of TARGETS) {
 }
 
 // Report anything still large enough to trip a small host's per-file limit.
-const MAX_OK = 25 * 1024 * 1024;
+// Threshold is 30 MiB, not 25: hosts without a hard per-file cap (Vercel
+// allows ~100 MB files) may legitimately carry the WebGPU jsep binary
+// (ort-wasm-simd-threaded.jsep.wasm, 26.5 MiB). Cloudflare Pages' 25 MiB cap
+// only applies to the CF deploy path, which never bakes the jsep (no --webgpu),
+// so leaving the cap at 25 would just needlessly fail a Vercel build.
+const MAX_OK = 30 * 1024 * 1024;
 function walk(dir) {
   let biggest = { size: 0, path: '' };
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

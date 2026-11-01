@@ -8,19 +8,14 @@ ort.env.wasm.wasmPaths = '/wasm/';
 // cannot fit this model's 411 MB intermediate tensors. Ask for the discrete GPU.
 if (ort.env.webgpu) ort.env.webgpu.powerPreference = 'high-performance';
 
-// WebGPU is enabled only on adapters that have been validated to produce a
-// correct mask. BiRefNet on onnxruntime-web is precision- and layout-sensitive;
-// on Adreno-6xx it silently returned a wrong result (missing foreground, opaque
-// rails left on the subject) with no error, so the WASM fallback never fired.
-// Until an adapter is verified end-to-end (correct mask + acceptable latency,
-// see the laptop test), default to WASM. `?provider=webgpu` still opts in.
+// NOTE: this worker file is superseded by `public/inference-worker.js` (the
+// imported classloader UMD bundle used at runtime). It is kept only as a
+// reference implementation; edits here do not ship unless it is re-wired.
 //
-// Each entry is a lowercase substring of `adapter.info.device ||
-// adapter.info.architecture || adapter.info.vendor || adapter.info.description`.
-// Keep the list empty until an adapter passes validation.
-const VALIDATED_WEBGPU_SUBSTRINGS: string[] = [
-  // e.g. 'radeon 780m', 'apple m2', 'intel iris xe — validated <date>'
-];
+// WebGPU is offered whenever the browser exposes an adapter; there is no
+// allowlist (see src/features/background-removal/provider-gate.ts). A WebGPU
+// session that fails to build/run falls back to WASM with a provider-fallback
+// message.
 
 function adapterSubstrings(): string {
   try {
@@ -38,10 +33,9 @@ function adapterSubstrings(): string {
   }
 }
 
-function webgpuValidated(): boolean {
+function webgpuAvailable(): boolean {
   const blob = adapterSubstrings();
-  if (!blob) return false;
-  return VALIDATED_WEBGPU_SUBSTRINGS.some((s) => blob.includes(s));
+  return blob.length > 0;
 }
 
 let session: ort.InferenceSession | null = null;
@@ -283,9 +277,8 @@ self.onmessage = async (e: MessageEvent<MainToWorkerMessage>) => {
         outputIsProbability = msg.outputIsProbability;
       }
       reportProgress('queued', 0);
-      // Only attempt WebGPU if the browser exposes it AND the adapter is one we
-      // have validated. An unvalidated GPU can silently produce a wrong mask, so
-      // the WASM fallback would never fire. `?provider=webgpu` still forces it.
+      // Attempt WebGPU whenever the browser exposes it; a failed webgpu
+      // candidate falls back to WASM inside createSession (no hang).
       const hasWebGPU =
         typeof (self as unknown as { navigator?: { gpu?: unknown } }).navigator?.gpu !== 'undefined';
       const forced = msg.forceProvider as
@@ -293,7 +286,7 @@ self.onmessage = async (e: MessageEvent<MainToWorkerMessage>) => {
         | undefined;
       const candidates: ort.InferenceSession.ExecutionProviderName[] = forced
         ? [forced]
-        : hasWebGPU && webgpuValidated()
+        : hasWebGPU
           ? ['webgpu', 'wasm']
           : ['wasm'];
       await createSession(candidates);

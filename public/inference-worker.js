@@ -4,10 +4,21 @@
 // WASM loader files (under /wasm/) are NOT transformed by Vite's module pipeline
 // (which refuses dynamic import() of /public files).
 //
-// The CPU-only bundle (`ort.wasm.min.js`) is loaded, not `ort.all.min.js`: the
-// full bundle pulls an additional 26.5 MiB `.jsep.wasm` for WebGPU that exceeds
-// Cloudflare Pages' 25 MiB per-file cap and cannot be split cross-origin (see
-// fetch-models.mjs). With this bundle only the CPU (wasm) provider exists.
+// Which ORT bundle to load is decided by the main thread (it knows whether the
+// browser has a GPU) and passed on the worker URL:
+//   - `?runtime=webgpu`  -> `ort.all.min.js`  (includes the WebGPU backend; the
+//     loader then pulls `ort-wasm-simd-threaded.jsep.wasm`, 26.5 MiB)
+//   - otherwise          -> `ort.wasm.min.js` (CPU-only, loads
+//     `ort-wasm-simd-threaded.wasm`, 13.3 MiB)
+//
+// The CPU-only bundle is the default because the jsep binary exceeds the
+// per-file cap of typical free static hosts (Cloudflare Pages' 25 MiB) and
+// cannot live on a foreign origin (ORT's pthread workers bypass the service
+// worker, so a cross-origin .wasm never gets the CORP header a COEP page
+// demands — verified). Hosts that CAN serve the jsep binary same-origin (local
+// preview, larger static hosts) get a working WebGPU path automatically.
+// With the CPU-only bundle, a `webgpu` request degrades to WASM via the
+// provider-fallback path with a clear message instead of hanging.
 //
 // Message protocol (see src/features/background-removal/types.ts):
 //   in:  {kind:'set-model', modelUrl} | {kind:'run', runId, tensor, width, height} | {kind:'dispose'}
@@ -16,7 +27,9 @@
 //        | {kind:'provider-fallback', from, to, reason}
 //        | {kind:'inference-time', ms, runId} | {kind:'result-ready', mask, width, height}
 //        | {kind:'error', message, runId?, fatal?}
-importScripts('/wasm/ort.wasm.min.js');
+
+const RUNTIME = new URL(self.location.href).searchParams.get('runtime') || 'wasm';
+importScripts(RUNTIME === 'webgpu' ? '/wasm/ort.all.min.js' : '/wasm/ort.wasm.min.js');
 
 // The UMD bundle declares a top-level `var ort` (a global in this classic
 // worker), so `ort` is available directly. Do NOT redeclare it.
@@ -32,41 +45,13 @@ if (ort.env.webgpu) {
   ort.env.webgpu.powerPreference = 'high-performance';
 }
 
-// WebGPU is enabled only on adapters that have been validated to produce a
-// correct mask. BiRefNet on onnxruntime-web is precision- and layout-sensitive;
-// on Adreno-6xx it silently returned a wrong result (missing foreground, opaque
-// rails left on the subject) with no error, so the WASM fallback never fired.
-// Until an adapter is verified end-to-end (correct mask + acceptable latency,
-// see the laptop test), default to WASM. `?provider=webgpu` still opts in.
-//
-// Each entry is a lowercase substring of `adapter.info.device ||
-// adapter.info.architecture || adapter.info.vendor || adapter.info.description`.
-// Keep the list empty until an adapter passes validation.
-const VALIDATED_WEBGPU_SUBSTRINGS = [
-  // e.g. 'radeon 780m', 'apple m2', 'intel iris xe — validated <date>'
-];
-
-function adapterSubstrings() {
-  try {
-    const a = ort.env.webgpu?.adapter;
-    if (!a) return '';
-    const info = a.info ?? {};
-    return [info.device, info.architecture, info.vendor, info.description]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-// Do NOT call navigator.gpu inside the worker before importScripts has run:
-// `adapterSubstrings()` is only meaningful once ort has enumerated the adapter.
-function webgpuValidated() {
-  const blob = adapterSubstrings();
-  if (!blob) return false;
-  return VALIDATED_WEBGPU_SUBSTRINGS.some((s) => blob.includes(s));
-}
+// WebGPU is attempted whenever the browser exposes `navigator.gpu` (see
+// src/features/background-removal/provider-gate.ts on the main thread). There
+// is no allowlist: a session that fails to build on the GPU, or a GPU run that
+// allocates/fails, falls back to WASM below with a clear message. The shipped
+// CPU-only ORT bundle (ort.wasm.min.js) has no WebGPU backend, so on hosts that
+// only serve it the webgpu attempt degrades to WASM with a provider-fallback
+// notice instead of hanging — same path a validated-but-unsupported device takes.
 
 let session = null;
 let lastProvider = 'none';
@@ -74,9 +59,10 @@ let modelUrl = null;
 let lastError = null;
 let adapterLabel = '';
 let MODEL_SIZE = 512;
-// The shipped BiRefNet_lite_512 export applies sigmoid internally and returns
-// probabilities; the older 1024 export returned raw logits.
+// The shipped exports apply sigmoid internally and return probabilities; the
+// older 1024 export returned raw logits.
 let outputIsProbability = true;
+let currentModelId = null;
 
 function post(msg) {
   self.postMessage(msg);
@@ -86,7 +72,7 @@ function post(msg) {
 // A single wall-clock origin for the whole load, so every checkpoint carries a
 // consistent elapsed time for the UI. Stages and percentages are emitted from the
 // worker (which knows the real byte counts) rather than inferred on the page.
-const loadStartedAt = performance.now();
+let loadStartedAt = performance.now();
 const PROGRESS_INTERVAL_MS = 250;
 let lastStage = null;
 let lastReportAt = 0;
@@ -392,22 +378,33 @@ self.onmessage = async (e) => {
   const msg = e.data;
   try {
     if (msg.kind === 'set-model') {
+      // A new set-model means a different model artefact: drop the previous
+      // session and its bytes so memory from one model never leaks into the
+      // next, and reset the load timeline/progress so the UI reports a fresh
+      // load (not a continuation of the previous model's).
+      await session?.release?.();
+      session = null;
+      modelBytes = null;
+      lastProvider = 'none';
+      lastError = null;
+      currentModelId = msg.modelId || null;
       modelUrl = msg.modelUrl;
       if (msg.inputSize) MODEL_SIZE = msg.inputSize;
       if (typeof msg.outputIsProbability === 'boolean') {
         outputIsProbability = msg.outputIsProbability;
       }
+      loadStartedAt = performance.now();
+      lastStage = null;
+      lastReportAt = 0;
       reportProgress('queued', PCT.START);
-      // Only attempt WebGPU if the browser actually exposes it AND the adapter
-      // is one we have validated (see VALIDATED_WEBGPU_SUBSTRINGS). An
-      // unvalidated GPU can silently produce a wrong mask, so the WASM fallback
-      // wouldn't fire. `?provider=webgpu` still forces it as an opt-in.
+      // Attempt WebGPU whenever the browser exposes it; a failed webgpu
+      // candidate falls back to WASM inside createSession (no hang).
       const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
       const forced = msg.forceProvider;
       let candidates;
       if (forced) {
         candidates = [forced];
-      } else if (hasWebGPU && webgpuValidated()) {
+      } else if (hasWebGPU) {
         candidates = ['webgpu', 'wasm'];
       } else {
         candidates = ['wasm'];
@@ -428,7 +425,13 @@ self.onmessage = async (e) => {
       }
       const totalMs = performance.now() - loadStartedAt;
       reportProgress('ready', 100, { detail: ep });
-      post({ kind: 'load-time', ms: totalMs, provider: ep, adapter: adapterLabel });
+      post({
+        kind: 'load-time',
+        ms: totalMs,
+        provider: ep,
+        adapter: adapterLabel,
+        modelId: currentModelId,
+      });
       return;
     }
     if (msg.kind === 'run') {
@@ -454,7 +457,13 @@ self.onmessage = async (e) => {
       }
       // result-ready first: the main thread renders the image before the promise
       // for this run settles, so the output is on screen before the summary.
-      post({ kind: 'result-ready', mask: result.mask, width: msg.width, height: msg.height });
+      post({
+        kind: 'result-ready',
+        mask: result.mask,
+        width: msg.width,
+        height: msg.height,
+        inputSize: MODEL_SIZE,
+      });
       post({ kind: 'inference-time', ms: result.timeMs, runId: msg.runId });
       return;
     }

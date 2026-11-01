@@ -43,15 +43,18 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      # Fetch the pinned model into public/ BEFORE build, so vite copies it
-      # into dist/ for preview to serve. The model is 193 MB and gitignored, so
-      # every fresh checkout starts without it.
+      # Fetch the pinned models into public/ BEFORE build, so vite copies them
+      # into dist/ for preview to serve. The models are ~94 + ~185 MB and
+      # gitignored, so every fresh checkout starts without them.
       - run: npm run fetch-models
       - run: npm run build
-      # Fail fast if the model did not survive the build; the preview can't
+      # Fail fast if any model did not survive the build; the preview can't
       # serve what isn't in dist/.
-      - name: Verify model artifact
-        run: test -s dist/models/model_512.onnx
+      - name: Verify model artifacts
+        run: |
+          test -s dist/models/c5_best.onnx
+          test -s dist/models/model_512.onnx
+          test -s dist/models-manifest.json
       # puppeteer-core needs an executable at run-smoke's default CHROME_BIN.
       - run: |
           sudo apt-get update
@@ -65,4 +68,13 @@ jobs:
             curl -s -o /dev/null http://localhost:4173 && break
             sleep 1
           done
-          node scripts/run-smoke.mjs http://localhost:4173 --out smoke-results/ci
+          # All CI runs force ?provider=wasm: the preview host serves only the
+          # CPU-only ORT bundle (the WebGPU jsep binary exceeds the 25 MiB
+          # static-file cap), and the app correctly refuses the webgpu bundle.
+          # ?provider=wasm also keeps these results deterministic across runners.
+          # Default (auto-loaded c5_best).
+          node scripts/run-smoke.mjs "http://localhost:4173/?provider=wasm" --out smoke-results/ci-c5
+          # Explicit second model; ?model= drives the app's own override.
+          node scripts/run-smoke.mjs "http://localhost:4173/?provider=wasm&model=model_512" --out smoke-results/ci-m512
+          # Mask adjustments wired from the URL (exercises the load path).
+          node scripts/run-smoke.mjs "http://localhost:4173/?provider=wasm&maskThreshold=30&maskFeather=4" --out smoke-results/ci-mask

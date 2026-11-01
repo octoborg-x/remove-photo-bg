@@ -1,4 +1,4 @@
-TUNNEL_HOST=<paste the trycloudflare hostname here>
+TUNNEL_HOST=beauty-dom-cuts-stockings.trycloudflare.com
 SSH_KEY=~/.ssh/colab_ed25519
 
 Connect to the Colab instance and execute the distillation plan exactly as

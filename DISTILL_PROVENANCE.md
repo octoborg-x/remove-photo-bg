@@ -54,7 +54,18 @@ verbatim MIT text and the fuller audit).
 | API note | `/public/collection/v1/search` **retired 2026-10-01** (HTTP 410); search is now `/public/collection/v1.1/search`; object details stay on `/v1/objects/{id}` |
 | Redistribution of derived weights | CC0 allows it |
 
-### 3.3 Licence reference pages checked (2026-11-01)
+### 3.3 Cleveland Museum of Art Open Access (`scripts/distill/fetch-cleveland.py`)
+
+| field | value |
+|---|---|
+| Source | Cleveland Open Access API `https://openaccess-api.clevelandart.org/api/artworks/` |
+| Query gate | `cc0=1&has_image=1` **and** per-record `share_license_status == "CC0"` (re-checked per row) |
+| Coverage | 41,806 CC0 artworks with images (verified 2026-11-01); supports `type=` filtering. Product-like types (Ceramic 3031, Sculpture 1957, Metalwork 1431, Jewelry 1020, Furniture 474, Glass 400, Silver 378, Lacquer 191) ≈ 8.9k |
+| Image used | `images.print.url` (≈3400 px JPEG, `openaccess-cdn.clevelandart.org`), fallback `web` |
+| Licence recorded | `CC0 1.0`, `https://creativecommons.org/publicdomain/zero/1.0/` (checked 2026-11-01, HTTP 200) |
+| Redistribution of derived weights | CC0 allows it; no attribution required (recorded anyway in the manifest) |
+
+### 3.4 Licence reference pages checked (2026-11-01)
 
 | page | result |
 |---|---|
@@ -75,6 +86,7 @@ on **2026-11-01**:
 | onnxoptimizer | >=0.3.13 | Apache-2.0 | `onnx/optimizer` GitHub `license.spdx_id` |
 | onnxsim | >=0.4.33 | Apache-2.0 | `daquexian/onnx-simplifier` GitHub `license.spdx_id` |
 | numpy | 1.26.4 | BSD-3-Clause | `numpy/numpy` LICENSE text ("Redistribution and use in source and binary forms …") |
+| scipy | >=1.11 | BSD-3-Clause | PyPI classifier `License :: OSI Approved :: BSD License`; LICENSE is 3-clause BSD. Bundled libs (OpenBLAS, LAPACK) are BSD-3-Clause; GCC runtime is GPL-3.0 WITH GCC-exception-3.1 (build-time only) |
 | pillow | >=10.0 | HPND (PIL licence) | `python-pillow/Pillow` LICENSE text ("The Python Imaging Library (PIL) is Copyright © 1997-2011 by Secret Labs AB …") |
 | requests | >=2.31 | Apache-2.0 | PyPI `license = "Apache-2.0"` |
 | timm | >=1.0.3 | Apache-2.0 | PyPI `license = "Apache-2.0"` |

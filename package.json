@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "fetch-models": "node scripts/fetch-models.mjs",
     "dev:local": "vite",
-    "build:site": "npm run build && node scripts/strip-large-assets.mjs"
+    "build:site": "npm run build && node scripts/strip-large-assets.mjs",
+    "vercel:build": "node scripts/fetch-models.mjs --webgpu --no-models && npm run build && node scripts/strip-large-assets.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "1.29.0"

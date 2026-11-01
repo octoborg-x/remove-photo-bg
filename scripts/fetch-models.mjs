@@ -12,9 +12,12 @@
 //
 // Also copies the onnxruntime-web WASM files we need into public/wasm.
 //
-// Usage: node scripts/fetch-models.mjs [--webgpu]
+// Usage: node scripts/fetch-models.mjs [--webgpu] [--no-models]
 //   --webgpu additionally copies the WebGPU-capable ORT runtime (37+ MiB of
 //   files) into public/wasm for hosts that can serve it same-origin.
+//   --no-models skips the (hundreds-of-MB) model body downloads while still
+//   writing the manifest and copying the WASM runtime — for builds where models
+//   are served from the remote asset origin at runtime instead of the site.
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -81,6 +84,11 @@ const WASM_FILES = [
 ];
 const WEBGPU_WASM_FILES = ['ort.all.min.js', 'ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm'];
 const WITH_WEBGPU = process.argv.includes('--webgpu');
+// Skip the model body downloads (hundreds of MB per build) but still write the
+// manifest and copy the WASM runtime. The app fetches models from the remote
+// asset origin at runtime (VITE_ASSET_BASE), so a build that only ships the
+// shell + WASM does not need the model bytes locally. Used by the Vercel build.
+const SKIP_MODELS = process.argv.includes('--no-models');
 
 // The manifest is the runtime source of truth: the UI builds the model
 // selector from it, the service worker seeds one cache bucket per model from
@@ -94,26 +102,28 @@ const manifest = MODELS.map(({ url: _downloadUrl, ...entry }) => ({
   url: `/${entry.file}`,
 }));
 
-for (const m of MODELS) {
-  // Artifacts land in public/ so `vite build` copies them into dist/ the same
-  // way the deployed SW expects them (`/models/<leaf>`). The absolute URL in
-  // the table above is only the download source.
-  const dest = resolve(ROOT, 'public', m.file);
-  mkdirSync(dirname(dest), { recursive: true });
-  const res = await fetch(m.url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${m.url}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  const h = createHash('sha256').update(buf).digest('hex');
-  if (h !== m.sha256) {
-    throw new Error(`SHA-256 mismatch for ${m.file}: expected ${m.sha256}, got ${h}`);
+if (!SKIP_MODELS) {
+  for (const m of MODELS) {
+    // Artifacts land in public/ so `vite build` copies them into dist/ the same
+    // way the deployed SW expects them (`/models/<leaf>`). The absolute URL in
+    // the table above is only the download source.
+    const dest = resolve(ROOT, 'public', m.file);
+    mkdirSync(dirname(dest), { recursive: true });
+    const res = await fetch(m.url);
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${m.url}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const h = createHash('sha256').update(buf).digest('hex');
+    if (h !== m.sha256) {
+      throw new Error(`SHA-256 mismatch for ${m.file}: expected ${m.sha256}, got ${h}`);
+    }
+    writeFileSync(dest, buf);
+    console.log(`OK  ${m.file}  ${buf.length} bytes  sha256=${h}`);
   }
-  writeFileSync(dest, buf);
-  console.log(`OK  ${m.file}  ${buf.length} bytes  sha256=${h}`);
 }
 
 const manifestPath = resolve(ROOT, 'public/models-manifest.json');
 writeFileSync(manifestPath, JSON.stringify({ version: 1, models: manifest }, null, 2) + '\n');
-console.log(`OK  public/models-manifest.json  (${manifest.length} model(s))`);
+console.log(`OK  public/models-manifest.json  (${manifest.length} model(s), ${SKIP_MODELS ? 'bodies skipped' : 'bodies included'})`);
 
 mkdirSync(resolve(ROOT, 'public/wasm'), { recursive: true });
 const allWasmFiles = WITH_WEBGPU ? WASM_FILES.concat(WEBGPU_WASM_FILES) : WASM_FILES;

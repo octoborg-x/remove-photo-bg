@@ -190,6 +190,13 @@ def main() -> int:
             })
             got += 1
 
+    def write_manifest() -> None:
+        with open(args.manifest, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=HEADERS_CSV)
+            w.writeheader()
+            for r in rows:
+                w.writerow({k: r.get(k, "") for k in HEADERS_CSV})
+
     for e in collected:
         if args.dry_run:
             continue
@@ -213,22 +220,20 @@ def main() -> int:
             seen.add(h)
             log["fetches"].append({"url": e["url"], "status": "ok",
                                    "sha256": h, "query": e["query"]})
+            write_manifest()
             time.sleep(0.1)
         except Exception as ex:
             log["fetches"].append({"url": e["url"], "status": "error",
                                    "err": str(ex)})
 
-    with open(args.manifest, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=HEADERS_CSV)
-        w.writeheader()
-        for r in rows:
-            w.writerow({k: r.get(k, "") for k in HEADERS_CSV})
+    write_manifest()
     (LOGDIR / f"met-{date.today()}.json").write_text(json.dumps(log, indent=2))
 
     ok = len([x for x in log["fetches"] if x["status"] == "ok"])
-    print(f"manifest: {len(rows)} rows | this run: {ok} ok, "
-          f"{len(log['rejections'])} rejected, "
-          f"{len([x for x in log['fetches'] if x['status'] != 'ok'])} errors")
+    dups = len([x for x in log["fetches"] if x["status"] == "dup"])
+    errs = len([x for x in log["fetches"] if x["status"] == "error"])
+    print(f"manifest: {len(rows)} rows | this run: {ok} ok, {dups} dup, "
+          f"{errs} error, {len(log['rejections'])} rejected")
     print(f"manifest -> {args.manifest}")
     return 0
 

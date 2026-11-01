@@ -33,15 +33,19 @@ from PIL import Image
 MEAN_ISH = (128, 128, 128)
 
 
-def dhash(img: Image.Image, size: int = 8) -> str:
+def dhash(img: Image.Image, size: int = 8) -> int:
+    """64-bit dHash as an int (MSB-first), so distance is an XOR popcount."""
     img = img.convert("L").resize((size + 1, size), Image.LANCZOS)
     arr = np.asarray(img, dtype=np.int16)
-    diff = arr[:, :-1] > arr[:, 1:]
-    return "".join("1" if b else "0" for b in diff.flatten())
+    diff = (arr[:, :-1] > arr[:, 1:]).flatten()
+    v = 0
+    for b in diff:
+        v = (v << 1) | int(b)
+    return v
 
 
-def hamming(a: str, b: str) -> int:
-    return sum(x != y for x, y in zip(a, b))
+def hamming(a: int, b: int) -> int:
+    return (a ^ b).bit_count()
 
 
 def laplacian_variance(img: Image.Image) -> float:
@@ -110,9 +114,10 @@ def main() -> None:
             "B" if any(k in ct for k in ("hair", "fur", "soft", "edge")) else "A")
         kept.append(row)
 
-    # deterministic per-category split
+    # deterministic per-category split (sorted categories: set iteration order
+    # is randomised per process, which would break reproducibility)
     rng = random.Random(args.seed)
-    for cat in {r.get("category", "") for r in kept}:
+    for cat in sorted({r.get("category", "") for r in kept}):
         grp = [r for r in kept if r.get("category") == cat]
         rng.shuffle(grp)
         n = len(grp)

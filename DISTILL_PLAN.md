@@ -65,15 +65,24 @@ work moved to the T4 host.
 
 Phase 1 seed fetchers (implemented, `scripts/distill/`):
 
+- `fetch-cleveland.py` — **Cleveland Museum of Art Open Access**, `cc0=1` query
+  plus a per-record `share_license_status == "CC0"` re-check. This is the bulk
+  source (≈14k rows). Product-like `type=` values, `images.print` (~3400 px).
 - `fetch-cc0.py` — Wikimedia Commons, per-file machine-readable licence filter
   (CC0 / PD / PDM only; `-sa`/`-nc` dropped). Batched metadata (50 titles/call)
   and an incremental, resumable manifest.
-- `fetch-met.py` — The Met Open Access, `isPublicDomain == true` + `primaryImage`
-  only. Object lookups parallelised (4 threads, thread-safe pacing).
+- `fetch-eval.py` — the **evaluation set** (spec §6-Phase1.3), same licence gate
+  but disjoint categories, separate manifest/dir (see §3.3).
+- `fetch-met.py` — The Met Open Access, `isPublicDomain == true` +
+  `primaryImage` only. **Dropped in practice:** the object-detail endpoint
+  returns 403 from the Colab host (`436535 403`, `437310 403`), so no Met rows
+  were fetched. Kept in the tree for a future host.
 
-Later sources per spec §5 (Smithsonian CC0, Cleveland/AIC CC0, Rijksmuseum,
-Openverse, Open Images V7 CC-BY, COCO/LVIS Flickr ids 4/7/8) are **pending** and
-each must pass the licence gate before use.
+Later sources per spec §5 (Smithsonian CC0, AIC, Rijksmuseum, Openverse, Open
+Images V7 CC-BY, COCO/LVIS) are **pending**. Smithsonian's public `DEMO_KEY` is
+rate-limited to ~10 requests/hour (measured: `X-Ratelimit-Limit: 10`), which is
+impractical for bulk; a registered key would be needed. AIC returned 403, NGA
+404, Rijksmuseum 410 (retired key).
 
 **Measured Phase 1 counts:** see §5 (filled from the manifest when fetching
 completes). Rejections are logged with a reason in
@@ -105,8 +114,11 @@ script directory from `sys.path`, so `import onnx`/PIL/numpy work. Verified
 Real images only, never trained on or tuned, ≥ 100 images if legally possible,
 covering plain-background product, hair, fur, glass/translucent, clutter, thin
 structures/holes, low contrast, small subject and hard shadows, plus the 3
-existing `test-images/`. No hand-verified ground-truth masks supplied yet, so
-**every metric is labelled "agreement with teacher, not accuracy"** (spec §6).
+existing `test-images/`. Built by `scripts/distill/fetch-eval.py` from
+licence-gated Commons categories **disjoint from the training categories**, into
+`data/eval-manifest.csv` (`split=test`) and `data/eval-images/`. No hand-verified
+ground-truth masks supplied yet, so **every metric is labelled "agreement with
+teacher, not accuracy"** (spec §6).
 
 ## 4. Storage plan (spec §4)
 
@@ -124,16 +136,38 @@ existing `test-images/`. No hand-verified ground-truth masks supplied yet, so
 
 ## 5. Delivery counts (Phase 1)
 
-**Measured** from `data/manifest.csv` after the fetch run completes. Fill:
+**Measured** from `data/manifest.csv` (raw) and `data/manifest-selected.csv`
+(after `select.py`), 2026-11-01.
+
+Raw manifest (licence-gated, before preselection):
 
 | dimension | counts |
 |---|---|
-| total rows | _pending (fetch running)_ |
-| per source | wikimedia-commons: _pending_ · met-museum: _pending_ |
-| per category | product/shoe/jewelry/plant/pet/glass/object: _pending_ |
-| per licence | CC0 / Public domain: _pending_ |
-| per tier | A/B/C: assigned by `select.py` after preselection |
-| per split | train/val/test: assigned by `select.py` (70/15/15 group split) |
+| total rows | **14,840** (all unique sha256; 0 missing files) |
+| per source | cleveland-maa 13,909 · wikimedia-commons 931 |
+| per licence | CC0 1.0 13,909 · CC0 681 · Public domain 250 |
+| per category | object 7,880 · product 5,009 · jewelry 1,128 · glass 400 · plant 200 · pet 200 · shoe 23 |
+
+After `select.py` (short-side ≥ 768, sharpness ≥ 30, dHash dedup):
+
+| dimension | counts |
+|---|---|
+| kept | **11,861** (2,979 rejected: 1,541 short-side, 800 duplicate-near, 638 sharpness) |
+| per category | object 6,285 · product 3,936 · jewelry 976 · glass 347 · plant 162 · pet 138 · shoe 17 |
+| per split | train 8,306 · val 1,779 · test 1,776 |
+| per tier | A 11,514 · C 347 |
+
+**Known gap (reported, not hidden):** Tier B (hair/fur/soft edges) is **empty in
+the training set** — the museum sources yield object/product/jewelry/glass
+categories only, so `select.py`'s category-based tiering produces no B rows. The
+evaluation set covers hair/fur separately. A small Tier-B training fetch
+(soft-edge/animal-hair categories, disjoint from the eval categories) is the
+recommended Phase-2 top-up before training, since the spec wants real Tier-B
+images in training.
+
+Evaluation set: `data/eval-manifest.csv` + `data/eval-images/` (see §3.3);
+counts filled below once `fetch-eval.py` completes.
+
 
 ## 6. Acceptance criteria (fixed before training — spec §7)
 

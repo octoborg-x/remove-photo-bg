@@ -9,37 +9,48 @@
     "key": "~/.ssh/colab_ed25519 (ED25519) \u2014 NOTE: the sandbox was reset on 2026-11-01 and the key file was wiped; a fresh copy is needed to reconnect.",
     "host_history": [
       "beauty-dom-cuts-stockings.trycloudflare.com (NO GPU - STOP per 3.1)",
-      "night-italic-genesis-picnic.trycloudflare.com (GPU Tesla T4 - verified)",
-      "tunnel-believe-hardcover-shadows.trycloudflare.com (up, key missing)",
-      "reflection-infinite-hope-patio.trycloudflare.com (up, key missing)",
-      "temple-voted-blacks-stem.trycloudflare.com (current; up, key missing)"
+      "night-italic-genesis-picnic.trycloudflare.com (GPU Tesla T4 - earlier session)",
+      "tunnel-believe-hardcover-shadows.trycloudflare.com (up)",
+      "reflection-infinite-hope-patio.trycloudflare.com (CPU-only, no nvidia-smi/GPU - STOP per 3.1)",
+      "temple-voted-blacks-stem.trycloudflare.com (current; GPU Tesla T4 - verified)"
     ]
   },
   "gpu": {
     "visible": true,
     "name": "Tesla T4",
     "driver": "580.82.07",
-    "cuda": "13.0",
     "memory_total_mib": 15360,
-    "compute_capability": "7.5"
+    "providers": [
+      "TensorrtExecutionProvider",
+      "CUDAExecutionProvider",
+      "CPUExecutionProvider"
+    ]
   },
   "host": {
-    "hostname": "ee1ecf2fbd06",
+    "hostname": "3ee7c45c9ca3",
     "python": "3.13.16",
     "torch": "2.11.0+cu130",
     "torch_cuda_available": true,
-    "onnxruntime": "not installed",
-    "onnx": "not installed",
-    "cpu": "Intel(R) Xeon(R) CPU @ 2.00GHz",
-    "cpu_count": 2,
-    "mem_total_gb": 12,
-    "disk_overlay_total_gb": 113,
-    "disk_overlay_used_gb": 43,
-    "disk_overlay_free_gb": 70,
-    "tmux": "/usr/bin/tmux",
-    "drive_mounted": false,
+    "onnxruntime": "1.31.1",
+    "onnx": "installed",
+    "disk_overlay_free_gb": 112,
     "repo_at": "/content/remove-photo-bg",
-    "repo_head": "68e6a6c Update agent-init-prompt.md"
+    "repo_head": "68e6a6c"
   },
-  "outcome": "GPU visible; proceeding to Phase 1 per audit.md. onnxruntime-gpu to be installed before Phase 2 labeling (section 3.7 requires 1.31.1 + CUDAExecutionProvider)."
+  "outcome": "GPU visible; proceeding to Phase 1 per audit.md. onnxruntime-gpu to be installed before Phase 2 labeling (section 3.7 requires 1.31.1 + CUDAExecutionProvider).",
+  "teacher": {
+    "path": "model_512.onnx",
+    "bytes": 193514682,
+    "sha256": "eaafaa10f19c63b77e2bae77bf4b2f59054c208ea08b8c6648f95ef36a3b6b87",
+    "url": "https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve/main/models/model_512.onnx",
+    "note": "repo-path /Octoborg/remove-photo-bg/resolve/main/ returns 401; the Space path works anonymously"
+  },
+  "gpu_parity_3_7": {
+    "status": "PASS",
+    "images": 3,
+    "worst_iou_at_0_5": 1.0,
+    "worst_mean_abs_diff": 0.0,
+    "max_abs_diff": 1.9e-05,
+    "measured_on": "Tesla T4, onnxruntime-gpu 1.31.1 CUDAExecutionProvider vs CPUExecutionProvider"
+  }
 }

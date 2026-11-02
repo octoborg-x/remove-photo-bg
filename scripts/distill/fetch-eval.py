@@ -45,11 +45,16 @@ EXCLUDED_CATEGORY_HINTS = ("porn", "nude", "esoteric", "sexual")
 
 # Coverage-driven categories, deliberately disjoint from fetch-cc0.py's.
 EVAL_SOURCES = {
-    "product": ["Category:Perfume bottles", "Category:Cosmetics containers",
+    # Plain-background product: CC0/PD-heavy isolation categories first; the
+    # branded/commercial categories below are mostly CC-BY(-SA) and rarely pass.
+    "product": ["Category:Household objects", "Category:Tools",
+                "Category:Packaging", "Category:White background",
+                "Category:Perfume bottles", "Category:Cosmetics containers",
                 "Category:Footwear by brand", "Category:Teapots",
                 "Category:Camera equipment"],
     "hair": ["Category:Human hair", "Category:Hair (anatomy)"],
-    "fur": ["Category:Animal fur", "Category:Fur clothing"],
+    "fur": ["Category:Fur coats", "Category:Animal hair", "Category:Furs",
+            "Category:Fox fur", "Category:Animal fur", "Category:Fur clothing"],
     "glass": ["Category:Drinking glasses", "Category:Glassware",
               "Category:Transparent materials"],
     "clutter": ["Category:Clutter", "Category:Desks"],

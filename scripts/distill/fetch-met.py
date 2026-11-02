@@ -69,21 +69,39 @@ HEADERS_CSV = ["id", "source", "url", "licence", "licence_url", "author",
 def _get(url: str, **kw) -> requests.Response:
     """GET with pacing + backoff.
 
-    The Met API is served from Colab's *shared* egress IP, so it frequently
-    returns 403 (throttled) as well as 429/5xx. We retry those with growing
-    delays and a small minimum interval between calls.
+    The Met API is served from shared egress IPs, so 429/5xx are transient and
+    retried. A 403, however, is an egress-IP block (seen from both the OpenHands
+    sandbox and Colab) that never clears on retry, so it fails fast instead of
+    burning ~105 s per call.
     """
     for attempt in range(6):
         _pace()
         r = requests.get(url, headers=HEADERS, timeout=60, **kw)
         if r.status_code == 200:
             return r
-        if r.status_code in (403, 429, 500, 502, 503):
+        if r.status_code == 403:
+            r.raise_for_status()
+        if r.status_code in (429, 500, 502, 503):
             time.sleep(min(60, 5 * (attempt + 1)))
             continue
         r.raise_for_status()
     r.raise_for_status()
     return r
+
+
+def endpoint_blocked() -> str | None:
+    """Probe the Met API once; return a reason if it is unreachable."""
+    probes = (("search", SEARCH,
+               {"q": "bottle", "hasImages": "true", "limit": 1}),
+              ("object", f"{OBJECT}/436535", None))
+    for name, url, params in probes:
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30, params=params)
+        except Exception as ex:
+            return f"{name} request failed: {ex}"
+        if r.status_code == 403:
+            return f"{name} endpoint returned 403 (blocked from this egress)"
+    return None
 
 
 _MIN_INTERVAL = 0.4
@@ -153,6 +171,12 @@ def main() -> int:
 
     IMGDIR.mkdir(parents=True, exist_ok=True)
     LOGDIR.mkdir(parents=True, exist_ok=True)
+
+    blocked = endpoint_blocked()
+    if blocked:
+        print(f"The Met API is unavailable from this host: {blocked}")
+        print("no rows fetched; continuing (Met is a best-effort source).")
+        return 0
 
     rows: list[dict] = []
     seen: set[str] = set()

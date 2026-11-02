@@ -74,9 +74,11 @@ Phase 1 seed fetchers (implemented, `scripts/distill/`):
 - `fetch-eval.py` — the **evaluation set** (spec §6-Phase1.3), same licence gate
   but disjoint categories, separate manifest/dir (see §3.3).
 - `fetch-met.py` — The Met Open Access, `isPublicDomain == true` +
-  `primaryImage` only. **Dropped in practice:** the object-detail endpoint
-  returns 403 from the Colab host (`436535 403`, `437310 403`), so no Met rows
-  were fetched. Kept in the tree for a future host.
+  `primaryImage` only. **Dropped in practice:** both the search and
+  object-detail endpoints return 403 from this egress (re-checked 2026-11-02:
+  `v1.1/search 403`, `v1/objects/436535 403`), so no Met rows were fetched. The
+  fetcher now probes once and exits cleanly on 403 instead of retrying (~105 s
+  per call), so it can no longer stall a run. Kept in the tree for a future host.
 
 Later sources per spec §5 (Smithsonian CC0, AIC, Rijksmuseum, Openverse, Open
 Images V7 CC-BY, COCO/LVIS) are **pending**. Smithsonian's public `DEMO_KEY` is
@@ -137,46 +139,54 @@ teacher, not accuracy"** (spec §6).
 ## 5. Delivery counts (Phase 1)
 
 **Measured** from `data/manifest.csv` (raw) and `data/manifest-selected.csv`
-(after `select.py`), 2026-11-01.
+(after `select.py`), 2026-11-02. The pipeline was re-run end-to-end in the
+OpenHands sandbox (see §5.1); these are exactly the numbers the pipeline printed.
 
 Raw manifest (licence-gated, before preselection):
 
 | dimension | counts |
 |---|---|
-| total rows | **14,840** (all unique sha256; 0 missing files) |
-| per source | cleveland-maa 13,909 · wikimedia-commons 931 |
-| per licence | CC0 1.0 13,909 · CC0 681 · Public domain 250 |
-| per category | object 7,880 · product 5,009 · jewelry 1,128 · glass 400 · plant 200 · pet 200 · shoe 23 |
+| total rows | **14,958** (all unique sha256; 0 missing files) |
+| per source | cleveland-maa 13,940 · wikimedia-commons 1,018 |
+| per licence | CC0 1.0 13,940 · CC0 664 · Public domain 354 |
+| per category | object 7,830 · product 4,990 · jewelry 1,128 · glass 400 · plant 150 · pet 150 · fur 149 · hair 138 · shoe 23 |
 
-After `select.py` (short-side ≥ 768, sharpness ≥ 30, dHash dedup):
+After `select.py` (short-side ≥ 768, sharpness ≥ 30, dHash dedup, eval leakage guard):
 
 | dimension | counts |
 |---|---|
-| kept | **11,861** (2,979 rejected: 1,541 short-side, 800 duplicate-near, 638 sharpness) |
-| per category | object 6,285 · product 3,936 · jewelry 976 · glass 347 · plant 162 · pet 138 · shoe 17 |
-| per split | train 8,306 · val 1,779 · test 1,776 |
-| per tier | A 11,514 · C 347 |
+| kept | **11,952** (3,006 rejected: 1,551 short-side, 801 duplicate-near, 648 sharpness, 6 in-eval-set) |
+| per source | cleveland-maa 11,222 · wikimedia-commons 730 |
+| per category | object 6,246 · product 3,918 · jewelry 980 · glass 349 · plant 122 · fur 118 · pet 108 · hair 94 · shoe 17 |
+| per split | train 8,370 · val 1,793 · test 1,789 |
+| per tier | A 11,391 · C 349 · B 212 |
 
-**Known gap (reported, not hidden):** Tier B (hair/fur/soft edges) is **empty in
-the training set** — the museum sources yield object/product/jewelry/glass
-categories only, so `select.py`'s category-based tiering produces no B rows. The
-evaluation set covers hair/fur separately. A small Tier-B training fetch
-(soft-edge/animal-hair categories, disjoint from the eval categories) is the
-recommended Phase-2 top-up before training, since the spec wants real Tier-B
-images in training.
+**Tier-B gap closed (was empty).** The dedicated `fetch-cc0.py --categories
+hair,fur` top-up draws from CC0/PD-heavy Commons categories whose names contain
+*hair*/*fur* (Wigs, Felt, Wool, Shih Tzu, Angora rabbits, Rabbits, Sheep, Teddy
+bears, Feathers, Persian cats, Chinchillas) — disjoint from `fetch-eval.py`'s
+hair/fur categories — and now contributes **212 Tier-B rows** (fur 118, hair 94).
+Reported honestly: Tier B is still small (1.8 % of the selected set); the museum
+bulk is Tier A. A larger soft-edge fetch remains a Phase-2 top-up.
 
-**Tier-B top-up (added 2026-11-01, run pending):** the museum sources yield no
-hair/fur/soft-edge rows, so a dedicated Tier-B fetch was added —
-`fetch-cc0.py --categories hair,fur` draws from CC0/PD-heavy Commons categories
-whose names contain *hair*/*fur* (Wigs, Felt, Wool, Shih Tzu, Angora rabbits,
-Rabbits, Sheep, Teddy bears, Feathers, Persian cats, Chinchillas) so `select.py`
-tiers them B. These categories are disjoint from `fetch-eval.py`'s hair/fur
-categories, and `select.py` now hard-excludes any sha256 present in
-`data/eval-manifest.csv` (leakage control, spec §6-Phase1.2). Counts below are
-filled once the fetch runs on Colab.
+Evaluation set: `data/eval-manifest.csv` + `data/eval-images/` (see §3.3) —
+**208 images** across all 9 coverage categories (glass 30, clutter 30, thin 30,
+small 30, lowcontrast 21, hair 20, shadow 17, product 15, fur 15); licences
+Public domain 115 / CC0 93. **0** sha256 overlap with the selected training set
+(6 raw rows were excluded by the leakage guard, `reject_reason=in-eval-set`).
 
-Evaluation set: `data/eval-manifest.csv` + `data/eval-images/` (see §3.3);
-counts filled below once `fetch-eval.py` completes.
+### 5.1 Where it ran (2026-11-02)
+
+The Colab MCP could not be used. The OpenHands sandbox is headless, so the
+server's `webbrowser.open_new(...)` never reaches the user's Colab tab and the
+notebook's WebSocket (bound to localhost inside the sandbox) never receives a
+connection — `open_colab_browser_connection` returned `false`, then timed out at
+300 s. The SSH fallback is also dead: the quick-tunnel host in
+`agent-init-prompt.md` no longer resolves, `~/.ssh/colab_ed25519` is absent and
+`cloudflared` is not installed. Phase 1 is CPU-only (HTTP + PIL + scipy) and the
+sandbox has working outbound internet (Cleveland 200, Commons 200), so the
+**identical scripts were run in the sandbox** and produced the counts above. No
+GPU was needed. `data/` is git-ignored, so the images live only in the sandbox.
 
 
 ## 6. Acceptance criteria (fixed before training — spec §7)

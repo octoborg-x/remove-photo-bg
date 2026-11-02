@@ -144,12 +144,15 @@ def main() -> int:
 
     rows: list[dict] = []
     seen: set[str] = set()
+    known_urls: set[str] = set()
     if args.manifest.exists():
         with open(args.manifest) as f:
             for r in csv.DictReader(f):
                 if r.get("sha256"):
                     rows.append(r)
                     seen.add(r["sha256"])
+                    if r.get("url"):
+                        known_urls.add(r["url"])
 
     log = {"date": str(date.today()), "source": "cleveland-maa",
            "fetches": [], "rejections": []}
@@ -167,6 +170,10 @@ def main() -> int:
             with lock:
                 log["rejections"].append({"id": rec.get("id"), "type": atype,
                                           "reject_reason": "no-image"})
+            return
+        # Skip images already in the manifest so a resume/top-up only downloads
+        # the new ones instead of re-fetching the whole collection.
+        if url in known_urls:
             return
         if args.dry_run:
             return

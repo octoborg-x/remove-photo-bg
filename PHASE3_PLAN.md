@@ -1,5 +1,10 @@
 # PHASE3_PLAN — Notices, privacy, and the licence audit
 
+> **Status: DONE.** Phase 3 is complete and verified — see
+> [`PHASE3_REPORT.md`](./PHASE3_REPORT.md) for the delivered items, the measured
+> licence audit, and the CSP verification. This plan is retained as the
+> historical scope.
+
 Prepared 2026-11-02, to start after Phase 2 is confirmed (`PHASE2_REPORT.md`).
 Scope: MVP_OPENHANDS.md §11 **Phase 3** (Notices/privacy), §4 (third-party
 notices), §8 (privacy/CSP), and the "Dependency and Model Licence Audit" section

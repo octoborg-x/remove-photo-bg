@@ -1,11 +1,17 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
+import { contentSecurityPolicy } from './scripts/write-headers.mjs';
 
 // Stamped into the page at build/serve time so a stale document is obvious: the
 // label, copy and behaviour of this harness change often, and a browser holding
 // an old copy silently shows old text with no way to tell.
 const BUILD_ID = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '');
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  // Same CSP the deployed site gets (scripts/write-headers.mjs), so `vite dev`
+  // and `vite preview` exercise the real policy rather than a laxer one.
+  const env = loadEnv(mode, process.cwd(), '');
+  const csp = contentSecurityPolicy(env.VITE_ASSET_BASE || '');
+  return {
   base: './',
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   plugins: [
@@ -40,6 +46,7 @@ export default defineConfig({
       // current document. Fine in dev: the heavy artifacts are cached by the
       // service worker, not by the HTTP cache.
       'Cache-Control': 'no-store',
+      'Content-Security-Policy': csp,
     },
   },
   preview: {
@@ -50,6 +57,7 @@ export default defineConfig({
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Content-Security-Policy': csp,
     },
   },
   optimizeDeps: {
@@ -57,4 +65,5 @@ export default defineConfig({
     // browser-side import errors in the worker.
     include: [],
   },
+  };
 });

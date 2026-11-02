@@ -304,7 +304,7 @@ closed; Phase 2 may start.
 See `PHASE2_REPORT.md` for the verified acceptance items, measured browser
 results (WASM), and the upload-validation/drop-zone gap closed in this run.
 Hardware (WebGPU) tests remain postponed until a GPU machine is available.
-Phase 3 (notices/privacy + licence audit) is planned in `PHASE3_PLAN.md`.
+Phase 3 (notices/privacy + licence audit) is **DONE** — see `PHASE3_REPORT.md`.
 
 Phase 2 implemented validation, worker lifecycle, model load, status/progress,
 preview, PNG/JPG exports, and error states.

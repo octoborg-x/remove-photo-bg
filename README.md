@@ -66,9 +66,18 @@ https URL that forwards port 12000.
 
 ## Persistent model loading
 
-The model (`model_512.onnx`, ~185 MB) and the ONNX Runtime WASM binaries
-(~42 MB) are large enough that re-downloading them on every visit is the dominant
-cost of using the app. A service worker (`public/sw.js`) fixes that:
+The model and the ONNX Runtime WASM binaries (~14 MB) are large enough that
+re-downloading them on every visit is the dominant cost of using the app. Three
+model sizes are served, all weight-only quantised and materialised to fp32 so the
+runtime kernels are unchanged (the app defaults to the smallest, ~65 MB):
+
+| id | file | size | what |
+|---|---|---|---|
+| `model_512_int8_fp16` | `models/model_512_int8_fp16.onnx` | 68.5 MB | int8 backbone + fp16 decoder — **default** |
+| `model_512_int0_fp16` | `models/model_512_int0_fp16.onnx` | 98.8 MB | fp16 weights (shipped earlier as `c5_best.onnx`) |
+| `model_512_int0_fp32` | `models/model_512_int0_fp32.onnx` | 193.5 MB | fp32 teacher, reference quality |
+
+A service worker (`public/sw.js`) keeps them on the device:
 
 - On the first visit, `/models/*` and `/wasm/*` are fetched from the network and
   stored in a versioned Cache API bucket (`remove-bg-assets-<version>`).

@@ -12,9 +12,27 @@ This doc explains the asset architecture (why the app is a small static shell
 
 | Artifact | Where it lives | Why |
 |---|---|---|
-| `model_512.onnx` (185 MB) | **Hugging Face** (free, no CC) | A generic static host caps a single file well below 185 MB and GitHub Releases sends no CORS header; HF serves with `Access-Control-Allow-Origin` and no size cap. Fetched inside the service worker, which proxies + caches it. |
+| `model_512_int0_fp32.onnx` (193 MB), `model_512_int0_fp16.onnx` (99 MB), `model_512_int8_fp16.onnx` (68 MB) | **Hugging Face** (free, no CC) | A generic static host caps a single file well below 185 MB and GitHub Releases sends no CORS header; HF serves with `Access-Control-Allow-Origin` and no size cap. Fetched inside the service worker, which proxies + caches it. |
 | WASM runtime (13.3 MB `ort-wasm-simd-threaded.wasm` + loaders) | **Same-origin static** | ORT's threaded `pthread` workers bypass the service worker, so the `.wasm` must be same-origin (or carry CORP). The CPU-only bundle fits comfortably in a static site. |
 | App shell | Any static host | ~400 KB (the model is fetched at runtime, not bundled). |
+
+## Served models
+
+Filenames follow `model_<inputSize>_int<weight-bits>_fp<compute-bits>.onnx`.
+All are weight-only quantised and materialised back to fp32, so the runtime
+executes the same fp32 kernels — only the bytes on disk shrink.
+
+| id | size | parity vs fp32 (measured) |
+|---|---:|---|
+| `model_512_int8_fp16` | 68,491,168 B | maxAbs 62/255, IoU@0.5 0.998726, **0 flips** |
+| `model_512_int0_fp16` | 98,799,684 B | maxAbs 3/255, IoU@0.5 0.999944, 0 flips |
+| `model_512_int0_fp32` | 193,514,682 B | reference |
+
+The int8 variant stores `m.bb.*` and `m.squeeze_module.*` at int8 (per-output-channel
+scale) and the decoder at fp16. The output head (`expand_*`/`sub_*`/`index_*`)
+**must** stay fp16 — quantising it flips >1000 pixels. Reproduce with
+`python3 -m scripts.distill.optimize-weights --model <fp32> --out <dir>`
+(`--aggressive` also quantises the decoder: 55,894,256 B, IoU@0.5 0.99922).
 
 ## Why this split
 
@@ -43,15 +61,17 @@ same-origin (only useful when the model fits under the host's per-file cap).
 ## Hosting the site manually
 
 1. **Create the HF model repo** (free). Layout matters — the app requests
-   `/models/model_512.onnx`, so put the file under `models/`:
+   `/models/<name>.onnx`, so put the files under `models/`:
 
    ```
    your-repo/
    └── models/
-       └── model_512.onnx
+       ├── model_512_int8_fp16.onnx
+       ├── model_512_int0_fp16.onnx
+       └── model_512_int0_fp32.onnx
    ```
 
-   Upload it (`huggingface-cli upload` with your token, or drag-and-drop on
+   Upload them (`huggingface-cli upload` with your token, or drag-and-drop on
    https://huggingface.co/new). The base URL is then:
 
    ```

@@ -17,7 +17,8 @@ product are goals, verified in PRIVACY.md updates when reached._
 The only network requests a client makes are:
 
 1. The app shell (HTML/JS/CSS) from its own origin.
-2. The pinned ONNX segmentation model (`public/models/model_512.onnx`).
+2. The pinned ONNX segmentation model (`public/models/model_512_int8_fp16.onnx`,
+   or the user-selected variant).
 3. The ONNX Runtime Web WASM binaries and loader (`public/wasm/…`).
 4. **Test images only in the Phase‑1 harness** (`public/test-images/…`),
    which ship with the repo for validation and are not part of the product.

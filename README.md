@@ -4,9 +4,13 @@ Browser-first background remover for product/marketplace photos. The BiRefNet
 segmentation model runs **inside the user's browser** (ONNX Runtime Web via a
 Web Worker); no image pixels leave the device.
 
-> Phase 1 status. This build is the Phase 1 feasibility harness per
-> `MVP_OPENHANDS.md` §13 (implement only Phase 0 + Phase 1). The verdict and
-> measured results are in [`PHASE1_REPORT.md`](./PHASE1_REPORT.md).
+> **Phase 2 status — product workflow complete and verified.** Phase 1
+> (feasibility) is closed in [`PHASE1_REPORT.md`](./PHASE1_REPORT.md); the Phase 2
+> product workflow (validation, worker lifecycle, model/runtime selectors,
+> auto-load, progress, preview, PNG/JPG export, error states) is confirmed in
+> [`PHASE2_REPORT.md`](./PHASE2_REPORT.md). Phase 3 (notices/privacy + licence
+> audit) is planned in [`PHASE3_PLAN.md`](./PHASE3_PLAN.md). Hardware (WebGPU)
+> tests are postponed until a GPU machine is available.
 
 ## Result — WASM path on a real phone
 

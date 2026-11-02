@@ -64,6 +64,13 @@ CATEGORY_SOURCES = {
     "pet": ["Category:Dogs", "Category:Cats"],
     "glass": ["Category:Glass objects", "Category:Bottles"],
     "object": ["Category:CC-Zero", "Category:PD-self", "Category:PD-old-100"],
+    # Tier B (hair/fur/soft edges). Category names contain "hair"/"fur" so
+    # select.py tiers them B. Deliberately disjoint from fetch-eval.py's
+    # categories (which use Human hair / Hair (anatomy) / Animal fur).
+    "hair": ["Category:Wigs", "Category:Felt", "Category:Wool"],
+    "fur": ["Category:Shih Tzu", "Category:Angora rabbits", "Category:Rabbits",
+            "Category:Sheep", "Category:Teddy bears", "Category:Feathers",
+            "Category:Persian cats", "Category:Chinchillas"],
 }
 
 

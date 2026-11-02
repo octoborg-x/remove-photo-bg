@@ -66,7 +66,19 @@ def main() -> None:
     ap.add_argument("--max-hashes", type=int, default=6)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--images", type=Path, default=Path("data/images"))
+    ap.add_argument("--eval-manifest", type=Path, default=Path("data/eval-manifest.csv"),
+                    help="sha256s here are excluded from training (leakage control)")
     args = ap.parse_args()
+
+    # Leakage control (spec §6-Phase1.2): an image in the evaluation set must
+    # never appear in a training split, even if it also got fetched into the
+    # training manifest.
+    eval_hashes: set[str] = set()
+    if args.eval_manifest.exists():
+        with open(args.eval_manifest) as f:
+            for r in csv.DictReader(f):
+                if r.get("sha256"):
+                    eval_hashes.add(r["sha256"])
 
     rows = list(csv.DictReader(open(args.manifest)))
     rejected = []
@@ -76,10 +88,13 @@ def main() -> None:
         r["reject_reason"] = reason
         rejected.append(r)
 
-    hashes: list[str] = []
+    hashes: list[int] = []
     kept: list[dict] = []
 
     for row in rows:
+        if eval_hashes and row.get("sha256") in eval_hashes:
+            rej(row, "in-eval-set")
+            continue
         path = args.images / f"{row['sha256']}.jpg"
         if not path.exists():
             rej(row, "missing-file")

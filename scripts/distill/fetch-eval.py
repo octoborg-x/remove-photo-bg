@@ -54,7 +54,7 @@ EVAL_SOURCES = {
               "Category:Transparent materials"],
     "clutter": ["Category:Clutter", "Category:Desks"],
     "thin": ["Category:Branches", "Category:Wire",
-             "Category:Sieves", "Category:Musical instruments"],
+             "Category:Sieves", "Category:Spider webs"],
     "lowcontrast": ["Category:Snow", "Category:Fog", "Category:Sand"],
     "small": ["Category:Miniature objects", "Category:Insects",
               "Category:Stamps"],

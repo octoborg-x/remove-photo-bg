@@ -1,0 +1,37 @@
+[
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/",
+    "resourceType": "document"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/assets/index-DuhdnMQ7.js",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/no-dev-server.js",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/models-manifest.json",
+    "resourceType": "fetch"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/favicon.ico",
+    "resourceType": "other"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/inference-worker.js",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "http://localhost:4173/test-images/animal-buddy-dog.jpg",
+    "resourceType": "image"
+  }
+]

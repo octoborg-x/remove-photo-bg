@@ -11,13 +11,15 @@
     "typecheck": "tsc --noEmit",
     "fetch-models": "node scripts/fetch-models.mjs",
     "dev:local": "vite",
-    "build:site": "npm run build && node scripts/strip-large-assets.mjs",
-    "vercel:build": "node scripts/fetch-models.mjs --webgpu --no-models && npm run build && node scripts/strip-large-assets.mjs"
+    "license:audit": "license-checker-rseidelsohn --production && license-checker-rseidelsohn --summary",
+    "build:site": "npm run build && node scripts/write-headers.mjs && node scripts/copy-legal-docs.mjs && node scripts/strip-large-assets.mjs",
+    "vercel:build": "node scripts/fetch-models.mjs --webgpu --no-models && npm run build && node scripts/write-headers.mjs && node scripts/copy-legal-docs.mjs && node scripts/strip-large-assets.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "1.29.0"
   },
   "devDependencies": {
+    "license-checker-rseidelsohn": "^5.0.1",
     "onnxruntime-node": "^1.29.0",
     "puppeteer-core": "^23.11.1",
     "typescript": "^5.6.0",

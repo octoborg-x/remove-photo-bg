@@ -4,13 +4,14 @@ Browser-first background remover for product/marketplace photos. The BiRefNet
 segmentation model runs **inside the user's browser** (ONNX Runtime Web via a
 Web Worker); no image pixels leave the device.
 
-> **Phase 2 status — product workflow complete and verified.** Phase 1
+> **Phase 3 status — notices/privacy + licence audit complete.** Phase 1
 > (feasibility) is closed in [`PHASE1_REPORT.md`](./PHASE1_REPORT.md); the Phase 2
 > product workflow (validation, worker lifecycle, model/runtime selectors,
 > auto-load, progress, preview, PNG/JPG export, error states) is confirmed in
-> [`PHASE2_REPORT.md`](./PHASE2_REPORT.md). Phase 3 (notices/privacy + licence
-> audit) is planned in [`PHASE3_PLAN.md`](./PHASE3_PLAN.md). Hardware (WebGPU)
-> tests are postponed until a GPU machine is available.
+> [`PHASE2_REPORT.md`](./PHASE2_REPORT.md). Phase 3 adds the legal/privacy
+> documents, footer links, and a restrictive CSP, verified in
+> [`PHASE3_REPORT.md`](./PHASE3_REPORT.md). Hardware (WebGPU) tests are postponed
+> until a GPU machine is available.
 
 ## Result — WASM path on a real phone
 
@@ -170,8 +171,10 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 | `npm run dev` | Vite dev server on port 12000 (the port remote sandboxes forward) |
 | `npm run dev:local` | Vite dev server on its default port 5173 |
 | `npm run build` | typecheck + production build |
+| `npm run build:site` | build + generate CSP `_headers` + copy legal docs + strip the model |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run fetch-models` | download + verify model/WASM artifacts (also prepares `public/wasm/` for local dev) |
+| `npm run license:audit` | dependency licence audit (all permissive; see `LICENSE_AUDIT.md`) |
 | `node scripts/run-smoke.mjs <url> [--image …] [--runs n] [--out dir]` | headless browser smoke test |
 
 ## Deployment
@@ -213,15 +216,28 @@ That produces a WebGPU-capable site. Verify with the Colab T4 notebook
 
 ## Privacy
 
-- Processing happens entirely in the browser. See [`PRIVACY.md`](./PRIVACY.md).
-- The smoke harness records all network requests; verification results are in
-  `PHASE1_REPORT.md` and `smoke-results-final/requests.json`.
+- Processing happens entirely in the browser; pixels never leave the device.
+  See [`PRIVACY.md`](./PRIVACY.md).
+- A restrictive Content-Security-Policy is generated per build
+  (`scripts/write-headers.mjs`) and applied in dev, preview, and on the deployed
+  host: `default-src 'self'`, `script-src 'self' 'wasm-unsafe-eval'`,
+  `connect-src 'self'` (plus the asset origin only when `VITE_ASSET_BASE` is
+  set), `worker-src 'self' blob:`, `object-src 'none'`, `frame-ancestors 'none'`.
+  `'wasm-unsafe-eval'` is the minimal allowance onnxruntime-web needs to compile
+  its WebAssembly module; no JS `eval` is permitted.
+- The smoke harness records all network requests; results are in
+  `PHASE1_REPORT.md`, `PHASE2_REPORT.md`, and `smoke-results*/requests.json`.
 
 ## Licensing / notices
 
-- [`THIRD_PARTY_LEGAL_NOTICES.md`](./THIRD_PARTY_LEGAL_NOTICES.md) — Phase-1
-  provenance + hashes; full licence audit pending Phase 3.
+- [`THIRD_PARTY_LEGAL_NOTICES.md`](./THIRD_PARTY_LEGAL_NOTICES.md) — model and
+  dependency provenance, hashes, and exact licence texts.
+- [`LICENSE_AUDIT.md`](./LICENSE_AUDIT.md) — full dependency licence audit
+  (Phase 3): 247 packages, all permissive, no copyleft. Reproduce with
+  `npm run license:audit`.
 - [`MODEL_CARD.md`](./MODEL_CARD.md) — model provenance and semantics.
+- The app footer links these documents; the build copies them into `dist/`
+  (`scripts/copy-legal-docs.mjs`) so the links resolve on the deployed site.
 
 ## Known Phase-1 limitations
 

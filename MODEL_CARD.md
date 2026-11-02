@@ -1,8 +1,8 @@
-# MODEL_CARD — BiRefNet_lite (ONNX fp32)
+# MODEL_CARD — BiRefNet_lite (ONNX, 512×512)
 
-Phase-1 record for the model used by this project. See also
-`THIRD_PARTY_LEGAL_NOTICES.md` (hashes/licences) and `PHASE1_REPORT.md`
-(measured results and verdict).
+Current record for the models served by this project. See also
+`THIRD_PARTY_LEGAL_NOTICES.md` (hashes/licences), `LICENSE_AUDIT.md`
+(dependency/model audit), and `PHASE1_REPORT.md` (measured results and verdict).
 
 ## Identity
 
@@ -13,7 +13,7 @@ Phase-1 record for the model used by this project. See also
     in card YAML and `license:mit` tag; verified 2026-10-25)
   - Source repository: https://github.com/ZhengPeng7/BiRefNet
   - Published licence declaration on the model card: MIT
-- **ONNX artifact used**: `Phoenix-ActuallyFree/BiRefNet_lite_512-ONNX`
+- **Source ONNX export**: `Phoenix-ActuallyFree/BiRefNet_lite_512-ONNX`
   - Model page: https://huggingface.co/Phoenix-ActuallyFree/BiRefNet_lite_512-ONNX
   - Exact file: `onnx/model.onnx`
   - Size: 193,514,682 bytes (≈185 MB)
@@ -21,6 +21,26 @@ Phase-1 record for the model used by this project. See also
   - Fixed input: 512×512
 - **Type**: third-party ONNX export (fp32) of the upstream checkpoint — **not**
   an upstream file.
+- **Shipped variants**: the three artifacts below are the fp32 export above with
+  **weight-only quantised storage materialised back to fp32 compute**, so the
+  runtime kernels, the input/output contract, and the model behaviour are
+  unchanged; only the on-disk size differs. They are served from the
+  `Octoborg/remove-photo-bg` Hugging Face Space and pinned by SHA-256 in
+  `public/models-manifest.json`.
+
+  | id (manifest) | size | method | role |
+  |---|---|---|---|
+  | `model_512_int8_fp16` | 68,491,168 B (≈65 MB) | per-output-channel **int8** for the backbone (`m.bb.*`, `m.squeeze_module.*`) + **fp16** decoder, all cast back to fp32 | **default** |
+  | `model_512_int0_fp16` | 98,799,684 B (≈94 MB) | weight-only fp16 storage, fp32 compute (shipped earlier as `c5_best.onnx`) | optional |
+  | `model_512_int0_fp32` | 193,514,682 B (≈184 MB) | the fp32 teacher, no quantisation | reference |
+
+  **Measured parity of the default vs the fp32 teacher** (browser, WASM,
+  `glass-wine.jpg`): IoU@0.5 **0.998726**, **0** pixels crossing the 0.5
+  threshold; the fp16 variant 0.999944 / 0 flips. Session load 2075 → ~950 ms.
+  The strict ≤0.02 per-pixel gate is **not** met (max 0.10–0.14,
+  boundary-dominated) — recorded honestly, not hidden. The output head
+  (`expand_*`/`sub_*`/`index_*`) must stay fp16: quantising it flips >1000
+  pixels, which is why "quantise everything" collapses.
 - **Provenance verification performed** (against
   `ZhengPeng7/BiRefNet_lite` `model.safetensors`, 586 tensors):
   - All 379 backbone tensors that map by name are bit-identical (max abs
@@ -44,7 +64,7 @@ Phase-1 record for the model used by this project. See also
 | Output | `output_image` — `[1, 1, 512, 512]` probabilities in `[0,1]` |
 | Activation | Sigmoid is **baked into the graph**; the output is already a probability map. Do not apply sigmoid again. |
 | Postprocessing | Upscale soft mask to original dimensions (bilinear), use as alpha over the original pixels |
-| Runtime | onnxruntime-web 1.29.0 (WebGPU preferred, WASM fallback) |
+| Runtime | onnxruntime-web 1.29.0 — GPU (WebGPU) when the browser exposes an adapter **and** the host serves the WebGPU-capable ORT bundle, else CPU (WASM) |
 | Peak transient memory | ~1.1 GB at 512×512 (was ~1.5 GB at 1024×1024 on native CPU) |
 
 ## Alternative 512 exports reviewed and rejected (2026-10-25)
@@ -74,6 +94,10 @@ question about training data has been adjudicated. Date checked: 2026-10-24
 
 ## Distribution note
 
-- Redistributed only as a self-hosted first-party asset from this app's origin.
+- Served from the `Octoborg/remove-photo-bg` Hugging Face Space and proxied
+  same-origin by the app's service worker; the WASM runtime ships same-origin
+  from the app itself.
 - Re-downloadable and verifiable via `npm run fetch-models` (fails on SHA-256 mismatch).
-- Phase-1 flag: ≈185 MB (over the 100 MB download-size flag in §13).
+- Download sizes: **65 MB default** (`model_512_int8_fp16`), 94 MB
+  (`model_512_int0_fp16`), 184 MB (`model_512_int0_fp32`). The default is under
+  the Phase-1 100 MB download-size flag; the fp32 reference is over it.

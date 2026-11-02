@@ -17,27 +17,6 @@ if (ort.env.webgpu) ort.env.webgpu.powerPreference = 'high-performance';
 // session that fails to build/run falls back to WASM with a provider-fallback
 // message.
 
-function adapterSubstrings(): string {
-  try {
-    // Reuse the AdapterLike cast: ort.env.webgpu.adapter is TryGetGlobalType<'GPUAdapter'>,
-    // which resolves to {} without @webgpu/types, so .info is not visible on it directly.
-    const adapter = adapterInfo();
-    if (!adapter) return '';
-    const info = adapter.info ?? {};
-    return [info.device, info.architecture, info.vendor, info.description]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-function webgpuAvailable(): boolean {
-  const blob = adapterSubstrings();
-  return blob.length > 0;
-}
-
 let session: ort.InferenceSession | null = null;
 let lastProvider = 'none';
 let modelUrl: string | null = null;

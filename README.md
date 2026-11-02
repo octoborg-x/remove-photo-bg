@@ -4,13 +4,13 @@ Browser-first background remover for product/marketplace photos. The BiRefNet
 segmentation model runs **inside the user's browser** (ONNX Runtime Web via a
 Web Worker); no image pixels leave the device.
 
-> **Phase 3 status — notices/privacy + licence audit complete.** Phase 1
-> (feasibility) is closed in [`PHASE1_REPORT.md`](./PHASE1_REPORT.md); the Phase 2
-> product workflow (validation, worker lifecycle, model/runtime selectors,
-> auto-load, progress, preview, PNG/JPG export, error states) is confirmed in
-> [`PHASE2_REPORT.md`](./PHASE2_REPORT.md). Phase 3 adds the legal/privacy
-> documents, footer links, and a restrictive CSP, verified in
-> [`PHASE3_REPORT.md`](./PHASE3_REPORT.md). Hardware (WebGPU) tests are postponed
+> **Phase 4 status — quality pass complete.** Phase 1 (feasibility) is closed in
+> [`PHASE1_REPORT.md`](./PHASE1_REPORT.md); the Phase 2 product workflow is
+> confirmed in [`PHASE2_REPORT.md`](./PHASE2_REPORT.md); Phase 3 (legal/privacy
+> documents, footer links, restrictive CSP) is verified in
+> [`PHASE3_REPORT.md`](./PHASE3_REPORT.md). Phase 4 adds ESLint, Vitest unit
+> tests, puppeteer-core browser tests, and a `npm run verify` gate, recorded in
+> [`PHASE4_REPORT.md`](./PHASE4_REPORT.md). Hardware (WebGPU) tests are postponed
 > until a GPU machine is available.
 
 ## Result — WASM path on a real phone
@@ -173,6 +173,10 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 | `npm run build` | typecheck + production build |
 | `npm run build:site` | build + generate CSP `_headers` + copy legal docs + strip the model |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint (flat config) over `src/`, `scripts/`, `public/` |
+| `npm run test` | Vitest unit tests (validation, mask maths, progress, manifest) |
+| `npm run test:browser` | puppeteer-core flow tests (upload, inference, exports, errors, keyboard) |
+| `npm run verify` | lint + typecheck + unit tests + build |
 | `npm run fetch-models` | download + verify model/WASM artifacts (also prepares `public/wasm/` for local dev) |
 | `npm run license:audit` | dependency licence audit (all permissive; see `LICENSE_AUDIT.md`) |
 | `node scripts/run-smoke.mjs <url> [--image …] [--runs n] [--out dir]` | headless browser smoke test |

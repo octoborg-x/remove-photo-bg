@@ -165,6 +165,16 @@ evaluation set covers hair/fur separately. A small Tier-B training fetch
 recommended Phase-2 top-up before training, since the spec wants real Tier-B
 images in training.
 
+**Tier-B top-up (added 2026-11-01, run pending):** the museum sources yield no
+hair/fur/soft-edge rows, so a dedicated Tier-B fetch was added —
+`fetch-cc0.py --categories hair,fur` draws from CC0/PD-heavy Commons categories
+whose names contain *hair*/*fur* (Wigs, Felt, Wool, Shih Tzu, Angora rabbits,
+Rabbits, Sheep, Teddy bears, Feathers, Persian cats, Chinchillas) so `select.py`
+tiers them B. These categories are disjoint from `fetch-eval.py`'s hair/fur
+categories, and `select.py` now hard-excludes any sha256 present in
+`data/eval-manifest.csv` (leakage control, spec §6-Phase1.2). Counts below are
+filled once the fetch runs on Colab.
+
 Evaluation set: `data/eval-manifest.csv` + `data/eval-images/` (see §3.3);
 counts filled below once `fetch-eval.py` completes.
 

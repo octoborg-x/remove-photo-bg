@@ -31,6 +31,19 @@
         border: 1px solid #bbb;
       }
       .hint { color: #666; font-size: 0.9rem; margin: 0.25rem 0; }
+      .dropZone {
+        display: flex; flex-direction: column; gap: 0.25rem;
+        border: 2px dashed #bbb; border-radius: 8px; padding: 1.25rem;
+        margin: 0.75rem 0; text-align: center; cursor: pointer; background: #fafafa;
+      }
+      .dropZone:focus-visible { outline: 3px solid #3b82f6; outline-offset: 2px; }
+      .dropZone.dragover { border-color: #3b82f6; background: #eff6ff; }
+      @media (prefers-reduced-motion: no-preference) {
+        .dropZone { transition: background-color 0.15s ease, border-color 0.15s ease; }
+      }
+      button:focus-visible, select:focus-visible, a:focus-visible, input:focus-visible {
+        outline: 3px solid #3b82f6; outline-offset: 2px;
+      }
     </style>
   </head>
   <body>
@@ -66,6 +79,12 @@
       <button id="runAll" disabled>Remove background</button>
       <button id="copyReport">Copy device report</button>
     </p>
+    <div id="dropZone" class="dropZone" role="button" tabindex="0"
+         aria-label="Drop a JPEG, PNG, or WebP image here, or press Enter to choose a file">
+      <strong>Drop an image here</strong>
+      <span class="hint">JPEG, PNG, or WebP — up to <span id="limitBytes">20 MB</span>,
+        longest side <span id="limitSide">4096</span> px</span>
+    </div>
     <div>
       <strong>Input image</strong>
       <div id="inputBox"></div>

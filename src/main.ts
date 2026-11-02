@@ -17,6 +17,11 @@ import {
 } from './features/background-removal/mask-postprocess';
 import { canvasToPngDataUrl, canvasToJpegDataUrl } from './features/background-removal/export-image';
 import {
+  validateFileTypeAndSize,
+  validateDimensions,
+  DEFAULT_UPLOAD_LIMITS,
+} from './features/background-removal/image-validation';
+import {
   ensureAssetCache,
   cachedAssetCount,
   onAssetCacheMessage,
@@ -59,6 +64,14 @@ const maskThresholdInput = document.getElementById('maskThreshold')! as HTMLInpu
 const maskThresholdValue = document.getElementById('maskThresholdValue')!;
 const maskFeatherInput = document.getElementById('maskFeather')! as HTMLInputElement;
 const maskFeatherValue = document.getElementById('maskFeatherValue')!;
+const dropZone = document.getElementById('dropZone')!;
+const limitBytesEl = document.getElementById('limitBytes')!;
+const limitSideEl = document.getElementById('limitSide')!;
+
+// Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
+// markup, so a changed limit never leaves stale copy on the page.
+limitBytesEl.textContent = `${Math.round(DEFAULT_UPLOAD_LIMITS.maxBytes / 1048576)} MB`;
+limitSideEl.textContent = String(DEFAULT_UPLOAD_LIMITS.maxLongestSide);
 
 // Persisted user preferences: model id, provider, and mask adjustments.
 // Scrubbed to safe values on read so stale/corrupt entries are ignored.
@@ -208,13 +221,32 @@ function showInputImage(img: HTMLImageElement): void {
 }
 
 async function loadImageFromFile(file: File): Promise<void> {
+  // Validate the declared type/size before decoding (never trust the extension),
+  // then the decoded dimensions after. Reject with a message the user can act on.
+  const typeCheck = validateFileTypeAndSize(file);
+  if (!typeCheck.ok) {
+    error(typeCheck.reason);
+    return;
+  }
   const url = URL.createObjectURL(file);
   const img = new Image();
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error('Failed to decode image'));
-    img.src = url;
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Failed to decode image'));
+      img.src = url;
+    });
+  } catch (e) {
+    URL.revokeObjectURL(url);
+    error(e instanceof Error ? e.message : String(e));
+    return;
+  }
+  const dimCheck = validateDimensions(img.naturalWidth, img.naturalHeight);
+  if (!dimCheck.ok) {
+    URL.revokeObjectURL(url);
+    error(dimCheck.reason);
+    return;
+  }
   const canvas = document.createElement('canvas');
   canvas.width = img.naturalWidth;
   canvas.height = img.naturalHeight;
@@ -227,7 +259,11 @@ async function loadImageFromFile(file: File): Promise<void> {
   currentObjectUrl = url;
   showInputImage(img);
   runAllBtn.disabled = !modelReady;
-  log(`Loaded image: ${file.name} (${canvas.width}x${canvas.height})`);
+  // Clear any previous error text so a successful load after a rejected one does
+  // not leave a stale error on the stage line.
+  setStage(modelReady ? 'Image ready — click “Remove background”' : 'Image ready — waiting for the model…');
+  // Do not log the filename (MVP §8: no filenames, EXIF, or raw user input).
+  log(`Loaded image: ${canvas.width}x${canvas.height}`);
 }
 
 async function loadImageFromUrl(url: string): Promise<void> {
@@ -687,7 +723,7 @@ function finishedRun(): void {
   runAllBtn.disabled = false;
 }
 
-pickFileBtn.addEventListener('click', () => {
+function chooseFile(): void {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/jpeg,image/png,image/webp';
@@ -696,6 +732,29 @@ pickFileBtn.addEventListener('click', () => {
     if (f) await loadImageFromFile(f);
   };
   input.click();
+}
+
+pickFileBtn.addEventListener('click', chooseFile);
+
+// Drag/drop (MVP §6) and keyboard activation of the drop zone (it is a
+// role=button with tabindex, so Enter/Space must do what a click does).
+dropZone.addEventListener('click', chooseFile);
+dropZone.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    chooseFile();
+  }
+});
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const f = e.dataTransfer?.files?.[0];
+  if (f) await loadImageFromFile(f);
 });
 
 runAllBtn.addEventListener('click', () => {

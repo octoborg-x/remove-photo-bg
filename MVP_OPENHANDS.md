@@ -1,10 +1,12 @@
 # remove-bg-photo — MVP Build Specification for OpenHands
 
-**Updated:** 2026-10-31  
+**Updated:** 2026-11-02  
 **Status:** Phase 1 (model feasibility) is **DONE** — see `PHASE1_REPORT.md`.  
-Phase 2 (product workflow) is **IN PROGRESS**; proceed autonomously through the
-end of Phase 2, then stop and report. See §11 for the expanded Phase 2 scope,
-including the model/runtime selector added on 2026-10-31.  
+Phase 2 (product workflow) is **DONE** — see `PHASE2_REPORT.md` (confirmed
+2026-11-02). Next is Phase 3 (notices/privacy + licence audit); see
+`PHASE3_PLAN.md`. Hardware (WebGPU) tests are postponed until a GPU machine is
+available. See §11 for the Phase 2 scope, including the model/runtime selector
+added on 2026-10-31.  
 **Goal:** Build a browser-first background remover for marketplace/product photos.  
 **Budget:** $0 during development; target under $50/month after validation.  
 **Agent:** OpenHands.
@@ -298,8 +300,14 @@ path + SHA-256, browser smoke test, tensor semantics + transparent PNG,
 no image-pixel network requests, model/runtime compatibility). Phase 1 is
 closed; Phase 2 may start.
 
-### Phase 2 — Product workflow (IN PROGRESS — expanded 2026-10-31)
-Implement validation, worker lifecycle, model load, status/progress, preview, PNG/JPG exports, and error states.
+### Phase 2 — Product workflow — ✅ DONE (confirmed 2026-11-02)
+See `PHASE2_REPORT.md` for the verified acceptance items, measured browser
+results (WASM), and the upload-validation/drop-zone gap closed in this run.
+Hardware (WebGPU) tests remain postponed until a GPU machine is available.
+Phase 3 (notices/privacy + licence audit) is planned in `PHASE3_PLAN.md`.
+
+Phase 2 implemented validation, worker lifecycle, model load, status/progress,
+preview, PNG/JPG exports, and error states.
 
 Expanded Phase 2 scope added on 2026-10-31 (model + runtime selector):
 

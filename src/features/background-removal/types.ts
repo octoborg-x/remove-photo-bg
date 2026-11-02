@@ -3,7 +3,7 @@
 // download URL, and the service worker's per-model cache bucket.
 export interface ModelManifestEntry {
   id: string;
-  /** Path served by this origin through the asset service worker, e.g. '/models/c5_best.onnx'. */
+  /** Path served by this origin through the asset service worker, e.g. '/models/model_512_int8_fp16.onnx'. */
   file: string;
   /** Relative URL the inference worker fetches. */
   url: string;
@@ -59,7 +59,7 @@ export type WorkerProgressMessage =
       ms: number;
       provider: string;
       adapter?: string;
-      /** The manifest id the session was built for (e.g. 'c5_best' or 'model_512'). */
+      /** The manifest id the session was built for (e.g. 'model_512_int8_fp16'). */
       modelId?: string;
     }
   | { kind: 'provider-fallback'; from: string; to: string; reason: string }

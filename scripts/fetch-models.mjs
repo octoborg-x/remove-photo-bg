@@ -1,14 +1,18 @@
 // Downloads the pinned ground-truth/background-removal ONNX artifacts and
 // verifies their SHA-256 before writing the model manifest.
 //
-// Both models are served from the Octoborg/remove-photo-bg Hugging Face space
+// All models are served from the Octoborg/remove-photo-bg Hugging Face space
 // (free hosting, CORS-enabled), which is exactly what the deployed service
-// worker proxies (VITE_ASSET_BASE). The shipped Phase-2 default is
-// `c5_best.onnx` — a weight-only-fp16 distilled student (~94 MiB download while
-// keeping fp32 compute); `model_512.onnx` is the Phase-1 fp32 export and stays
-// selectable. Every artifact is pinned by URL and SHA-256; the generated
-// `public/models-manifest.json` is the single source of truth the UI, the
-// service worker, and the smoke harness read.
+// worker proxies (VITE_ASSET_BASE). Every artifact is pinned by URL and SHA-256;
+// the generated `public/models-manifest.json` is the single source of truth the
+// UI, the service worker, and the smoke harness read.
+//
+// Naming: `model_<inputSize>_int<weight-bits>_fp<compute-bits>.onnx`, so the
+// filename states the weight precision and the compute precision. E.g.
+// `model_512_int0_fp32` is the full-precision teacher (no int quantisation,
+// fp32 compute) and `model_512_int8_fp16` stores the backbone at int8 and the
+// rest at fp16 (fp32 compute). The default is the smallest artifact that keeps
+// zero pixels crossing the 0.5 threshold on the repo test images.
 //
 // Also copies the onnxruntime-web WASM files we need into public/wasm.
 //
@@ -33,27 +37,40 @@ const HF_SPACE = 'https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve
 
 const MODELS = [
   {
-    id: 'c5_best',
-    file: 'models/c5_best.onnx',
-    url: `${HF_SPACE}/models/c5_best.onnx`,
-    size: 98799684,
-    sha256: '099c89de1d9a3da27af3d5329460f543e5d9390fc45e7ba7d0e7360b378d5f97',
-    label: 'c5_best (fast, ~94 MB)',
+    id: 'model_512_int8_fp16',
+    file: 'models/model_512_int8_fp16.onnx',
+    url: `${HF_SPACE}/models/model_512_int8_fp16.onnx`,
+    size: 68491168,
+    sha256: '524bd904f68a48c3390bd27ab85d9e8107af0e1b8e79f20197ecdeaad8b17046',
+    label: 'int8+fp16 (small, ~65 MB)',
     description:
-      'Newer distilled student, weight-only fp16 (~94 MB download). Default model when no other criterion applies.',
+      'Weight-only int8 backbone (m.bb.*, m.squeeze_module.*) + fp16 decoder, materialised to fp32. 68.5 MB, 0 pixels flip vs the teacher on the repo test images. Default: smallest artifact with no 0.5-threshold flips.',
     inputSize: 512,
     outputIsProbability: true,
     default: true,
   },
   {
-    id: 'model_512',
-    file: 'models/model_512.onnx',
-    url: `${HF_SPACE}/models/model_512.onnx`,
+    id: 'model_512_int0_fp16',
+    file: 'models/model_512_int0_fp16.onnx',
+    url: `${HF_SPACE}/models/model_512_int0_fp16.onnx`,
+    size: 98799684,
+    sha256: '099c89de1d9a3da27af3d5329460f543e5d9390fc45e7ba7d0e7360b378d5f97',
+    label: 'fp16 weights (~94 MB)',
+    description:
+      'Weight-only fp16 storage, fp32 compute (previously shipped as c5_best.onnx). Byte-identical to that artifact.',
+    inputSize: 512,
+    outputIsProbability: true,
+    default: false,
+  },
+  {
+    id: 'model_512_int0_fp32',
+    file: 'models/model_512_int0_fp32.onnx',
+    url: `${HF_SPACE}/models/model_512_int0_fp32.onnx`,
     size: 193514682,
     sha256: 'eaafaa10f19c63b77e2bae77bf4b2f59054c208ea08b8c6648f95ef36a3b6b87',
-    label: 'model_512 (full, ~184 MB)',
+    label: 'fp32 full (~184 MB)',
     description:
-      'Phase-1 fp32 export of BiRefNet_lite at 512x512 (earlier generation, larger download).',
+      'Phase-1 fp32 export of BiRefNet_lite at 512x512 (the teacher, no quantisation). Largest download; reference quality.',
     inputSize: 512,
     outputIsProbability: true,
     default: false,

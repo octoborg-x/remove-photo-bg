@@ -718,7 +718,7 @@ declare global {
     onSmokeDone: ((result: RunDone, maskDataUrl: string) => void) | null;
     smokeModelReady: boolean;
     smokeProvider: string;
-    /** Manifest id of the currently loaded model, e.g. 'c5_best'. */
+    /** Manifest id of the currently loaded model, e.g. 'model_512_int8_fp16'. */
     smokeModelId: string;
     crossOriginIsolated: boolean;
   }
@@ -919,7 +919,7 @@ async function boot(): Promise<void> {
 
   // Resolve defaults: provider can come from ?provider=, then localStorage,
   // then the GPU gate; model likewise from ?model=, then localStorage, then the
-  // manifest default (newest = c5_best.onnx).
+  // manifest default (the smallest artifact, model_512_int8_fp16.onnx).
   selectedProvider = resolveProvider();
   selectedModel = resolveModel();
 

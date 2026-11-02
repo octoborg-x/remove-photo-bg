@@ -1,7 +1,7 @@
 // Service worker: keeps the model and WASM runtime on the device so a page
 // reload does not re-download ~235 MB.
 //
-// Why this exists: the inference worker fetches /models/model_512.onnx (~185 MB)
+// Why this exists: the inference worker fetches /models/*.onnx (65-193 MB)
 // and onnxruntime-web fetches the /wasm/* binaries (~42 MB). Static hosts serve
 // them with `Cache-Control: no-cache`, and the HTTP disk cache is unreliable for
 // files this large, so without an explicit store every visit started from zero.
@@ -32,7 +32,7 @@ const CACHE_VERSION = 'v8';
 const CACHE_NAME = `remove-bg-assets-${CACHE_VERSION}`;
 const MODEL_BUCKET_PREFIX = 'remove-bg-model-';
 
-// leaf name (e.g. 'c5_best.onnx') -> { id, sha256, file } read from
+// leaf name (e.g. 'model_512_int8_fp16.onnx') -> { id, sha256, file } read from
 // /models-manifest.json (the generated source of truth; see
 // scripts/fetch-models.mjs). Loaded on activate and lazily on demand, so a
 // first-ever load with a slow manifest still works.
@@ -106,7 +106,7 @@ const PERSISTENT_DIRS = ['models/', 'wasm/'];
 const REMOTE_DIRS = ['models/'];
 
 // Relative path under the app scope for a persistent request, or null if the
-// request is not one we persist (e.g. `models/` -> `model_512.onnx`).
+// request is not one we persist (e.g. `models/` -> `model_512_int8_fp16.onnx`).
 function persistentRelativePath(url) {
   // Derive the base path from the worker's own scope so a sub-path deployment
   // (vite `base: './'`) still matches, rather than assuming a root deployment.

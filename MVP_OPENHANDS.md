@@ -1,12 +1,13 @@
 # remove-bg-photo — MVP Build Specification for OpenHands
 
 **Updated:** 2026-11-02  
-**Status:** Phase 1 (model feasibility) is **DONE** — see `PHASE1_REPORT.md`.  
-Phase 2 (product workflow) is **DONE** — see `PHASE2_REPORT.md` (confirmed
-2026-11-02). Next is Phase 3 (notices/privacy + licence audit); see
-`PHASE3_PLAN.md`. Hardware (WebGPU) tests are postponed until a GPU machine is
-available. See §11 for the Phase 2 scope, including the model/runtime selector
-added on 2026-10-31.  
+**Status:** Phase 1 (model feasibility) is **DONE** — see `PHASE1_REPORT.md`.
+Phase 2 (product workflow) is **DONE** — see `PHASE2_REPORT.md`. Phase 3
+(notices/privacy + licence audit) is **DONE** — see `PHASE3_REPORT.md`. Phase 4
+(quality: lint, typecheck, unit + browser tests, build) is **DONE** — see
+`PHASE4_REPORT.md`. Next is Phase 5 (delivery). Hardware (WebGPU) tests are
+postponed until a GPU machine is available. See §11 for the Phase 2 scope,
+including the model/runtime selector added on 2026-10-31.
 **Goal:** Build a browser-first background remover for marketplace/product photos.  
 **Budget:** $0 during development; target under $50/month after validation.  
 **Agent:** OpenHands.
@@ -341,11 +342,11 @@ Expanded Phase 2 scope added on 2026-10-31 (model + runtime selector):
 - Keep the existing network/privacy guarantees (no pixels off-device) and the
   worker/session/error-state lifecycle from Phase 1 test harness.
 
-### Phase 3 — Notices/privacy
-Create `MODEL_CARD.md`, `THIRD_PARTY_LEGAL_NOTICES.md`, and `PRIVACY.md` from verified sources. Add footer links and CSP. Preserve required notices. Document the MIT declaration as the project basis without claiming every training-data question is definitively resolved.
+### Phase 3 — Notices/privacy — ✅ DONE
+See `PHASE3_REPORT.md`. Create `MODEL_CARD.md`, `THIRD_PARTY_LEGAL_NOTICES.md`, and `PRIVACY.md` from verified sources. Add footer links and CSP. Preserve required notices. Document the MIT declaration as the project basis without claiming every training-data question is definitively resolved.
 
-### Phase 4 — Quality
-Run lint, typecheck, unit tests, browser tests where available, and production build. Run a real manual model smoke test and record browser/device results. Fix failures rather than suppressing tests.
+### Phase 4 — Quality — ✅ DONE
+See `PHASE4_REPORT.md`. Run lint, typecheck, unit tests, browser tests where available, and production build. Run a real manual model smoke test and record browser/device results. Fix failures rather than suppressing tests.
 
 ### Phase 5 — Delivery
 Update README with install/run/test/build, model-download instructions, browser requirements, privacy, provenance, and notices. `.env.example` should contain names only and should not require a secret for browser-only inference. Report changed files, model revision/hash, actual test results, limitations, and deployment steps. Use a feature branch if available; do not force-push or push directly to the default branch without permission. Do not spend money without approval.

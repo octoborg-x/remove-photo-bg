@@ -6,8 +6,6 @@
 //   pred_pil.resize(image.size)  -> upscale mask to original dimensions
 // Then mask is used as the image alpha.
 
-import { MODEL_SIZE } from './image-preprocess';
-
 export function probabilityToMask(prob: Float32Array): Uint8ClampedArray {
   const mask = new Uint8ClampedArray(prob.length);
   for (let i = 0; i < prob.length; i++) {

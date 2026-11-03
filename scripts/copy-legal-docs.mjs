@@ -4,7 +4,7 @@
 // readable in the browser and needs no extra tooling.
 //
 // The source files stay the single copy; this only mirrors them into the build.
-import { copyFileSync, mkdirSync, existsSync } from 'node:fs';
+import { copyFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 

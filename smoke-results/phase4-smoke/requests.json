@@ -1,0 +1,37 @@
+[
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:4400/",
+    "resourceType": "document"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:4400/assets/index-CUNCoUxr.js",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:4400/no-dev-server.js",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:4400/models-manifest.json",
+    "resourceType": "fetch"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:4400/favicon.ico",
+    "resourceType": "other"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:4400/inference-worker.js",
+    "resourceType": "script"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:4400/test-images/glass-wine.jpg",
+    "resourceType": "image"
+  }
+]

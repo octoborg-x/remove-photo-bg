@@ -4,14 +4,42 @@ Browser-first background remover for product/marketplace photos. The BiRefNet
 segmentation model runs **inside the user's browser** (ONNX Runtime Web via a
 Web Worker); no image pixels leave the device.
 
-> **Phase 4 status — quality pass complete.** Phase 1 (feasibility) is closed in
-> [`PHASE1_REPORT.md`](./PHASE1_REPORT.md); the Phase 2 product workflow is
-> confirmed in [`PHASE2_REPORT.md`](./PHASE2_REPORT.md); Phase 3 (legal/privacy
-> documents, footer links, restrictive CSP) is verified in
-> [`PHASE3_REPORT.md`](./PHASE3_REPORT.md). Phase 4 adds ESLint, Vitest unit
-> tests, puppeteer-core browser tests, and a `npm run verify` gate, recorded in
-> [`PHASE4_REPORT.md`](./PHASE4_REPORT.md). Hardware (WebGPU) tests are postponed
-> until a GPU machine is available.
+> **All five MVP phases are complete** (delivery: [`PHASE5_REPORT.md`](./PHASE5_REPORT.md)).
+> Phase 1 (feasibility) is closed in [`PHASE1_REPORT.md`](./PHASE1_REPORT.md);
+> Phase 2 (product workflow) in [`PHASE2_REPORT.md`](./PHASE2_REPORT.md); Phase 3
+> (legal/privacy documents, footer links, restrictive CSP) in
+> [`PHASE3_REPORT.md`](./PHASE3_REPORT.md); Phase 4 (ESLint, Vitest unit tests,
+> puppeteer-core browser tests, `npm run verify`) in
+> [`PHASE4_REPORT.md`](./PHASE4_REPORT.md). Hardware (WebGPU) tests remain
+> postponed until a GPU machine is available.
+
+## Quick start
+
+```bash
+npm ci                 # install (Node ≥ 20)
+npm run fetch-models   # download + SHA-256-verify the model into public/models/
+npm run dev            # http://localhost:12000  (dev:local → Vite's 5173)
+```
+
+Open the URL the dev server prints (not `index.html` directly — the page needs
+Vite to compile `src/main.ts`). Pick a photo, press **Remove background**, and
+download the transparent PNG or the white-background JPG.
+
+```bash
+npm run verify         # lint + typecheck + unit tests + production build
+npm run test:browser   # real-browser flow tests (needs Chromium + fetched model)
+```
+
+No secret or account is required — inference is entirely local. See
+[`.env.example`](./.env.example) for the one optional build-time variable.
+
+### Browser requirements
+
+- A modern browser with **Web Workers + WebAssembly SIMD/threads**: Chrome/Edge
+  ≥ 90, Firefox ≥ 90, Safari ≥ 15. WebGPU is used automatically when an adapter
+  is present; otherwise the app runs on WASM (CPU).
+- First visit downloads the model once (~68 MB by default) and caches it in the
+  Cache API; later visits load it from the device.
 
 ## Result — WASM path on a real phone
 
@@ -52,22 +80,21 @@ behavior described below.
 ## Requirements
 
 - Node.js ≥ 20 (tested on v24)
-- System Chromium for the headless smoke test (`/usr/bin/chromium`; override with `CHROME_BIN`)
+- A browser with Web Workers + WebAssembly SIMD/threads (see
+  [Browser requirements](#browser-requirements)); WebGPU is optional
+- System Chromium for the headless smoke/browser tests (`/usr/bin/chromium`;
+  override with `CHROME_BIN`)
 - Python 3 + `pip` (only for the optional reference-inference script)
-- A GPU with WebGPU is strongly recommended (see latency notes in `PHASE1_REPORT.md`)
+- A GPU with WebGPU is recommended for latency (see `PHASE1_REPORT.md`); WASM
+  works everywhere
 
 ## Setup
 
-```bash
-npm install
-npm run fetch-models   # downloads model + WASM into public/ with SHA-256 checks
-npm run dev            # http://localhost:12000 (dev:local keeps the Vite default 5173)
-```
-
-Open the URL the dev server prints, not `index.html` itself: the page needs Vite
-to compile `src/main.ts`, so opening the file directly (or through an editor's
-file preview) renders a page that cannot start. On a remote sandbox, use the
-https URL that forwards port 12000.
+See [Quick start](#quick-start) for the three commands. Open the URL the dev
+server prints, not `index.html` itself: the page needs Vite to compile
+`src/main.ts`, so opening the file directly (or through an editor's file
+preview) renders a page that cannot start. On a remote sandbox, use the https
+URL that forwards port 12000.
 
 ## Persistent model loading
 
@@ -294,6 +321,6 @@ That produces a WebGPU-capable site. Verify with the Colab T4 notebook
   Both default to 0/off so the raw model mask is unchanged; they persist in
   `localStorage` and can be driven from URLs for testing
   (`?maskThreshold=30&maskFeather=8`).
-- The full product UI ships with Phase 2 (model/provider selectors, auto-load,
-  mask threshold/feather); legal docs (Phase 3) and the test suite (Phase 4)
-  are not built yet per the phase-1 prompt.
+- All five MVP phases are complete: the product UI (Phase 2), legal/privacy
+  docs + CSP (Phase 3), and the lint/unit/browser test suite (Phase 4) are all
+  in. See [`PHASE5_REPORT.md`](./PHASE5_REPORT.md) for the delivery summary.

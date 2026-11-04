@@ -1,11 +1,18 @@
-name: smoke
+name: ci
 
-# Free CPU/WASM regression gate (class-2 "no WebGPU device" proxy).
-# Software rendering is NOT a GPU: this never produces real WebGPU timings.
+# Two independent gates on every change that can influence the app.
 #
-# Fires only when the change can influence the runtime pipeline it exercises
-# (model fetch/load, WASM runtime, in-browser inference, the smoke harness
-# itself, or build/dependency config). Doc-only and CI-only edits skip it.
+#   static-checks — lint, typecheck, and the unit suite (no browser, no model
+#                   download). Fast; catches the "green build, broken tests"
+#                   case the smoke job alone cannot see.
+#   wasm-smoke    — a real build served to real Chromium: the browser flow tests
+#                   (upload → inference → exports, error paths, privacy) plus the
+#                   WASM smoke runs. Class-2 "no WebGPU device" proxy: software
+#                   rendering is NOT a GPU, so this never produces WebGPU timings.
+#
+# Both fire only when the change can influence the pipeline they exercise
+# (source, runtime, model fetch/load, the harnesses, or build/dependency config).
+# Doc-only and CI-only edits skip them.
 on:
   push:
     branches: [main, staging, production]
@@ -14,6 +21,7 @@ on:
       - 'public/**'
       - 'scripts/**'
       - 'test-images/**'
+      - 'eval/**'
       - 'index.html'
       - 'vite.config.ts'
       - 'tsconfig.json'
@@ -26,6 +34,7 @@ on:
       - 'public/**'
       - 'scripts/**'
       - 'test-images/**'
+      - 'eval/**'
       - 'index.html'
       - 'vite.config.ts'
       - 'tsconfig.json'
@@ -34,6 +43,26 @@ on:
       - '.github/workflows/smoke.yml'
 
 jobs:
+  # Lint + typecheck + unit tests. No Chromium and no model download, so this
+  # job is fast and runs even when the heavier smoke job would be wasteful.
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      # The evaluation set is committed, so it can drift. Verify the pinned
+      # images still match the manifest (existence, size, SHA-256, dimensions)
+      # before anything depends on it. Offline; uses only the Python stdlib.
+      - name: Verify evaluation set
+        run: python3 scripts/eval/build-eval-set.py --verify
+
   wasm-smoke:
     runs-on: ubuntu-latest
     steps:
@@ -56,11 +85,17 @@ jobs:
           test -s dist/models/model_512_int0_fp16.onnx
           test -s dist/models/model_512_int0_fp32.onnx
           test -s dist/models-manifest.json
-      # puppeteer-core needs an executable at run-smoke's default CHROME_BIN.
+      # puppeteer-core needs an executable at the harnesses' default CHROME_BIN.
       - run: |
           sudo apt-get update
           sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
           test -x /usr/bin/chromium
+      # Real-browser flow tests: upload → inference → transparent PNG + JPG,
+      # error surfacing, keyboard access, and the no-third-party-request check.
+      # Runs its own dev server (which serves public/, where fetch-models put
+      # the model) and fails the job if any check fails.
+      - name: Browser flow tests
+        run: npm run test:browser
       - name: Run WASM smoke
         shell: bash
         run: |

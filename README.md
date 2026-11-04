@@ -77,6 +77,30 @@ behavior described below.
 - Native-CPU reference inference (`reference-inference.py`) that produces the
   same model's masks fast, for correctness cross-checks.
 
+### One inference implementation (the classic worker)
+
+There is exactly **one** inference implementation, and it is
+[`public/inference-worker.js`](./public/inference-worker.js) — a **classic**
+(not module) Web Worker loaded by `src/main.ts` as
+`new Worker('/inference-worker.js', { type: 'classic' })`. It is the only file
+in the repo that calls `onnxruntime`'s `InferenceSession.create`.
+
+It is deliberately *not* a TypeScript module worker under `src/`. A module
+worker would be bundled by Vite, and Vite refuses to bundle the ONNX Runtime
+loader files (`/wasm/*.mjs`, `/wasm/*.wasm`) that live in `public/` — they must
+be fetched at runtime as plain same-origin static files, which is what
+`importScripts('/wasm/ort.wasm.min.js')` gives us. Keeping the worker as a
+plain file in `public/` also keeps its URLs (`/inference-worker.js`,
+`/wasm/…`) out of the hashed build output, so the service worker can cache them
+by a stable name. This is a hard constraint of the runtime, not a preference.
+
+> An earlier Phase-1 experiment left a second, TypeScript "reference" worker at
+> `src/features/background-removal/model.worker.ts`. It was never referenced by
+> the app, so editing it changed nothing at runtime — a real drift hazard. It
+> has been removed. `single-inference-worker.test.ts` now fails the build if a
+> second session-creating worker appears or if the page stops loading the
+> classic worker, so the two cannot diverge again.
+
 ## Requirements
 
 - Node.js ≥ 20 (tested on v24)
@@ -187,6 +211,49 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 # outputs smoke-results/reference/*.mask.png + summary.json (~12 s/image, vs >10 min WASM)
 ```
 
+## Model quality evaluation (fixed image set)
+
+Model comparisons in `PHASE*_REPORT.md` mostly measure *agreement with another
+model*, which does not answer the customer's question: does the cut-out look
+right? `eval/` adds a fixed, licence-verified image set and a harness that runs
+the **real deployed pipeline** over it, so results are reproducible and can be
+diffed after any model or runtime change.
+
+- `eval/manifest.json` — 64 images across 8 categories (ordinary product,
+  clothing, hair/fur, glass & transparent packaging, small accessory, complex
+  background, large image, thin structure), 8 each. Every entry records the
+  licence, source page, pinned thumbnail URL, dimensions and SHA-256.
+- `eval/ATTRIBUTION.md` — the per-image credit list (generated from the
+  manifest). The set uses only CC0, public domain, "no restrictions" and CC BY
+  images: no ShareAlike, so the redistributed set imposes no copyleft on the
+  repository (which is otherwise copyleft-free; see `LICENSE_AUDIT.md`).
+- `eval/images/` — the images themselves (committed, so the set is stable).
+- `scripts/eval/build-eval-set.py` — rebuilds the manifest from Wikimedia
+  Commons. It searches by category, keeps only approved licences and browser-
+  decodable rasters, and pins a standard-width thumbnail URL per image.
+- `scripts/eval/run-eval.mjs` — drives the shipped page over every image via the
+  genuine upload path and records success/failure, output dimensions, timing and
+  peak browser memory, saving each output PNG under `eval-results/<run>/`.
+- `scripts/eval/analyze-eval.py` — measures edge-character metrics from those
+  PNGs (foreground share, soft-edge band, edge contrast, components, speckle)
+  and writes `quality.json` / `quality.md`.
+
+```bash
+npm run eval:set                       # download the pinned images (once)
+npm run build
+npm run eval:run -- --provider wasm --out eval-results/wasm
+npm run eval:analyze                   # or: python3 scripts/eval/analyze-eval.py eval-results/wasm
+# WebGPU, on a machine that has it:
+RUN_GPU=1 npm run eval:run -- --provider webgpu --out eval-results/webgpu
+```
+
+The metrics are descriptive, not accuracy scores (there is no ground-truth mask
+for these images). Use them for regression comparison and review
+`eval-results/<run>/outputs/*.png` visually — a mask that looks correct to the
+customer matters more than a faster inference time. See
+[`EVALUATION.md`](./EVALUATION.md) for the full method and the recorded baseline
+(64/64 succeeded, 0 wrong dimensions, mean 4.1 s/image, 8 empty outputs).
+
 ## Commands
 
 | Command | Purpose |
@@ -198,6 +265,9 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 | `npm run lint` | ESLint (flat config) over `src/`, `scripts/`, `public/` |
 | `npm run test` | Vitest unit tests (validation, mask maths, progress, manifest) |
 | `npm run test:browser` | puppeteer-core flow tests (upload, inference, exports, errors, keyboard) |
+| `npm run eval:set` | download the fixed evaluation images (`eval/images/`) |
+| `npm run eval:run` | run the deployed pipeline over the evaluation set (WASM; `RUN_GPU=1` for WebGPU) |
+| `npm run eval:analyze` | edge-character metrics from an evaluation run's output PNGs |
 | `npm run verify` | lint + typecheck + unit tests + build |
 | `npm run fetch-models` | download + verify model/WASM artifacts (also prepares `public/wasm/` for local dev) |
 | `npm run license:audit` | dependency licence audit (all permissive; see `LICENSE_AUDIT.md`) |

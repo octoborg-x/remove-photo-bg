@@ -14,11 +14,55 @@ behaviour. The plan is [`PHASE5_PLAN.md`](./PHASE5_PLAN.md).
 - **`README.md`** — added a **Quick start** (three commands) and **Browser
   requirements**; `Requirements`/`Setup` now point at them; the phase banner and
   the final "known limitations" bullet reflect that all five phases are done.
+  Added a **Model quality evaluation** section and a **One inference
+  implementation** section (drift fix, below).
 - **`.env.example`** — names only, **no secret required for browser-only
   inference**. The single optional variable is `VITE_ASSET_BASE` (asset origin);
   blank means same-origin.
 - **`PHASE5_REPORT.md`** — this file.
+- **`EVALUATION.md`** — the fixed image set, the harness, and the recorded WASM
+  baseline (below).
+- **`eval/` + `scripts/eval/`** — the evaluation set (`manifest.json`,
+  `images/`, `ATTRIBUTION.md`) and its builder/harness/analyser.
 - **Definition-of-done sweep** — below (MVP §12).
+
+## Post-Phase-5 review fixes
+
+A review of the delivered repo raised four points; the fixes are recorded here.
+
+### 1. One inference implementation (drift removed)
+
+`src/features/background-removal/model.worker.ts` was a second, TypeScript
+inference worker that **nothing loaded** — the app uses the classic
+`public/inference-worker.js` (see `README.md` "One inference implementation").
+Editing the TypeScript file changed nothing at runtime: a real drift hazard.
+The dead file is **removed**, and `single-inference-worker.test.ts` now fails if
+a second session-creating worker appears or if the page stops loading the
+classic worker. The classic worker is required by the build/runtime (Vite
+cannot bundle the ONNX Runtime loader files in `public/wasm/`; the service
+worker caches stable URLs), and that reason is documented in the README.
+
+### 2. CI verifies the latest commit
+
+The CI workflow (`.github/workflows/smoke.yml`, `name: ci`) now runs **two
+independent gates** on every change that can influence the app:
+
+- `static-checks` — `npm run lint`, `typecheck`, the unit suite, and the offline
+  evaluation-set verification. Fast; catches "green build, broken tests" that
+  the smoke job alone cannot see.
+- `wasm-smoke` — a real build served to real Chromium: the **browser flow tests**
+  (upload → inference → exports, error paths, keyboard, privacy) **and** the
+  WASM smoke runs across the three models and the mask-override path.
+
+Both fire on `src/**`, `public/**`, `scripts/**`, `eval/**`, `test-images/**`
+and build/dependency config. Note: HEAD `1b769da` already had a **successful**
+`smoke` run (see the run table); this change widens coverage, it does not fill a
+missing verification.
+
+### 3. Model quality evaluated against real images
+
+A fixed, licence-verified 64-image set and a harness that runs the **deployed
+pipeline** over it. See `EVALUATION.md`; baseline recorded below.
 
 ## Changed files (whole build)
 
@@ -29,9 +73,11 @@ behaviour. The plan is [`PHASE5_PLAN.md`](./PHASE5_PLAN.md).
 | 4 (quality) | `5612c1f` | `eslint.config.js`, `vitest.config.ts`, `src/test-setup.ts`, 7 `*.test.ts`, `scripts/run-browser-tests.mjs`, `package.json`, `PHASE4_REPORT.md` |
 | 5 (prep) | `545f23c` | `PHASE5_PLAN.md` |
 | 5 (delivery) | this branch | `README.md`, `.env.example`, `PHASE5_REPORT.md` |
+| review fixes | this branch | `public/inference-worker.js` (only), `single-inference-worker.test.ts`, `.github/workflows/smoke.yml`, `eval/**`, `scripts/eval/**`, `EVALUATION.md`, `package.json` |
 
-No source file changed in Phase 5. `package.json` (from Phase 4) now exposes:
-`lint`, `test`, `test:watch`, `test:browser`, `verify`.
+No source file changed in Phase 5. `package.json` now exposes:
+`lint`, `test`, `test:watch`, `test:browser`, `verify`, `eval:set`, `eval:run`,
+`eval:analyze`.
 
 ## Model revision + hashes
 
@@ -57,24 +103,47 @@ WASM runtime (committed in `public/wasm/`, CPU-only ORT bundle):
 
 `onnxruntime-web` is pinned to **1.29.0**.
 
-## Actual test results (this branch, `f9e1d5b` + Phase 5)
+## Actual test results (this branch, `f9e1d5b` + Phase 5 + review fixes)
 
 | Gate | Command | Result |
 |---|---|---|
 | Lint | `npm run lint` | clean (0 errors, 0 warnings) |
 | Typecheck | `npm run typecheck` | pass (`tsc --noEmit`) |
-| Unit tests | `npm run test` | **60/60 pass** (7 files) |
+| Unit tests | `npm run test` | **64/64 pass** (8 files) |
 | Build | `npm run build` | pass (`tsc` + `vite build`) |
 | Browser tests | `npm run test:browser` | **10/10 pass** |
-| CI smoke | GitHub Actions `wasm-smoke` | pass (4 WASM runs, ~4 min) |
+| CI `static-checks` | GitHub Actions | lint + typecheck + unit + eval-set verify |
+| CI `wasm-smoke` | GitHub Actions | browser tests + 4 WASM runs |
 | Prod smoke | `run-smoke.mjs` on `vite preview`, CSP active | 960×1280 RGBA, avg **3.61 s** (WASM), 0 CSP violations |
+| Evaluation (WASM) | `npm run eval:run` + `eval:analyze` | **64/64 succeeded, 0 wrong dims**, mean 4.1 s, 8 empty outputs |
+
+The extra 4 unit tests are `single-inference-worker.test.ts` (drift guard).
+
+### CI runs around HEAD
+
+The latest commit was verified before this branch:
+
+| SHA | Workflow | Conclusion |
+|---|---|---|
+| `1b769da` (HEAD) | smoke | success |
+| `a5149cd` | smoke | success |
+| `2388ce3` | smoke | success |
+
+### Model quality baseline (WASM)
+
+See [`EVALUATION.md`](./EVALUATION.md) for the full table. Summary: 64/64
+images succeeded at the correct dimensions on `model_512_int8_fp16`; mean
+inference 4097 ms; peak browser RSS 555 MB. The eight empty/near-empty outputs
+are the first thing to review — several are dark or low-contrast frames. These
+are descriptive edge metrics, not accuracy; there is no ground-truth mask.
 
 Unit tests cover validation boundaries, mask maths, progress formatting,
-manifest resolution, the provider gate, asset URLs, and a source scan proving
-MVP §9's "no app-level upload path". Browser tests cover JPEG/PNG upload →
-inference → transparent PNG (colour type 6) + white-background JPG, zero
-third-party requests, unsupported/corrupt input errors, worker + manifest
-failure surfacing, and keyboard activation. Details in `PHASE4_REPORT.md`.
+manifest resolution, the provider gate, asset URLs, the single-inference-worker
+drift guard, and a source scan proving MVP §9's "no app-level upload path".
+Browser tests cover JPEG/PNG upload → inference → transparent PNG (colour type
+6) + white-background JPG, zero third-party requests, unsupported/corrupt input
+errors, worker + manifest failure surfacing, and keyboard activation. Details in
+`PHASE4_REPORT.md`.
 
 ## Limitations
 

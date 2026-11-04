@@ -48,8 +48,8 @@ Record, from real measurements (not estimates):
 - [ ] **Limitations** — WASM-only latency in this sandbox; hardware/WebGPU
       untested (postponed); no ground-truth masks (all quality numbers are
       agreement-with-teacher); distilled model not shipped.
-- [ ] **Deployment steps** — Cloudflare Pages (`production`/`staging`) + HF asset
-      origin; `VITE_ASSET_BASE` as an Actions variable *and* a Vercel env var.
+- [ ] **Deployment steps** — Vercel Git integration + HF asset origin; `VITE_ASSET_BASE` configured
+      as a Vercel project environment variable.
 
 ## 4. Definition-of-done sweep (MVP §12)
 

@@ -94,28 +94,18 @@ failure surfacing, and keyboard activation. Details in `PHASE4_REPORT.md`.
 
 ## Deployment steps
 
-**Asset origin (Hugging Face).** The model lives in the HF Space
-`Octoborg/remove-photo-bg` under `models/`; `VITE_ASSET_BASE` points at
+**Model assets (Hugging Face).** The model lives in the HF Space
+`Octoborg/remove-photo-bg`; `VITE_ASSET_BASE` points at
 `https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve/main/`.
 
-**Static site.** Two supported hosts:
+**Application hosting (Vercel).** Deploy the static application through Vercel
+Git integration. The build uses `npm run vercel:build`, publishes `dist/`,
+prepares the WebGPU runtime, skips model weights, copies legal documents, and
+removes `dist/models/`. Set `VITE_ASSET_BASE` in the Vercel project
+environment variables. Production response headers are configured in
+`vercel.json`.
 
-- **Cloudflare Pages** (`npm run build:site`): production branch `production`,
-  previews from `staging`; `main` does not deploy. The WASM runtime ships in the
-  site; `scripts/strip-large-assets.mjs` removes `dist/models/`. Builds run in
-  GitHub Actions (`deploy-pages.yml`), which passes `VITE_ASSET_BASE` as a
-  workflow **variable**.
-- **Vercel Hobby** (`npm run vercel:build`, no credit card): the only free host
-  that can serve the WebGPU (jsep) runtime same-origin, which exceeds Cloudflare
-  Pages' 25 MiB per-file cap. **Requires `VITE_ASSET_BASE` as a dashboard env
-  var** — without it `ASSET_BASE=''` and `/models/*.onnx` 404s.
-
-Both hosts get a restrictive CSP: `scripts/write-headers.mjs` is the single
-source of truth (dev + preview via `vite.config.ts`, `dist/_headers` for
-Cloudflare Pages, mirrored in `vercel.json` for Vercel). COOP/COEP are set so
-the threaded WASM can use `SharedArrayBuffer`.
-
-See [`DEPLOY.md`](./DEPLOY.md) for the architecture.
+See [`DEPLOY.md`](./DEPLOY.md) for current deployment instructions.
 
 ## Definition of done (MVP §12)
 

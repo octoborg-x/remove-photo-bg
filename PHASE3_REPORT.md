@@ -19,7 +19,7 @@ inference path; the Phase 1/2 model, worker, and UI behaviour is unchanged.
 | Footer links | `index.html` | Privacy · Third-party notices · Licence audit · Model card. |
 | CSP (generator) | `scripts/write-headers.mjs` | Single source of truth for the policy; used by dev, preview, and the built site. |
 | CSP (dev + preview) | `vite.config.ts` | Same policy applied as a response header. |
-| CSP (deploy) | `dist/_headers` | Generated into the build for Cloudflare Pages. |
+| CSP (deploy) | `vercel.json` | Production response headers configured in Vercel. |
 | Legal-doc copy | `scripts/copy-legal-docs.mjs` | Copies the four documents into `dist/` so the footer links resolve when deployed. |
 | Inline-script removal | `public/no-dev-server.js` | The dev-server hint moved out of `index.html` so `script-src 'self'` needs no `'unsafe-inline'` or hash. |
 
@@ -91,7 +91,7 @@ the CSP active and a console/`pageerror` listener counting violations.
 | CSP violations | **0** (same-origin and cross-origin HF runs) |
 | Cross-origin model fetch (HF + CDN) under CSP | ✅ loads, 0 violations |
 | Footer links resolve on deployed build | ✅ `PRIVACY.md`, `THIRD_PARTY_LEGAL_NOTICES.md`, `LICENSE_AUDIT.md`, `MODEL_CARD.md` all HTTP 200 |
-| `npm run typecheck` / `npm run build:site` | ✅ pass |
+| `npm run typecheck` / `npm run build` | ✅ pass |
 
 ### The one real bug found and fixed
 
@@ -126,9 +126,9 @@ MVP §8 says to configure the CSP *after testing actual runtime requirements*.
 
 ```sh
 npm run typecheck
-npm run build:site          # writes dist/_headers (CSP) + copies legal docs
+npm run build               # production Vite build
 VITE_ASSET_BASE="https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve/main/" \
   node scripts/write-headers.mjs   # print the cross-origin policy
-npm run preview             # serve dist/ with the real headers
+npm run preview             # serve dist/ with Vite preview headers
 npm run license:audit
 ```

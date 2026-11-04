@@ -1,157 +1,66 @@
-# Deploying the static site (no credit card)
+# Deployment — Vercel
 
-Pushing to `staging` or `production` runs `.github/workflows/deploy-pages.yml`,
-which builds the site (`npm run build:site` — Vite build + model stripped from
-`dist/`) and uploads it to Cloudflare Pages. The job no-ops with a notice until
-the `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` secrets are set.
-
-This doc explains the asset architecture (why the app is a small static shell
-+ remote heavy artifacts) and the branch model.
+Vercel is the deployment target for the static Vite application. Model weights
+remain hosted on Hugging Face and are fetched at runtime by the browser service
+worker.
 
 ## Asset architecture
 
-| Artifact | Where it lives | Why |
+| Artifact | Location | Reason |
 |---|---|---|
-| `model_512_int0_fp32.onnx` (193 MB), `model_512_int0_fp16.onnx` (99 MB), `model_512_int8_fp16.onnx` (68 MB) | **Hugging Face** (free, no CC) | A generic static host caps a single file well below 185 MB and GitHub Releases sends no CORS header; HF serves with `Access-Control-Allow-Origin` and no size cap. Fetched inside the service worker, which proxies + caches it. |
-| WASM runtime (13.3 MB `ort-wasm-simd-threaded.wasm` + loaders) | **Same-origin static** | ORT's threaded `pthread` workers bypass the service worker, so the `.wasm` must be same-origin (or carry CORP). The CPU-only bundle fits comfortably in a static site. |
-| App shell | Any static host | ~400 KB (the model is fetched at runtime, not bundled). |
+| App shell and WebGPU-capable ONNX Runtime assets | Vercel | Same-origin delivery supports the threaded runtime and cross-origin isolation headers. |
+| Model weights | Hugging Face Space: `Octoborg/remove-photo-bg` | Keeps large model files out of the application build; the service worker fetches and caches the selected model. |
 
-## Served models
+The Hugging Face base URL is:
 
-Filenames follow `model_<inputSize>_int<weight-bits>_fp<compute-bits>.onnx`.
-All are weight-only quantised and materialised back to fp32, so the runtime
-executes the same fp32 kernels — only the bytes on disk shrink.
-
-| id | size | parity vs fp32 (measured) |
-|---|---:|---|
-| `model_512_int8_fp16` | 68,491,168 B | maxAbs 62/255, IoU@0.5 0.998726, **0 flips** |
-| `model_512_int0_fp16` | 98,799,684 B | maxAbs 3/255, IoU@0.5 0.999944, 0 flips |
-| `model_512_int0_fp32` | 193,514,682 B | reference |
-
-The int8 variant stores `m.bb.*` and `m.squeeze_module.*` at int8 (per-output-channel
-scale) and the decoder at fp16. The output head (`expand_*`/`sub_*`/`index_*`)
-**must** stay fp16 — quantising it flips >1000 pixels. Reproduce with
-`python3 -m scripts.distill.optimize-weights --model <fp32> --out <dir>`
-(`--aggressive` also quantises the decoder: 55,894,256 B, IoU@0.5 0.99922).
-
-## Why this split
-
-- **Model → HF.** The service worker fetches it cross-origin (HF answers with
-  `Access-Control-Allow-Origin: *`), normalizes it into a same-origin,
-  `Cross-Origin-Resource-Policy: cross-origin` cached response, and caches it. On
-  later visits nothing is re-downloaded (verified: 0 model requests on reload).
-- **WASM → same-origin static.** The WebGPU (`jsep`) binary is 26.5 MiB, so we
-  ship the **CPU-only bundle** (`ort.wasm.min.js`, which loads only the 13.3 MiB
-  threaded binary). Runtime provider is `wasm`; WebGPU is no longer attempted
-  (see `scripts/fetch-models.mjs` for the reasoning). Cross-origin WASM would
-  hang anyway.
-
-## Deploy flow (automated)
-
-`.github/workflows/deploy-pages.yml` deploys on push to `staging`/`production`:
-
-- `staging` -> Cloudflare Pages preview deployment
-- `production` -> production deployment (only this branch)
-
-`main` pushes do **not** deploy. The workflow reads `VITE_ASSET_BASE` from the
-repo's actions **variable** (displayed value, not a secret) so the built site
-can fetch the model from Hugging Face; leave it unset to serve model/WASM
-same-origin (only useful when the model fits under the host's per-file cap).
-
-## Hosting the site manually
-
-1. **Create the HF model repo** (free). Layout matters — the app requests
-   `/models/<name>.onnx`, so put the files under `models/`:
-
-   ```
-   your-repo/
-   └── models/
-       ├── model_512_int8_fp16.onnx
-       ├── model_512_int0_fp16.onnx
-       └── model_512_int0_fp32.onnx
-   ```
-
-   Upload them (`huggingface-cli upload` with your token, or drag-and-drop on
-   https://huggingface.co/new). The base URL is then:
-
-   ```
-   https://huggingface.co/<owner>/<repo>/resolve/main/
-   ```
-
-   (`resolve/` redirects to a CDN host; the SW follows the redirect and the
-   cache key is the URL you gave it.)
-
-2. **Build and host the shell on any static host:**
-
-   ```sh
-   npm ci
-   npm run fetch-models   # fetch model + WASM into public/ (gitignored)
-   npm run build          # -> dist/
-   ```
-
-   Upload `dist/` to your host. Set the build-time variable:
-
-   ```
-   VITE_ASSET_BASE=https://huggingface.co/<owner>/<repo>/resolve/main/
-   ```
-
-   (`public/_headers` and `public/sw.js` carry the cross-origin-isolation and
-   caching headers for hosts that honor them.)
-
-## Security headers and the CSP
-
-The Content-Security-Policy is generated by `scripts/write-headers.mjs` so the
-dev server, `vite preview`, and the deployed site all enforce the same policy.
-`connect-src` is derived from `VITE_ASSET_BASE`: `'self'` when the model is
-self-hosted, plus the asset origin (and the `*.hf.co` / `*.huggingface.co` CDN it
-redirects to) when the model comes from Hugging Face.
-
-- **Cloudflare Pages** honors `dist/_headers`, which `npm run build:site`
-  generates (and `npm run vercel:build` generates too, for completeness).
-- **Vercel** does **not** read `dist/_headers`; it reads `vercel.json` from the
-  repository. `vercel.json` therefore carries the CSP statically, with the
-  Hugging Face origins in `connect-src` — matching the `VITE_ASSET_BASE` that
-  the Vercel build always uses. If you change the asset origin, update both
-  `vercel.json` and the `VITE_ASSET_BASE` dashboard variable.
-
-`script-src` includes `'wasm-unsafe-eval'` (not `'unsafe-eval'`): Chromium
-refuses `WebAssembly.instantiate` under a bare `script-src 'self'`, and this
-keyword permits only WASM compilation. `worker-src 'self' blob:` covers
-onnxruntime-web's pthread workers and its `blob:` worker.
-
-## Branch model (release flow only)
-
-The `main` → `staging` → `production` flow is enforced by
-`.github/workflows/branch-flow-guard.yml` (staging only ever receives the
-literal `main` branch; production receives `main` or `staging`). Since the
-deploy pipeline is gone, these branches are bookkeeping — promote when you want,
-deploy separately.
-
-## Local development against the real remote
-
-```sh
-VITE_ASSET_BASE=https://huggingface.co/<owner>/<repo>/resolve/main/ npm run dev
+```text
+https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve/main/
 ```
 
-If the repo is public, a `VITE_ASSET_BASE` without credentials works from any
-browser; the SW caches the model on first load and subsequent visits need no
-network for it.
+## Vercel setup
 
-## Re-enabling a deploy (if you want one)
+1. Import `octoborg-x/remove-photo-bg` into Vercel from GitHub.
+2. Select the Vite framework preset (or allow auto-detection).
+3. Keep the build command from `vercel.json`: `npm run vercel:build`.
+4. Set the project environment variable:
 
-Add a workflow that uploads `dist/` to a static host of your choice. If you go
-back to Cloudflare Pages:
+   ```text
+   VITE_ASSET_BASE=https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve/main/
+   ```
 
-- `npm run build:site` (Vite build + the model-stripping script) produces the
-  uploadable `dist/`.
-- Set `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets and, when the
-  model lives on Hugging Face, a `VITE_ASSET_BASE` variable.
-- `npx wrangler@3 pages deploy dist --project-name=remove-photo-bg --branch=<branch>`.
+5. Deploy. The build prepares the WebGPU-capable runtime without downloading
+   model weights, builds the application, copies legal documents, and removes
+   any local `dist/models/` directory.
 
-The model is **not** fetched during a deploy — it lives on HF. To re-upload it
-after a change, push to the HF repo (or run `npm run fetch-models` locally and
-`hf upload` the file).
+## Build behaviour
 
-`.github/workflows/deploy-pages.yml` now does all of this automatically on
-push to `staging` (preview) or `production`. The job refuses to fail the build
-when the secrets are missing — it emits a notice and exits green.
+The `vercel:build` script:
+
+- Downloads the WebGPU-capable runtime without model weights.
+- Runs `npm run build` for type-checking and the Vite production build.
+- Copies legal and privacy documents into `dist/`.
+- Removes `dist/models/`; model weights are fetched from Hugging Face at runtime.
+
+## Security headers
+
+`vercel.json` configures COOP, COEP, and Content-Security-Policy response
+headers for production. The Vite development and preview servers apply their
+corresponding headers through `vite.config.ts`.
+
+## Local development
+
+```sh
+npm ci
+npm run fetch-models -- --webgpu
+npm run dev
+```
+
+For a local production build and preview:
+
+```sh
+npm run build
+npm run preview
+```
+
+The service worker caches downloaded model assets on the device. Bump
+`CACHE_VERSION` in `public/sw.js` when changing the model or ONNX Runtime.

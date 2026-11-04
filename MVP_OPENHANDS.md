@@ -369,7 +369,7 @@ Update README with install/run/test/build, model-download instructions, browser 
 - [x] Lint, typecheck, tests, and build pass, or failures are truthfully documented. (`npm run verify`)
 - [x] README explains setup and commands. (Quick start + Commands table)
 - [x] No secrets committed. (`.env.example` names only; `.env*` gitignored)
-- [x] Hosting limits and monthly cost estimate checked before public launch. (CF Pages 25 MiB/file cap; Vercel Hobby; `DEPLOY.md`; $0/mo)
+- [x] Hosting limits and monthly cost estimate checked before public launch. (Vercel Hobby; `DEPLOY.md`; Hugging Face model hosting)
 
 Passing means technically ready for a private demo, not a guarantee of legal certainty.
 

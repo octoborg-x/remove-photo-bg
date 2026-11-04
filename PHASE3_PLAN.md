@@ -77,8 +77,8 @@ Known items to confirm during the audit: `onnxruntime-web` (MIT),
    - state that filenames are not logged (fixed in Phase 2).
 2. Network evidence: cite `smoke-results/phase2-final/requests.json` (16
    first-party requests, 0 third-party) as the Phase 2 verification.
-3. CSP: add to `public/_headers` (Cloudflare Pages) and `vite.config.ts` dev
-   headers, after testing the real requirements. Draft to validate:
+3. CSP: configure `vite.config.ts` development/preview headers and production
+   response headers in `vercel.json`, after testing the real requirements. Draft to validate:
    `default-src 'self'; script-src 'self'; worker-src 'self' blob:;
    connect-src 'self' <asset-origin>; img-src 'self' blob: data:;
    style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none';

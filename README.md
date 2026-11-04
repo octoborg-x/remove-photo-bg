@@ -139,10 +139,8 @@ can show e.g. `Downloading model… 42% (78.1 MB / 185.0 MB, 12.3s)`. On a cache
 visit the whole load takes ~1–2 s instead of the first-visit download time.
 
 To force a re-download after changing the model or upgrading ONNX Runtime, bump
-`CACHE_VERSION` in `public/sw.js`. For hosts that honor it, `public/_headers`
-(Cloudflare Pages syntax) also sets `Cache-Control: immutable` on `/models/*`
-and `/wasm/*` as a second layer for browsers where a service worker is
-unavailable.
+`CACHE_VERSION` in `public/sw.js`. Vercel response headers are configured in `vercel.json`; the service worker
+handles versioned asset caching.
 
 ## Browser smoke test (headless)
 
@@ -166,10 +164,8 @@ opens the deployed app, forces `?provider=webgpu`, and asserts the provider
 comes back as `webgpu` (plus logs timings, the adapter report, and every network
 request for the privacy check). Cost: $0.
 
-The GPU path needs the host to actually serve the WebGPU-capable ORT bundle
-(the 26.5 MiB `ort-wasm-simd-threaded.jsep.wasm` exceeds Cloudflare Pages' 25 MiB
-per-file cap, so the deployed `/wasm/` only has the CPU bundle). Bake it in
-before starting the tunnel on the machine that serves the page:
+The GPU path needs the host to serve the WebGPU-capable ORT bundle. Fetch it
+before starting the local preview server:
 
 ```bash
 npm run fetch-models -- --webgpu   # also copies ort.all.min.js + jsep wasm
@@ -198,7 +194,6 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 | `npm run dev` | Vite dev server on port 12000 (the port remote sandboxes forward) |
 | `npm run dev:local` | Vite dev server on its default port 5173 |
 | `npm run build` | typecheck + production build |
-| `npm run build:site` | build + generate CSP `_headers` + copy legal docs + strip the model |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint (flat config) over `src/`, `scripts/`, `public/` |
 | `npm run test` | Vitest unit tests (validation, mask maths, progress, manifest) |
@@ -210,15 +205,11 @@ python3 scripts/reference-inference.py test-images/glass-wine.jpg
 
 ## Deployment
 
-### Recommended: Vercel (free, no credit card, WebGPU-capable)
+### Vercel (Hobby)
 
-The app is a static site with one hard requirement: the WebGPU ORT runtime must
-be served same-origin, and its jsep binary is **26.5 MiB** — above Cloudflare
-Pages' 25 MiB static-file cap (and a CF Pages Function proxying it would exceed
-the free tier's CPU quota). **Vercel Hobby** has no per-file cap relevant here
-(~100 MB), **no credit card required**, ~100 GB/mo transfer, and honors
-COOP/COEP via `vercel.json` at the CDN layer — so it's the only free host that
-can actually serve WebGPU.
+Vercel serves the application and WebGPU-capable ONNX Runtime assets from the
+same origin. Model weights remain hosted on Hugging Face and are fetched at
+runtime by the service worker.
 
 Deploy (one-time manual steps in the dashboard):
 
@@ -237,27 +228,42 @@ Deploy (one-time manual steps in the dashboard):
 That produces a WebGPU-capable site. Verify with the Colab T4 notebook
 (`notebooks/colab-webgpu-smoke.ipynb`).
 
-### Alternatives
-
-- Any static host can serve the **CPU-only** build (`npm run build:site`);
-  WebGPU will simply not be offered (probe finds no jsep → graceful WASM).
-  This is what the old Cloudflare Pages setup did.
-- See [`DEPLOY.md`](./DEPLOY.md) for the architecture (app shell vs remote
-  asset origin) and the HF/worker interplay.
+See [`DEPLOY.md`](./DEPLOY.md) for the asset architecture and deployment details.
 
 ## Privacy
 
 - Processing happens entirely in the browser; pixels never leave the device.
   See [`PRIVACY.md`](./PRIVACY.md).
-- A restrictive Content-Security-Policy is generated per build
-  (`scripts/write-headers.mjs`) and applied in dev, preview, and on the deployed
-  host: `default-src 'self'`, `script-src 'self' 'wasm-unsafe-eval'`,
+- A restrictive Content-Security-Policy is applied in development and preview
+  by `vite.config.ts`, and in production by Vercel response headers in
+  `vercel.json`: `default-src 'self'`, `script-src 'self' 'wasm-unsafe-eval'`,
   `connect-src 'self'` (plus the asset origin only when `VITE_ASSET_BASE` is
   set), `worker-src 'self' blob:`, `object-src 'none'`, `frame-ancestors 'none'`.
   `'wasm-unsafe-eval'` is the minimal allowance onnxruntime-web needs to compile
   its WebAssembly module; no JS `eval` is permitted.
 - The smoke harness records all network requests; results are in
   `PHASE1_REPORT.md`, `PHASE2_REPORT.md`, and `smoke-results*/requests.json`.
+
+## Repository code licence
+
+The original Project Materials in this repository are **proprietary and
+all-rights-reserved** under [LICENSE](./LICENSE). Unless you have separate
+written permission from the copyright holder, you may not use, copy, modify,
+redistribute, sublicense, sell, or create derivative works from those materials.
+Repository access is not a licence to reuse the code.
+
+This proprietary licence covers only original project materials owned by the
+copyright holder, such as application source, project scripts, configuration,
+and project documentation. It does **not** relicense third-party components,
+model weights, ONNX Runtime binaries, npm dependencies, datasets, or other
+externally sourced materials. Those remain subject to their own licences and
+required notices, documented below. If a third-party licence grants rights
+that cannot be restricted by this repository licence, that third-party licence
+continues to govern that component.
+
+A private GitHub repository controls who can access the repository; the
+licence separately states what recipients are permitted to do with the
+copyrighted materials. See [LICENSE](./LICENSE) for the terms.
 
 ## Licensing / notices
 

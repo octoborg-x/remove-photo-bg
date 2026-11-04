@@ -17,8 +17,7 @@
     "fetch-models": "node scripts/fetch-models.mjs",
     "dev:local": "vite",
     "license:audit": "license-checker-rseidelsohn --production && license-checker-rseidelsohn --summary",
-    "build:site": "npm run build && node scripts/write-headers.mjs && node scripts/copy-legal-docs.mjs && node scripts/strip-large-assets.mjs",
-    "vercel:build": "node scripts/fetch-models.mjs --webgpu --no-models && npm run build && node scripts/write-headers.mjs && node scripts/copy-legal-docs.mjs && node scripts/strip-large-assets.mjs"
+    "vercel:build": "node scripts/fetch-models.mjs --webgpu --no-models && npm run build && node scripts/copy-legal-docs.mjs && node scripts/strip-large-assets.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "1.29.0"

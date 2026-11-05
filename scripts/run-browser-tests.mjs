@@ -372,6 +372,9 @@ try {
         configurable: true,
         get: () => ({ type: 'cellular', effectiveType: '3g', saveData: false }),
       });
+      // The app skips the prompt in automated sessions (CI's Chromium reports a
+      // metered-looking connection). Opt this page out so the prompt path runs.
+      Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     const warnShown = await page

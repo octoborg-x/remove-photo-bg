@@ -1286,9 +1286,11 @@ function shouldConfirmDownload(): boolean {
   if (!selectedModel) return false;
   // Explicit user consent already given this session.
   if (sessionStorage.getItem('remove-bg:download-confirmed') === '1') return false;
-  // An explicit ?model=/?provider= override is a deliberate, scripted choice;
-  // do not interrupt it with a modal.
-  if (forcedModel || forcedProvider) return false;
+  // An explicit ?model=/?provider= override is a deliberate, scripted choice,
+  // and an automated (WebDriver) session must never block on a modal — CI's
+  // Chromium reports a metered-looking connection, which would otherwise stall
+  // the harness. The metered test opts out of the WebDriver flag itself.
+  if (forcedModel || forcedProvider || navigator.webdriver) return false;
   return assessNetwork({ sizeBytes: selectedModel.size }).warn;
 }
 

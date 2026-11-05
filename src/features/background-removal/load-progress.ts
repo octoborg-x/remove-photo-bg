@@ -14,6 +14,36 @@ export const STAGE_LABELS: Record<LoadStage, string> = {
   ready: 'Ready',
 };
 
+/**
+ * Coarse grouping of the loading stages, so the UI can say which of the three
+ * user-visible phases is running: the model download, preparing the runtime, or
+ * the image inference. The product promise is that these read as distinct steps
+ * rather than one long "Loading…".
+ */
+export type LoadPhase = 'download' | 'prepare' | 'inference';
+
+export const PHASE_LABELS: Record<LoadPhase, string> = {
+  download: 'Downloading model',
+  prepare: 'Preparing model',
+  inference: 'Removing background',
+};
+
+const STAGE_PHASE: Record<LoadStage, LoadPhase> = {
+  queued: 'prepare',
+  runtime: 'prepare',
+  'cache-check': 'download',
+  'cache-hit': 'prepare',
+  downloading: 'download',
+  downloaded: 'download',
+  'creating-session': 'prepare',
+  'session-ready': 'prepare',
+  ready: 'prepare',
+};
+
+export function phaseForStage(stage: LoadStage): LoadPhase {
+  return STAGE_PHASE[stage] ?? 'prepare';
+}
+
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   if (bytes < 1024) return `${bytes} B`;

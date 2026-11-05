@@ -1,0 +1,16 @@
+{
+  "pageUrl": "http://localhost:4173/",
+  "image": "test-images/animal-buddy-dog.jpg",
+  "provider": "wasm",
+  "model": "model_512_int8_fp16",
+  "run": {
+    "timings": [
+      3947.1099999998696
+    ],
+    "avgMs": 3947.1099999998696,
+    "provider": "wasm",
+    "modelId": "model_512_int8_fp16"
+  },
+  "measuresIndex": 40,
+  "pageLog": "Build 20261102T222440\nDetecting GPU…\nWebGPU is enabled but no adapter was found\nModel manifest: 3 model(s) — model_512_int8_fp16, model_512_int0_fp16, model_512_int0_fp32\nMask adjust: threshold off, feather off\nProvider default: wasm\nModel default: model_512_int8_fp16\nAsset cache ready. First visit: the model downloads once and is kept on this device.\nIf the model is not downloaded, run: npm run fetch-models\nLoading model: model_512_int8_fp16 (/models/model_512_int8_fp16.onnx)\nProvider: CPU (WASM)\nCached for next visit: /wasm/ort.wasm.min.js\nLoad stage: queued\nLoad stage: runtime (providers: wasm)\nLoad stage: cache-check (checking for a cached model)\nLoad stage: downloading\nLoad stage: creating-session (provider wasm)\nCached for next visit: /wasm/ort-wasm-simd-threaded.mjs\nCached for next visit: /models/model_512_int8_fp16.onnx\nCached for next visit: /wasm/ort-wasm-simd-threaded.wasm\nLoad stage: session-ready (wasm)\nLoad stage: ready (wasm)\nModel: model_512_int8_fp16\nModel load time: 3998.1 ms\nExecution provider: wasm\nLoaded image from URL: test-images/animal-buddy-dog.jpg (960x1260)\nRendered transparent PNG (960x1260), 32.1% opaque.\nInference 1: 3947.1 ms\n--- Summary ---\nWarm inference timings (1 run): 3947.1 ms\nAverage: 3947.1 ms\nProvider: wasm\nModel: model_512_int8_fp16 (65.3 MB)\n"
+}

@@ -1,0 +1,48 @@
+PROPRIETARY SOFTWARE LICENSE
+Copyright (c) 2026 Miloud Lafttah. All rights reserved.
+
+1. Scope
+
+This license applies only to the original source code, application logic,
+scripts, configuration, documentation, and other materials in this repository
+that are owned by the copyright holder ("Project Materials").
+
+2. No public licence grant
+
+No permission is granted to any person to use, reproduce, copy, modify, adapt,
+publish, distribute, sublicense, sell, make available, or create derivative
+works from the Project Materials, in whole or in part, except with the
+copyright holder's prior express written permission.
+
+Access to this repository, including access granted to collaborators, does not
+by itself grant any licence or ownership rights. Any collaborator permissions
+must be separately agreed in writing.
+
+3. Third-party materials
+
+This license does not replace or override the licences of third-party software,
+libraries, model weights, runtime binaries, datasets, fonts, or other materials
+included in, downloaded by, or used with the project. Those materials remain
+governed by their own applicable licence terms and notices. See
+THIRD_PARTY_LEGAL_NOTICES.md and LICENSE_AUDIT.md. Where a third-party licence
+grants rights that cannot be restricted by this license, that third-party
+licence controls for the relevant material.
+
+4. Ownership
+
+All rights not expressly granted in writing are reserved by the copyright
+holder. This license does not transfer ownership of the Project Materials.
+
+5. Disclaimer
+
+To the maximum extent permitted by applicable law, the Project Materials are
+provided "AS IS", without warranties or conditions of any kind, express or
+implied, including merchantability, fitness for a particular purpose, and
+non-infringement. To the maximum extent permitted by applicable law, the
+copyright holder is not liable for any claim, damages, or other liability
+arising from use of the Project Materials.
+
+6. Contact and permissions
+
+For written permission or commercial licensing enquiries, contact the
+copyright holder through the repository owner’s GitHub profile.

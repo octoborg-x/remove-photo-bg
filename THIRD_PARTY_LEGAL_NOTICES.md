@@ -1,10 +1,11 @@
 # Third-Party Legal Notices and Disclosure
 
-> Phase 1 status. This document records the components used and redistributed by
-> the Phase 1 build with their verified hashes and published licence declarations.
-> A full repeatable licence audit (`LICENSE_AUDIT.md`) and legal review of every
-> licence text is scheduled for Phase 3 per MVP_OPENHANDS.md §4 and §13. Nothing
-> here is a legal warranty.
+> Phase 3 status (2026-11-02). This document records the components used and
+> redistributed by the current build with their verified hashes and published
+> licence declarations. The repeatable dependency + model licence audit is in
+> [`LICENSE_AUDIT.md`](./LICENSE_AUDIT.md) (MVP_OPENHANDS.md §4 and the
+> "Dependency and Model Licence Audit" section). Nothing here is a legal
+> warranty.
 
 Each component remains subject to its own licence and notices.
 
@@ -18,15 +19,31 @@ Each component remains subject to its own licence and notices.
     2026-10-26). The licence that covers this project's use is the **upstream
     MIT** below, which the export's weights are derived from / restated as
     (same tensors, BN folded).
-- Exact artifact: `onnx/model.onnx` (fixed 512×512 input)
-- File size: 193,514,682 bytes (≈185 MB)
-- SHA-256: `eaafaa10f19c63b77e2bae77bf4b2f59054c208ea08b8c6648f95ef36a3b6b87`
-  (see `scripts/fetch-models.mjs`)
+- Shipped artifacts: **three weight-only quantised variants** of the same
+  512×512 fp32 export, all served from the `Octoborg/remove-photo-bg` Hugging
+  Face Space (`…/resolve/main/models/<file>`). All three are the fp32 teacher
+  with quantised *storage* materialised back to fp32 compute, so the runtime
+  kernels and the input/output contract are unchanged. The generated
+  `public/models-manifest.json` is the runtime source of truth and pins each
+  file's SHA-256 (verified by `scripts/fetch-models.mjs`):
+
+  | id (manifest) | file | size (bytes) | SHA-256 | role |
+  |---|---|---|---|---|
+  | `model_512_int8_fp16` | `models/model_512_int8_fp16.onnx` | 68,491,168 | `524bd904f68a48c3390bd27ab85d9e8107af0e1b8e79f20197ecdeaad8b17046` | **default**; weight-only int8 backbone (`m.bb.*`, `m.squeeze_module.*`) + fp16 decoder, materialised to fp32 |
+  | `model_512_int0_fp16` | `models/model_512_int0_fp16.onnx` | 98,799,684 | `099c89de1d9a3da27af3d5329460f543e5d9390fc45e7ba7d0e7360b378d5f97` | weight-only fp16 storage, fp32 compute (shipped earlier as `c5_best.onnx`) |
+  | `model_512_int0_fp32` | `models/model_512_int0_fp32.onnx` | 193,514,682 | `eaafaa10f19c63b77e2bae77bf4b2f59054c208ea08b8c6648f95ef36a3b6b87` | Phase-1 fp32 teacher (no quantisation) |
+
+  The quantisation method and its measured parity (int8+fp16: IoU@0.5 ≥ 0.9987
+  vs the teacher, 0 pixels crossing the 0.5 threshold on the repo test images)
+  are recorded in `MODEL_CARD.md`.
+- Fixed 512×512 input; output `[1,1,512,512]` probabilities (sigmoid baked in).
 - Upstream vs third-party: third-party ONNX export of the upstream checkpoint
 - Weights provenance: verified against `ZhengPeng7/BiRefNet_lite`
   `model.safetensors`. Backbone tensors are bit-identical; the decoder
   convolutions are the upstream weights with BatchNorm folded in (differences
-  ~1e-7, i.e. float32 rounding). See `MODEL_CARD.md` for the method.
+  ~1e-7, i.e. float32 rounding). The quantised variants are derived from that
+  export with the output head kept at fp16 (quantising it flips >1000 pixels).
+  See `MODEL_CARD.md` for the method.
 - Published licence declaration: MIT (per the Hugging Face model card for
   `ZhengPeng7/BiRefNet_lite`, incl. commit `aa62cd87eafb9cc43056d08ef3615a14628b831d`
   "Complete the MIT license in the model card", card YAML `license: mit` and
@@ -88,20 +105,50 @@ review for measured numbers.
 
 - Package: `onnxruntime-web`
 - Version: 1.29.0 (installed, `node_modules/onnxruntime-web/package.json`)
-- Licence: MIT
+- Licence: MIT (`LICENSE` @ tag `v1.29.0`: "Copyright (c) Microsoft Corporation";
+  verified 2026-11-02)
 - Source: https://github.com/microsoft/onnxruntime
-- Redistributed artifacts under `public/wasm/`:
-  - `ort.all.min.js` (UMD bundle)
-    SHA-256 `292feb81eb47989f30d40e62e29e2373979e7588231c189e6dd494ff294f069d`
+- **Redistributed** artifacts under `public/wasm/` (CPU-only bundle, committed and
+  deployed; hashes re-verified 2026-11-02, see `LICENSE_AUDIT.md` §4):
+  - `ort.wasm.min.js` (UMD bundle)
+    SHA-256 `f87630372da0668a72b4304e062365117cbe432d6060ca146799b1c1888460ae`
   - `ort-wasm-simd-threaded.mjs` (WASM loader)
     SHA-256 `5a15f1fd086b3f6c2baf1f35105b8f502653b567e165cef80028870b39748747`
   - `ort-wasm-simd-threaded.wasm`
     SHA-256 `ec8580a9d7b9476ceee52e10a7f94124e4dc71a019d666ed6d4726697c109a4d`
+- **Build-time only** (not committed, fetched only by `fetch-models --webgpu` on
+  hosts that can serve the WebGPU backend same-origin):
+  - `ort.all.min.js`
+    SHA-256 `292feb81eb47989f30d40e62e29e2373979e7588231c189e6dd494ff294f069d`
   - `ort-wasm-simd-threaded.jsep.mjs`
     SHA-256 `3d68fa7af88c48894d4b0c8629de12018ab73b77519bc0b05dc8d908ad82749f`
   - `ort-wasm-simd-threaded.jsep.wasm`
     SHA-256 `db816fadbab47a755170c08f933961e231412ac17f5981f9a62e519708a44dea`
-- Include any required notice text from the onnxruntime LICENSE here (Phase 3).
+- Required notice text (MIT, verbatim):
+
+```
+MIT License
+
+Copyright (c) Microsoft Corporation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Development dependencies
 
@@ -111,10 +158,12 @@ review for measured numbers.
 | TypeScript | 5.9.3 | Apache-2.0 | https://github.com/microsoft/TypeScript | build |
 | puppeteer-core | 23.11.1 | Apache-2.0 | https://github.com/puppeteer/puppeteer | dev/test |
 | onnxruntime-node | 1.29.0 | MIT | https://github.com/microsoft/onnxruntime | dev/test |
+| license-checker-rseidelsohn | 5.0.1 | BSD-3-Clause | https://github.com/RSeidelsohn/license-checker-rseidelsohn | dev (audit) |
 
-> Phase 3 action: run a repeatable licence audit of the full dependency tree
-> (direct + transitive) per MVP §"Dependency and Model Licence Audit". Verify
-> every licence text and record in `LICENSE_AUDIT.md`.
+The full direct + transitive tree (247 packages) was audited on 2026-11-02 with
+`license-checker-rseidelsohn` 5.0.1; the distribution, flagged items, and
+resolutions are in [`LICENSE_AUDIT.md`](./LICENSE_AUDIT.md). No copyleft,
+source-available, non-commercial, or unknown licence is present.
 
 ## Maintenance
 

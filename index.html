@@ -3,18 +3,72 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BiRefNet_lite Phase 1 — browser smoke test</title>
+    <title>Remove Photo BG — browser background remover</title>
+    <meta
+      name="description"
+      content="Remove the background from a product photo in your browser. Download a transparent PNG or a white-background JPG. Free, no account, and your photo never leaves your device."
+    />
     <style>
-      /* Minimal, plain styling for the Phase 1 smoke-test harness. */
-      body { font-family: system-ui, sans-serif; margin: 2rem; }
-      pre { background: #f4f4f4; padding: 1rem; white-space: pre-wrap; }
-      img { max-width: 45%; display: inline-block; margin: 0.5rem 0.5rem 0 0; }
-      .stage { font-size: 0.9rem; color: #333; }
-      canvas { max-width: 45%; border: 1px solid #ccc; }
-      button { margin-right: 0.5rem; }
+      /* Plain, responsive styling for the browser background remover. */
+      :root {
+        --bg: #f7f8fa;
+        --card: #ffffff;
+        --ink: #1f2430;
+        --muted: #5b6472;
+        --line: #e2e5ea;
+        --brand: #2563eb;
+        --brand-ink: #ffffff;
+        --ok: #16a34a;
+        --warn: #b45309;
+        --warn-bg: #fffbeb;
+        --warn-line: #fde68a;
+        --err: #b91c1c;
+        --err-bg: #fef2f2;
+        --err-line: #fecaca;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        margin: 0 auto;
+        padding: 1.5rem 1rem 4rem;
+        max-width: 720px;
+        color: var(--ink);
+        background: var(--bg);
+        line-height: 1.45;
+      }
+      h1 { font-size: 1.5rem; margin: 0 0 0.35rem; }
+      h2 { font-size: 1.05rem; margin: 0 0 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
+      .tagline { color: var(--muted); margin: 0 0 1.25rem; }
+      .stepNum {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 1.4rem; height: 1.4rem; border-radius: 50%;
+        background: var(--brand); color: var(--brand-ink);
+        font-size: 0.8rem; font-weight: 700; flex: none;
+      }
+      section.step {
+        background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+        padding: 1rem 1.1rem; margin: 0 0 1rem;
+      }
+      .hint { color: var(--muted); font-size: 0.85rem; margin: 0.25rem 0; }
+      .stage { font-size: 0.9rem; color: var(--muted); margin: 0.5rem 0 0; min-height: 1.2em; }
+
+      /* Drop zone is the primary call to action. */
+      .dropZone {
+        display: flex; flex-direction: column; gap: 0.35rem; align-items: center;
+        border: 2px dashed #c3c9d2; border-radius: 10px; padding: 1.5rem 1rem;
+        text-align: center; cursor: pointer; background: #fbfcfe;
+      }
+      .dropZone strong { font-size: 1.02rem; }
+      .dropZone:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+      .dropZone.dragover { border-color: var(--brand); background: #eff6ff; }
+      @media (prefers-reduced-motion: no-preference) {
+        .dropZone { transition: background-color 0.15s ease, border-color 0.15s ease; }
+      }
+
+      .inputBox img, .outputBox img { max-width: 100%; display: block; border-radius: 8px; margin-top: 0.5rem; }
       /* A transparent PNG on a white page looks blank, so show transparency
          against a checkerboard instead. */
-      #outputBox img {
+      .outputBox img {
         background-color: #fff;
         background-image:
           linear-gradient(45deg, #d0d0d0 25%, transparent 25%),
@@ -25,90 +79,248 @@
         background-position: 0 0, 0 8px, 8px -8px, -8px 0;
         border: 1px solid #bbb;
       }
-      .hint { color: #666; font-size: 0.9rem; margin: 0.25rem 0; }
+
+      .runRow { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+      .modelRow { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+      .modelRow label { font-weight: 600; }
+      select { min-width: 13rem; padding: 0.35rem 0.5rem; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+
+      button, .btn {
+        font: inherit; cursor: pointer; border-radius: 8px; padding: 0.55rem 0.95rem;
+        border: 1px solid var(--line); background: #fff; color: var(--ink);
+        text-decoration: none; display: inline-block;
+      }
+      button:disabled { opacity: 0.55; cursor: not-allowed; }
+      .primary, button.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); font-weight: 600; }
+      .secondary { background: #fff; }
+      button:focus-visible, select:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visible {
+        outline: 3px solid var(--brand); outline-offset: 2px;
+      }
+
+      /* Model progress ring: a small animated circle beside the model name. */
+      .ring { display: inline-flex; width: 18px; height: 18px; flex: none; }
+      .ring[hidden] { display: none; }
+      .ring svg { width: 18px; height: 18px; }
+      .ring .ringTrack { fill: none; stroke: var(--line); stroke-width: 3.5; }
+      .ring .ringValue {
+        fill: none; stroke: var(--brand); stroke-width: 3.5; stroke-linecap: round;
+        stroke-dasharray: 94.25; stroke-dashoffset: 94.25;
+        transform: rotate(-90deg); transform-origin: 50% 50%;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .ring .ringValue { transition: stroke-dashoffset 0.2s ease; }
+        .ring.indeterminate svg { animation: ringSpin 1s linear infinite; }
+      }
+      .ring.indeterminate .ringValue { stroke-dasharray: 24 94.25; stroke-dashoffset: 0; }
+      @keyframes ringSpin { to { transform: rotate(360deg); } }
+
+      /* Processing panel: collapsed word with an animated colour, expands to steps. */
+      .processing { margin-top: 0.85rem; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+      .processingToggle {
+        width: 100%; display: flex; align-items: center; justify-content: space-between;
+        gap: 0.5rem; border: 0; border-radius: 0; background: #fbfcfe; padding: 0.6rem 0.8rem;
+        font-weight: 600;
+      }
+      .processingLabel.working { animation: pulseInk 1.6s ease-in-out infinite; }
+      @keyframes pulseInk { 0%, 100% { color: var(--brand); } 50% { color: #93b4fb; } }
+      @media (prefers-reduced-motion: reduce) {
+        .processingLabel.working { animation: none; color: var(--brand); }
+      }
+      .processingToggle .chevron { transition: transform 0.15s ease; }
+      .processingToggle[aria-expanded='true'] .chevron { transform: rotate(90deg); }
+      .processingBody { padding: 0.35rem 0.9rem 0.9rem; }
+      .processingBody[hidden] { display: none; }
+      .stepList { list-style: none; margin: 0.2rem 0 0.6rem; padding: 0; }
+      .stepList li { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.18rem 0; color: var(--muted); }
+      .stepList li .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--line); flex: none; }
+      .stepList li[data-state='active'] { color: var(--ink); font-weight: 600; }
+      .stepList li[data-state='active'] .dot { background: var(--brand); }
+      .stepList li[data-state='done'] .dot { background: var(--ok); }
+      .stepList li .stepDetail { color: var(--muted); font-weight: 400; }
+      .logDetails summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+      #log {
+        background: #f4f5f7; border-radius: 8px; padding: 0.6rem; white-space: pre-wrap;
+        font-size: 0.78rem; max-height: 15rem; overflow: auto; margin: 0.5rem 0 0;
+      }
+
+      .exportActions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.75rem; }
+      .exportActions [hidden] { display: none; }
+
+      .recovery {
+        margin-top: 0.75rem; border: 1px solid var(--err-line); background: var(--err-bg);
+        border-radius: 10px; padding: 0.75rem 0.9rem;
+      }
+      .recovery[hidden] { display: none; }
+      .recovery p { margin: 0 0 0.6rem; }
+      .recovery .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+      .netWarn {
+        border: 1px solid var(--warn-line); background: var(--warn-bg); border-radius: 10px;
+        padding: 0.85rem 1rem; margin: 0 0 1rem;
+      }
+      .netWarn[hidden] { display: none; }
+      .netWarn p { margin: 0 0 0.65rem; white-space: pre-line; }
+      .netWarn .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+      details.advanced { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0.6rem 1.1rem; }
+      details.advanced summary { cursor: pointer; font-weight: 600; }
+      .controls { display: flex; flex-wrap: wrap; gap: 0.9rem; align-items: baseline; margin-top: 0.75rem; }
+      .controls label { font-weight: 600; }
+      .controls input[type='range'] { vertical-align: middle; }
+
+      .siteFooter { margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 0.75rem; }
+      a { color: var(--brand); }
+      @media (max-width: 520px) {
+        .runRow { flex-direction: column; align-items: stretch; }
+        .runRow .primary { width: 100%; }
+      }
     </style>
   </head>
   <body>
-    <h1>BiRefNet_lite — browser smoke test</h1>
-    <p class="stage" id="stage">Starting…</p>
-    <p class="hint" id="buildHint">Build <code id="buildStamp">__BUILD_ID__</code> — if this does not match the build you just made, the page is stale; reload with Ctrl+Shift+R.</p>
-    <button id="pickFile">Choose image</button>
-    <button id="runAll" disabled>Run smoke test</button>
-    <button id="copyReport">Copy device report</button>
-    <div>
-      <strong>Input image</strong>
-      <div id="inputBox"></div>
+    <header>
+      <h1>Remove the background from a product photo</h1>
+      <p class="tagline">
+        Drop a photo, get a transparent PNG or a white-background JPG.
+        Everything runs in your browser — your photo is never uploaded.
+      </p>
+    </header>
+
+    <!-- Metered-connection preflight: shown only when a large download is
+         about to happen on a link that may be metered. -->
+    <div id="netWarn" class="netWarn" hidden>
+      <p id="netWarnText"></p>
+      <div class="actions">
+        <button id="netWarnConfirm" class="primary">Download model</button>
+        <button id="netWarnDismiss" class="secondary">Not now</button>
+      </div>
     </div>
-    <div>
-      <strong>Output (transparent PNG)</strong>
-      <div id="outputBox"></div>
-    </div>
-    <pre id="log"></pre>
+
+    <section class="step" aria-labelledby="step1Title">
+      <h2 id="step1Title"><span class="stepNum">1</span> Choose a photo</h2>
+      <div
+        id="dropZone"
+        class="dropZone"
+        role="button"
+        tabindex="0"
+        aria-label="Drop a JPEG, PNG, or WebP image here, or press Enter to choose a file"
+      >
+        <strong>Drop a photo here, or tap to choose</strong>
+        <span class="hint"
+          >JPEG, PNG, or WebP — up to <span id="limitBytes">20 MB</span>, longest side
+          <span id="limitSide">4096</span> px</span
+        >
+      </div>
+      <div id="inputBox" class="inputBox"></div>
+    </section>
+
+    <section class="step" aria-labelledby="step2Title">
+      <h2 id="step2Title"><span class="stepNum">2</span> Remove the background</h2>
+      <div class="runRow">
+        <div class="modelRow">
+          <label for="modelSelect">Model</label>
+          <select id="modelSelect" disabled></select>
+          <!-- Animated progress ring, shown next to the selected model's name
+               while that model downloads or initialises. -->
+          <span id="modelProgress" class="ring" hidden aria-hidden="true">
+            <svg viewBox="0 0 36 36">
+              <circle class="ringTrack" cx="18" cy="18" r="15"></circle>
+              <circle class="ringValue" cx="18" cy="18" r="15"></circle>
+            </svg>
+          </span>
+        </div>
+        <button id="runAll" class="primary" disabled>Remove background</button>
+      </div>
+      <p id="stage" class="stage" role="status" aria-live="polite">Starting…</p>
+
+      <!-- Collapsed "Processing" summary; expands to the live steps and log. -->
+      <div id="processing" class="processing" hidden>
+        <button
+          id="processingToggle"
+          class="processingToggle"
+          aria-expanded="false"
+          aria-controls="processingBody"
+        >
+          <span id="processingLabel" class="processingLabel working">Processing…</span>
+          <span class="chevron" aria-hidden="true">›</span>
+        </button>
+        <div id="processingBody" class="processingBody" hidden>
+          <ol id="stepList" class="stepList"></ol>
+          <details class="logDetails">
+            <summary>Technical details</summary>
+            <pre id="log"></pre>
+          </details>
+        </div>
+      </div>
+
+      <div id="recovery" class="recovery" hidden></div>
+    </section>
+
+    <section id="outputSection" class="step" hidden aria-labelledby="step3Title">
+      <h2 id="step3Title"><span class="stepNum">3</span> Download your image</h2>
+      <div id="outputBox" class="outputBox"></div>
+      <div class="exportActions">
+        <a id="downloadPng" class="btn primary" download hidden>Download transparent PNG</a>
+        <a id="downloadJpg" class="btn secondary" download hidden>Download white-background JPG</a>
+      </div>
+    </section>
+
+    <details class="advanced">
+      <summary>Advanced options</summary>
+      <div class="controls">
+        <div>
+          <label for="providerToggle">Runtime</label>
+          <select id="providerToggle" disabled></select>
+          <span class="hint" id="providerHint"></span>
+        </div>
+        <div>
+          <button id="loadModel" disabled>Reload model</button>
+        </div>
+        <div>
+          <label for="maskThreshold">Mask threshold</label>
+          <input
+            type="range"
+            id="maskThreshold"
+            min="0"
+            max="100"
+            step="1"
+            value="0"
+            title="Forces alpha to 0 below this cut-off (0 = off)"
+          />
+          <span class="hint" id="maskThresholdValue">off</span>
+        </div>
+        <div>
+          <label for="maskFeather">Mask feather (px)</label>
+          <input
+            type="range"
+            id="maskFeather"
+            min="0"
+            max="64"
+            step="1"
+            value="0"
+            title="Softens the mask edge by this many output pixels (0 = off)"
+          />
+          <span class="hint" id="maskFeatherValue">off</span>
+        </div>
+      </div>
+    </details>
+
+    <p class="hint" id="buildHint" style="margin-top: 1rem">
+      Build <code id="buildStamp">__BUILD_ID__</code> — if this does not match the build you
+      just made, the page is stale; reload with Ctrl+Shift+R.
+    </p>
+
+    <footer class="siteFooter">
+      <p class="hint">
+        Your image is processed entirely in your browser and never uploaded.
+        <a href="./PRIVACY.md">Privacy</a> ·
+        <a href="./THIRD_PARTY_LEGAL_NOTICES.md">Third-party notices</a> ·
+        <a href="./LICENSE_AUDIT.md">Licence audit</a> ·
+        <a href="./MODEL_CARD.md">Model card</a>.
+      </p>
+    </footer>
 
     <!-- The worker is loaded as a module worker via Vite. -->
     <script type="module" src="/src/main.ts"></script>
-    <script>
-      // A page served without Vite's transform (`index.html` opened directly, or
-      // through an IDE/static file preview) still contains the literal
-      // `__BUILD_ID__` placeholder and cannot load `/src/main.ts`. Say that plainly
-      // instead of showing a raw token and a generic "script did not run".
-      (function () {
-        // The token is assembled at runtime so the transform that substitutes it
-        // cannot also substitute this copy.
-        var placeholder = '__BUILD' + '_ID__';
-        var stamp = document.getElementById('buildStamp');
-        if (!stamp || stamp.textContent.indexOf(placeholder) === -1) {
-          // Transformed by Vite: normal path. Watch for an entry point that never
-          // executes (404 on main.ts, or a module that throws while evaluating).
-          setTimeout(function () {
-            var log = document.getElementById('log');
-            if (log && !log.textContent) {
-              document.getElementById('stage').textContent =
-                'App script did not run — open the browser console and check that /src/main.ts is served';
-            }
-          }, 8000);
-          return;
-        }
-
-        stamp.textContent = 'none';
-        var stage = document.getElementById('stage');
-        var hint = document.getElementById('buildHint');
-        stage.textContent = 'This page was opened without the dev server';
-
-        // The sandbox forwards each port to its own hostname: `work-1-<id>` is
-        // port 12000, `work-2-<id>` is 12001. Opening any other one (or a preview
-        // pane) serves this file raw, so send the reader to the app on 12000.
-        var forwarded = location.hostname.match(/^work-\d+-([a-z0-9]+)\.prod-runtime\.all-hands\.dev$/);
-        if (forwarded && location.hostname.indexOf('work-1-') !== 0) {
-          var appUrl = 'https://work-1-' + forwarded[1] + '.prod-runtime.all-hands.dev/';
-          stage.textContent = 'Moving you to the app on port 12000…';
-          hint.innerHTML = '';
-          var link = document.createElement('a');
-          link.href = appUrl;
-          link.textContent = appUrl;
-          hint.appendChild(document.createTextNode('If nothing happens, open '));
-          hint.appendChild(link);
-          hint.appendChild(document.createTextNode('.'));
-          location.replace(appUrl);
-          return;
-        }
-
-        hint.innerHTML = '';
-        hint.appendChild(
-          document.createTextNode(
-            'index.html was served as a plain file, so the TypeScript entry point cannot load. ' +
-              'Start the dev server and open the URL it prints instead of the file: ',
-          ),
-        );
-        var code = document.createElement('code');
-        code.textContent = 'npm run dev';
-        hint.appendChild(code);
-        hint.appendChild(
-          document.createTextNode(
-            ' (sets port 12000). On a remote sandbox use the https URL that forwards port 12000, not localhost.',
-          ),
-        );
-      })();
-    </script>
+    <script src="./no-dev-server.js"></script>
   </body>
 </html>

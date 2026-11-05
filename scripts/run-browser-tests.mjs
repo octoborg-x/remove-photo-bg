@@ -151,7 +151,7 @@ try {
 
     // Upload through the real file chooser (the button creates the input).
     const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#pickFile');
+    await page.click('#dropZone');
     const chooser = await chooserPromise;
     await chooser.accept([resolve(ROOT, 'test-images/glass-wine.jpg')]);
 
@@ -167,15 +167,18 @@ try {
     );
 
     const exportState = await page.evaluate(() => {
-      const png = document.querySelector('#outputBox a');
+      const png = document.getElementById('downloadPng');
       const jpg = document.getElementById('downloadJpg');
       const img = document.querySelector('#outputBox img');
       return {
         pngHref: png?.getAttribute('href') ?? '',
         pngDownload: png?.getAttribute('download') ?? '',
+        pngHidden: png ? png.hidden : true,
         jpgHref: jpg?.getAttribute('href') ?? '',
         jpgDownload: jpg?.getAttribute('download') ?? '',
+        jpgHidden: jpg ? jpg.hidden : true,
         imgSrc: img?.getAttribute('src') ?? '',
+        outputSectionHidden: document.getElementById('outputSection')?.hidden ?? true,
         log: document.getElementById('log')?.textContent ?? '',
       };
     });
@@ -189,9 +192,44 @@ try {
     const colourType = Buffer.from(pngB64, 'base64')[25];
     record('PNG export has an alpha channel (colour type 6)', colourType === 6, `colourType=${colourType}`);
     record(
-      'JPG export is offered as a white-background JPEG',
-      exportState.jpgHref.startsWith('data:image/jpeg') && exportState.jpgDownload.endsWith('.jpg'),
-      exportState.jpgDownload,
+      'download section reveals transparent PNG (default) + white-background JPG',
+      exportState.outputSectionHidden === false &&
+        exportState.pngHidden === false &&
+        exportState.pngDownload.endsWith('.png') &&
+        exportState.jpgHidden === false &&
+        exportState.jpgHref.startsWith('data:image/jpeg') &&
+        exportState.jpgDownload.endsWith('.jpg'),
+      `${exportState.pngDownload} / ${exportState.jpgDownload}`,
+    );
+
+    // The processing panel must be visible and its step list must show the three
+    // phases (download, prepare, remove background) as completed.
+    const panelState = await page.evaluate(() => {
+      const panel = document.getElementById('processing');
+      const toggle = document.getElementById('processingToggle');
+      const label = document.getElementById('processingLabel')?.textContent ?? '';
+      toggle?.click();
+      const steps = Array.from(document.querySelectorAll('#stepList li')).map((li) => ({
+        text: li.textContent ?? '',
+        state: li.dataset.state,
+      }));
+      return {
+        hidden: panel ? panel.hidden : true,
+        label,
+        expanded: toggle?.getAttribute('aria-expanded') ?? '',
+        steps,
+      };
+    });
+    record(
+      'processing panel lists download/prepare/inference steps',
+      panelState.hidden === false &&
+        panelState.expanded === 'true' &&
+        panelState.steps.length >= 3 &&
+        panelState.steps.every((s) => s.state === 'done') &&
+        panelState.steps.some((s) => /download/i.test(s.text)) &&
+        panelState.steps.some((s) => /prepare/i.test(s.text)) &&
+        panelState.steps.some((s) => /remove background/i.test(s.text)),
+      panelState.steps.map((s) => `${s.state}:${s.text}`).join(' | '),
     );
 
     // Privacy: every request during processing is same-origin (no third party).
@@ -213,7 +251,7 @@ try {
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     const pngPath = resolve(ROOT, 'smoke-results/phase4-browser/input.png');
     const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#pickFile');
+    await page.click('#dropZone');
     (await chooserPromise).accept([pngPath]);
     await page.waitForFunction(() => !document.getElementById('runAll').disabled, { timeout: 30000 });
     await page.click('#runAll');
@@ -229,7 +267,7 @@ try {
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#pickFile');
+    await page.click('#dropZone');
     (await chooserPromise).accept([resolve(ROOT, 'smoke-results/phase4-browser/not-an-image.txt')]);
     await page.waitForFunction(
       () => /Unsupported file type/.test(document.getElementById('stage')?.textContent ?? ''),
@@ -246,7 +284,7 @@ try {
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#pickFile');
+    await page.click('#dropZone');
     (await chooserPromise).accept([resolve(ROOT, 'smoke-results/phase4-browser/corrupt.png')]);
     await page.waitForFunction(
       () => /Failed to decode|ERROR/.test(document.getElementById('stage')?.textContent ?? ''),
@@ -278,6 +316,10 @@ try {
       .then(() => true)
       .catch(() => false);
     record('worker startup failure surfaces an error in the UI', sawError);
+    const recoveryShown = await page.evaluate(
+      () => (document.getElementById('recovery')?.hidden ?? true) === false,
+    );
+    record('worker failure shows a recovery panel', recoveryShown);
     await page.close();
   }
   {
@@ -315,6 +357,47 @@ try {
       opened = false;
     }
     record('drop zone is keyboard-activatable (Enter opens the chooser)', opened);
+    await page.close();
+  }
+
+  // ——— Scenario 7: metered-connection preflight ———
+  // The decision module is unit-tested; this proves the page actually gates the
+  // first download behind a confirmation with the model size, and that
+  // confirming proceeds. The Network Information API is stubbed before scripts
+  // run (it is read-only in the browser).
+  {
+    const page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'connection', {
+        configurable: true,
+        get: () => ({ type: 'cellular', effectiveType: '3g', saveData: false }),
+      });
+    });
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    const warnShown = await page
+      .waitForFunction(
+        () => (document.getElementById('netWarn')?.hidden ?? true) === false,
+        { timeout: 30000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    const warnText = await page.evaluate(
+      () => document.getElementById('netWarnText')?.textContent ?? '',
+    );
+    record(
+      'metered connection shows a download confirmation with the model size',
+      warnShown && /\d+(\.\d+)? MB/.test(warnText),
+      warnText.replace(/\s+/g, ' ').slice(0, 90),
+    );
+    await page.click('#netWarnConfirm');
+    const startedAfterConfirm = await page
+      .waitForFunction('window.smokeModelReady === true', { timeout: 600000 })
+      .then(() => true)
+      .catch(() => false);
+    const warnGone = await page.evaluate(
+      () => (document.getElementById('netWarn')?.hidden ?? true) === true,
+    );
+    record('confirming the download starts the model load', startedAfterConfirm && warnGone);
     await page.close();
   }
 } finally {

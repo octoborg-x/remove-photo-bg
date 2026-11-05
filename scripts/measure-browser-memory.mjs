@@ -72,7 +72,7 @@ const afterModel = treeRssKb(pid).total;
 
 const [chooser] = await Promise.all([
   page.waitForFileChooser({ timeout: 20000 }),
-  page.click('#pickFile'),
+  page.click('#dropZone'),
 ]);
 await chooser.accept([`test-images/${IMAGE}`]);
 await page.waitForFunction(() => !!document.querySelector('#inputBox img'), { timeout: 20000, polling: 250 });
@@ -80,8 +80,7 @@ await page.waitForFunction(() => !!document.querySelector('#inputBox img'), { ti
 const t0 = Date.now();
 await page.evaluate(() => document.getElementById('runAll').click());
 await page.waitForFunction(
-  () => document.getElementById('stage').textContent === 'Done' ||
-        document.getElementById('stage').textContent.startsWith('Error'),
+  () => /Done|Error/.test(document.getElementById('stage').textContent ?? ''),
   { timeout: 280000, polling: 500 },
 );
 const elapsed = Date.now() - t0;

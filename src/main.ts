@@ -27,7 +27,11 @@ import {
   onAssetCacheMessage,
   ASSET_BASE,
 } from './features/background-removal/asset-cache';
-import { describeProgress } from './features/background-removal/load-progress';
+import { describeProgress, phaseForStage, PHASE_LABELS } from './features/background-removal/load-progress';
+import {
+  assessNetwork,
+  downloadConfirmationText,
+} from './features/background-removal/network-preflight';
 import {
   detectWebGpu,
   isProviderChoice,
@@ -52,12 +56,12 @@ const stageEl = document.getElementById('stage')!;
 const logEl = document.getElementById('log')! as HTMLPreElement;
 const inputBox = document.getElementById('inputBox')!;
 const outputBox = document.getElementById('outputBox')!;
-const pickFileBtn = document.getElementById('pickFile')! as HTMLButtonElement;
+const outputSection = document.getElementById('outputSection')!;
 const runAllBtn = document.getElementById('runAll')! as HTMLButtonElement;
-const copyReportBtn = document.getElementById('copyReport')! as HTMLButtonElement;
 const modelSelect = document.getElementById('modelSelect')! as HTMLSelectElement;
 const providerToggle = document.getElementById('providerToggle')! as HTMLSelectElement;
 const loadModelBtn = document.getElementById('loadModel')! as HTMLButtonElement;
+const downloadPngBtn = document.getElementById('downloadPng')! as HTMLAnchorElement;
 const downloadJpgBtn = document.getElementById('downloadJpg')! as HTMLAnchorElement;
 const providerHint = document.getElementById('providerHint')!;
 const maskThresholdInput = document.getElementById('maskThreshold')! as HTMLInputElement;
@@ -67,6 +71,18 @@ const maskFeatherValue = document.getElementById('maskFeatherValue')!;
 const dropZone = document.getElementById('dropZone')!;
 const limitBytesEl = document.getElementById('limitBytes')!;
 const limitSideEl = document.getElementById('limitSide')!;
+const modelProgressEl = document.getElementById('modelProgress')!;
+const modelProgressValue = modelProgressEl.querySelector('.ringValue') as SVGCircleElement;
+const processingEl = document.getElementById('processing')!;
+const processingToggle = document.getElementById('processingToggle')! as HTMLButtonElement;
+const processingLabel = document.getElementById('processingLabel')!;
+const processingBody = document.getElementById('processingBody')!;
+const stepListEl = document.getElementById('stepList')!;
+const recoveryEl = document.getElementById('recovery')!;
+const netWarnEl = document.getElementById('netWarn')!;
+const netWarnText = document.getElementById('netWarnText')!;
+const netWarnConfirm = document.getElementById('netWarnConfirm')! as HTMLButtonElement;
+const netWarnDismiss = document.getElementById('netWarnDismiss')! as HTMLButtonElement;
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
 // markup, so a changed limit never leaves stale copy on the page.
@@ -104,6 +120,10 @@ let currentObjectUrl: string | null = null;
 let worker: Worker | null = null;
 let modelReady = false;
 let modelError: string | null = null;
+// True between posting a set-model and the worker's load-time/error reply, so a
+// second caller (e.g. Remove background after a paused download) never
+// double-posts the load.
+let modelLoadInFlight = false;
 // Set as soon as the worker posts anything at all; distinguishes "never started"
 // from "working on a long download".
 let workerResponded = false;
@@ -158,13 +178,15 @@ function applyMaskUi(): void {
   maskFeatherValue.textContent = maskAdjust.feather > 0 ? `${maskAdjust.feather}px` : 'off';
 }
 
-function setOutputStatus(text: string): void {
+// Clears a previous result so a newly chosen photo never sits above a stale
+// export, and hides the download section until a fresh mask is rendered.
+function clearOutput(): void {
   outputBox.innerHTML = '';
-  if (!text) return;
-  const p = document.createElement('p');
-  p.className = 'hint';
-  p.textContent = text;
-  outputBox.appendChild(p);
+  downloadPngBtn.hidden = true;
+  downloadJpgBtn.hidden = true;
+  downloadPngBtn.removeAttribute('href');
+  downloadJpgBtn.removeAttribute('href');
+  outputSection.hidden = true;
 }
 
 function log(msg: string): void {
@@ -180,11 +202,237 @@ function showError(msg: string): void {
   setStage(`Error: ${msg}`);
 }
 
-function error(msg: string): void {
-  showError(describeError(msg));
+function error(msg: string, kind: ErrorKind = 'generic'): void {
+  const described = describeError(msg);
+  showError(described);
+  setProcessingLabel('Could not finish', false);
+  if (kind === 'upload') {
+    // A rejected file is a normal input mistake, not a broken app: explain it on
+    // the stage line and let the user pick another photo. No recovery panel.
+    hideRecovery();
+    return;
+  }
+  showRecovery(kind, described);
 }
 
+// ——— Error recovery ———
+// Every failure surfaces the concrete next step instead of a dead end. `kind`
+// picks the guidance; the panel always offers a reliable escape (reload).
+type ErrorKind = 'upload' | 'download' | 'memory' | 'worker' | 'generic';
+
+function retryModelOrRun(): void {
+  hideRecovery();
+  if (!modelReady) loadSelectedModel();
+  else if (currentImageData) void runSmoke();
+}
+
+function showRecovery(kind: ErrorKind, message: string): void {
+  recoveryEl.innerHTML = '';
+  const guidance = document.createElement('p');
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+
+  let text: string;
+  let primaryLabel = 'Try again';
+  let primaryRun: () => void = retryModelOrRun;
+
+  switch (kind) {
+    case 'download':
+      text =
+        'The model download did not finish. Check your connection and try again — ' +
+        'the model is kept on this device once it succeeds, so you only download it once.';
+      primaryLabel = 'Retry download';
+      primaryRun = () => {
+        hideRecovery();
+        loadSelectedModel();
+      };
+      break;
+    case 'memory':
+      text =
+        'This device ran out of memory. Close other tabs or apps to free memory, then ' +
+        'try again. A smaller model in the Model list needs less memory.';
+      primaryLabel = 'Try again';
+      primaryRun = () => {
+        hideRecovery();
+        if (!modelReady) loadSelectedModel();
+        else if (currentImageData) void runSmoke();
+      };
+      break;
+    case 'worker':
+      text =
+        'The background-removal engine could not start. Reload the page; if it keeps ' +
+        'failing, check the Technical details above for the exact error.';
+      primaryLabel = 'Reload page';
+      primaryRun = () => location.reload();
+      break;
+    default:
+      text = 'Something went wrong. Try again, or reload the page.';
+  }
+
+  guidance.textContent = text;
+  recoveryEl.appendChild(guidance);
+
+  const detail = document.createElement('p');
+  detail.className = 'hint';
+  detail.textContent = message;
+  recoveryEl.appendChild(detail);
+
+  const primary = document.createElement('button');
+  primary.className = 'primary';
+  primary.textContent = primaryLabel;
+  primary.addEventListener('click', primaryRun);
+  actions.appendChild(primary);
+
+  if (kind !== 'worker') {
+    const reload = document.createElement('button');
+    reload.className = 'secondary';
+    reload.textContent = 'Reload page';
+    reload.addEventListener('click', () => location.reload());
+    actions.appendChild(reload);
+  }
+  if (kind === 'upload' || kind === 'generic' || kind === 'memory') {
+    const pick = document.createElement('button');
+    pick.className = 'secondary';
+    pick.textContent = 'Choose another photo';
+    pick.addEventListener('click', () => chooseFile());
+    actions.appendChild(pick);
+  }
+
+  recoveryEl.appendChild(actions);
+  recoveryEl.hidden = false;
+}
+
+function hideRecovery(): void {
+  recoveryEl.hidden = true;
+  recoveryEl.innerHTML = '';
+}
+
+// ——— Model progress ring ———
+// A small animated circle beside the model name. Determinate while the download
+// reports a real percentage; indeterminate for the unmeasurable phases (runtime
+// setup, session creation).
+function showRing(percent: number | null): void {
+  modelProgressEl.hidden = false;
+  const determinate = typeof percent === 'number' && Number.isFinite(percent);
+  modelProgressEl.classList.toggle('indeterminate', !determinate);
+  if (determinate) {
+    const clamped = Math.max(0, Math.min(100, percent));
+    const circumference = 94.25; // 2 * pi * r, r = 15
+    modelProgressValue.style.strokeDashoffset = String(circumference * (1 - clamped / 100));
+  } else {
+    modelProgressValue.style.strokeDashoffset = '';
+  }
+}
+
+function hideRing(): void {
+  modelProgressEl.hidden = true;
+  modelProgressEl.classList.remove('indeterminate');
+  modelProgressValue.style.strokeDashoffset = '';
+}
+
+// ——— Processing panel ———
+// One collapsed "Processing…" word (with an animated colour while work is in
+// progress). Expanding it lists the live steps — downloading, preparing, and
+// removing the background — plus the technical log, so the three phases are
+// distinguishable at a glance and no bottom-of-page text block is needed.
+type StepId = 'download' | 'prepare' | 'inference' | 'export';
+type StepState = 'todo' | 'active' | 'done';
+interface Step {
+  id: StepId;
+  label: string;
+  state: StepState;
+  detail: string;
+}
+let steps: Step[] = [];
+let processingVisible = false;
+
+function stepLabel(id: StepId): string {
+  switch (id) {
+    case 'download':
+      return 'Download model';
+    case 'prepare':
+      return 'Prepare model';
+    case 'inference':
+      return 'Remove background';
+    case 'export':
+      return 'Create image';
+  }
+}
+
+function ensureStep(id: StepId): Step {
+  let step = steps.find((s) => s.id === id);
+  if (!step) {
+    step = { id, label: stepLabel(id), state: 'todo', detail: '' };
+    steps.push(step);
+  }
+  return step;
+}
+
+function setStep(id: StepId, state: StepState, detail = ''): void {
+  const step = ensureStep(id);
+  step.state = state;
+  if (detail) step.detail = detail;
+  renderSteps();
+}
+
+function renderSteps(): void {
+  stepListEl.innerHTML = '';
+  for (const step of steps) {
+    const li = document.createElement('li');
+    li.dataset.state = step.state;
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    li.appendChild(dot);
+    const name = document.createElement('span');
+    name.textContent = step.label;
+    li.appendChild(name);
+    if (step.detail) {
+      const detail = document.createElement('span');
+      detail.className = 'stepDetail';
+      detail.textContent = `— ${step.detail}`;
+      li.appendChild(detail);
+    }
+    stepListEl.appendChild(li);
+  }
+}
+
+function resetSteps(): void {
+  steps = [];
+  ensureStep('download');
+  ensureStep('prepare');
+  renderSteps();
+}
+
+function showProcessing(label: string, working: boolean): void {
+  if (!processingVisible) {
+    processingEl.hidden = false;
+    processingVisible = true;
+  }
+  setProcessingLabel(label, working);
+}
+
+function setProcessingLabel(label: string, working: boolean): void {
+  processingLabel.textContent = label;
+  processingLabel.classList.toggle('working', working);
+}
+
+processingToggle.addEventListener('click', () => {
+  const expanded = processingToggle.getAttribute('aria-expanded') === 'true';
+  processingToggle.setAttribute('aria-expanded', String(!expanded));
+  processingBody.hidden = expanded;
+});
+
 const OOM_PATTERN = /bad_alloc|out of memory|outofmemory|allocation failed|allocation error/i;
+const DOWNLOAD_PATTERN =
+  /fetch|network|failed to load|download|load failed|404|403|timeout|timed out|abort|sha|checksum|integrity|offline/i;
+
+// Maps a raw error message to the recovery guidance to show. The worker tags a
+// set-model failure as fatal, but not why; the message is the only signal.
+function classifyError(msg: string): ErrorKind {
+  if (OOM_PATTERN.test(msg)) return 'memory';
+  if (DOWNLOAD_PATTERN.test(msg)) return 'download';
+  return 'generic';
+}
 
 const MEMORY_NOTE =
   `BiRefNet_lite at its fixed ${MODEL_SIZE}x${MODEL_SIZE} input needs ~1 GB of transient ` +
@@ -225,7 +473,7 @@ async function loadImageFromFile(file: File): Promise<void> {
   // then the decoded dimensions after. Reject with a message the user can act on.
   const typeCheck = validateFileTypeAndSize(file);
   if (!typeCheck.ok) {
-    error(typeCheck.reason);
+    error(typeCheck.reason, 'upload');
     return;
   }
   const url = URL.createObjectURL(file);
@@ -238,13 +486,13 @@ async function loadImageFromFile(file: File): Promise<void> {
     });
   } catch (e) {
     URL.revokeObjectURL(url);
-    error(e instanceof Error ? e.message : String(e));
+    error(e instanceof Error ? e.message : String(e), 'upload');
     return;
   }
   const dimCheck = validateDimensions(img.naturalWidth, img.naturalHeight);
   if (!dimCheck.ok) {
     URL.revokeObjectURL(url);
-    error(dimCheck.reason);
+    error(dimCheck.reason, 'upload');
     return;
   }
   const canvas = document.createElement('canvas');
@@ -258,10 +506,20 @@ async function loadImageFromFile(file: File): Promise<void> {
   if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
   currentObjectUrl = url;
   showInputImage(img);
-  runAllBtn.disabled = !modelReady;
+  updateRunButton();
+  // A new photo invalidates the previous result and any error panel, but must
+  // not wipe the step list while the model is still loading: keep the download
+  // step active so the panel keeps showing the load in progress.
+  clearOutput();
+  hideRecovery();
+  if (!modelLoadInFlight) {
+    resetSteps();
+    setStep('download', modelReady ? 'done' : 'todo');
+    setStep('prepare', modelReady ? 'done' : 'todo');
+  }
   // Clear any previous error text so a successful load after a rejected one does
   // not leave a stale error on the stage line.
-  setStage(modelReady ? 'Image ready — click “Remove background”' : 'Image ready — waiting for the model…');
+  setStage(modelReady ? 'Photo ready — tap “Remove background”' : 'Photo ready — waiting for the model…');
   // Do not log the filename (MVP §8: no filenames, EXIF, or raw user input).
   log(`Loaded image: ${canvas.width}x${canvas.height}`);
 }
@@ -282,7 +540,7 @@ async function loadImageFromUrl(url: string): Promise<void> {
   currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   currentImage = img;
   showInputImage(img);
-  runAllBtn.disabled = !modelReady;
+  updateRunButton();
   log(`Loaded image from URL: ${url} (${canvas.width}x${canvas.height})`);
 }
 
@@ -293,6 +551,7 @@ function waitForModel(): Promise<void> {
 }
 
 function settleModel(error: string | null): void {
+  modelLoadInFlight = false;
   if (error) {
     modelError = error;
   } else {
@@ -303,6 +562,14 @@ function settleModel(error: string | null): void {
     if (error) w.reject(new Error(error));
     else w.resolve();
   }
+}
+
+// The run button is the page's primary action. It is enabled as soon as a photo
+// is chosen — not only once the model is ready — so pressing it while the model
+// is still downloading (or after a paused preflight) starts the run and waits.
+// A fatal model error keeps it disabled; the recovery panel offers the retry.
+function updateRunButton(): void {
+  runAllBtn.disabled = !currentImage || modelError !== null;
 }
 
 async function initWorker(): Promise<void> {
@@ -334,11 +601,11 @@ async function initWorker(): Promise<void> {
   // importScripts of the ORT runtime) posts nothing at all and the page waits on
   // its initial "Starting…" text forever.
   worker.onerror = (e) => {
-    error(`Inference worker failed to start: ${e.message || 'unknown worker error'}`);
+    error(`Inference worker failed to start: ${e.message || 'unknown worker error'}`, 'worker');
     settleModel('worker failed to start');
   };
   worker.onmessageerror = () => {
-    error('Inference worker sent a message that could not be deserialized');
+    error('Inference worker sent a message that could not be deserialized', 'worker');
   };
   worker.onmessage = (e: MessageEvent<WorkerProgressMessage>) => {
     const msg = e.data;
@@ -347,20 +614,27 @@ async function initWorker(): Promise<void> {
       updateLoadProgress(msg);
     } else if (msg.kind === 'load-time') {
       const loadedModelId = msg.modelId ?? selectedModel?.id ?? 'unknown';
-      setStage(`Model loaded — provider ${msg.provider}`);
+      setStage(`Model ready — provider ${msg.provider}`);
       loadTimeMs = msg.ms;
       log(`Model: ${loadedModelId}`);
       log(`Model load time: ${loadTimeMs.toFixed(1)} ms`);
       log(`Execution provider: ${msg.provider}`);
-      if (msg.adapter) {
-        adapterReport = msg.adapter;
-        log(`GPU adapter: ${msg.adapter}`);
-      }
+      if (msg.adapter) log(`GPU adapter: ${msg.adapter}`);
       window.smokeProvider = msg.provider;
       window.smokeModelId = loadedModelId;
       announcedLog.push(msg.provider);
-      runAllBtn.disabled = !currentImage;
-      pickFileBtn.disabled = false;
+      // Model loading is done: settle the download/prepare steps and the ring.
+      setStep('download', 'done', 'on this device');
+      setStep('prepare', 'done', `running on ${msg.provider}`);
+      hideRing();
+      hideRecovery();
+      if (processingVisible) {
+        setProcessingLabel(
+          currentImageData ? 'Ready — tap “Remove background”' : 'Model ready — choose a photo',
+          false,
+        );
+      }
+      updateRunButton();
       loadModelBtn.disabled = false;
       setSelectorsDisabled(false);
       settleModel(null);
@@ -388,6 +662,9 @@ async function initWorker(): Promise<void> {
         return;
       }
       const { mask, width, height } = msg;
+      setStep('inference', 'done');
+      setStep('export', 'active');
+      setProcessingLabel('Creating your image…', true);
       // The worker reports the model's actual input size so a per-model input
       // change (e.g. a 384 variant) never mis-scales the mask.
       const inputSize = msg.inputSize ?? MODEL_SIZE;
@@ -418,17 +695,22 @@ async function initWorker(): Promise<void> {
       img.alt = 'Background removed';
       outputBox.appendChild(img);
 
-      const a = document.createElement('a');
-      a.href = png;
-      a.download = `smoke-${width}x${height}.png`;
-      a.textContent = 'Download transparent PNG';
-      outputBox.appendChild(a);
+      // Transparent PNG is the default export; the white-background JPG is the
+      // secondary choice. Both live in the download section, not as raw links.
+      downloadPngBtn.href = png;
+      downloadPngBtn.download = `background-removed-${width}x${height}.png`;
+      downloadPngBtn.hidden = false;
 
-      // White-background JPG export (Phase 2 requirement).
       const jpg = canvasToJpegDataUrl(canvas);
       downloadJpgBtn.href = jpg;
-      downloadJpgBtn.download = `smoke-${width}x${height}.jpg`;
-      downloadJpgBtn.style.display = 'inline-block';
+      downloadJpgBtn.download = `background-removed-${width}x${height}.jpg`;
+      downloadJpgBtn.hidden = false;
+
+      outputSection.hidden = false;
+
+      setStep('export', 'done');
+      setProcessingLabel('Done — your image is ready', false);
+      setStage('Done — download your image below.');
 
       log(`Rendered transparent PNG (${width}x${height}), ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
       // A uniform mask means the model did not segment anything; say so rather
@@ -438,16 +720,17 @@ async function initWorker(): Promise<void> {
       // Errors tied to a run are delivered through that run's promise, so the
       // caller reports them once. Anything else is surfaced here.
       if (msg.runId !== undefined) failPendingRuns(new Error(msg.message));
-      else error(msg.message);
+      else error(msg.message, msg.fatal ? classifyError(msg.message) : 'generic');
       if (msg.fatal) {
         settleModel(msg.message);
-        runAllBtn.disabled = true;
+        updateRunButton();
         loadModelBtn.disabled = false;
         setSelectorsDisabled(false);
-      } else if (currentImageData) {
+        hideRing();
+      } else {
         // A run-level failure (e.g. an allocation error) does not kill the
         // session; the worker retries on CPU, so keep the app usable.
-        runAllBtn.disabled = false;
+        updateRunButton();
       }
     }
   };
@@ -472,6 +755,8 @@ function providerForce(provider: 'webgpu' | 'wasm'): string | undefined {
  *  no-response watchdog. The model load itself resolves through waitForModel. */
 function loadSelectedModel(): void {
   if (!selectedModel || !worker) return;
+  if (modelLoadInFlight) return;
+  modelLoadInFlight = true;
   modelReady = false;
   modelError = null;
   window.smokeModelReady = false;
@@ -479,7 +764,13 @@ function loadSelectedModel(): void {
   window.smokeProvider = selectedProvider;
   workerResponded = false;
   resetProgressClock();
-  adapterReport = '';
+  // Model (re)load: reset the step list to download → prepare and show the
+  // animated ring next to the model name while the worker reports progress.
+  hideRecovery();
+  resetSteps();
+  setStep('download', 'active');
+  showProcessing(`Downloading ${selectedModel.label}…`, true);
+  showRing(null);
   setStage(`Loading model ${selectedModel.id}…`);
   log(`Loading model: ${selectedModel.id} (${selectedModel.url})`);
   const force = providerForce(selectedProvider);
@@ -501,13 +792,19 @@ function loadSelectedModel(): void {
   // line on "Starting…" with nothing in the log.
   setTimeout(() => {
     if (workerResponded || modelReady || modelError) return;
-    setStage('No response from the inference worker');
+    setStage('No response from the background-removal engine');
     log(
       `WARNING: the inference worker has not responded in ${WORKER_START_TIMEOUT_MS / 1000}s. ` +
         'Its script or the ONNX Runtime files may have failed to load; check the browser console.',
     );
+    hideRing();
+    setProcessingLabel('Could not start', false);
     setSelectorsDisabled(false);
     loadModelBtn.disabled = false;
+    showRecovery(
+      'worker',
+      'The background-removal engine did not respond. Reload the page, then try again.',
+    );
   }, WORKER_START_TIMEOUT_MS);
 }
 
@@ -694,8 +991,8 @@ function failPendingRuns(err: Error): void {
 function runOneInference(): Promise<number> {
   if (!currentImageData || !worker) return Promise.reject(new Error('No image loaded'));
   const imageData = currentImageData;
-  setStage(`Inference ${timings.length + 1}/${WARM_RUNS}…`);
-  setOutputStatus(`Running inference ${timings.length + 1}/${WARM_RUNS}…`);
+  setStep('inference', 'active');
+  setProcessingLabel('Removing background…', true);
   if (window.smokeProvider === 'webgpu' && timings.length === 0) {
     log('First GPU run compiles shaders; this can take a minute or two.');
   }
@@ -712,7 +1009,6 @@ function runOneInference(): Promise<number> {
 }
 
 function finishedRun(): void {
-  setStage('Done');
   const avg = timings.reduce((a, b) => a + b, 0) / timings.length;
   const model = selectedModel ? `${selectedModel.id} (${(selectedModel.size / 1048576).toFixed(1)} MB)` : '<none>';
   log(`--- Summary ---`);
@@ -720,7 +1016,9 @@ function finishedRun(): void {
   log(`Average: ${avg.toFixed(1)} ms`);
   log(`Provider: ${window.smokeProvider || '<reported above>'}`);
   log(`Model: ${model}`);
-  runAllBtn.disabled = false;
+  // A second run (the harness runs warm) already produced a result; make sure
+  // the button is re-enabled even when no result-ready message follows.
+  updateRunButton();
 }
 
 function chooseFile(): void {
@@ -733,8 +1031,6 @@ function chooseFile(): void {
   };
   input.click();
 }
-
-pickFileBtn.addEventListener('click', chooseFile);
 
 // Drag/drop (MVP §6) and keyboard activation of the drop zone (it is a
 // role=button with tabindex, so Enter/Space must do what a click does).
@@ -790,7 +1086,7 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
     try {
       await loadImageFromUrl(imgUrl);
     } catch (e) {
-      error(e instanceof Error ? e.message : String(e));
+      error(e instanceof Error ? e.message : String(e), 'upload');
       return null;
     }
   }
@@ -798,22 +1094,31 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
     error('No image loaded');
     return null;
   }
+  // A model download that was paused at the metered-connection prompt resumes
+  // here: pressing Remove background is an explicit request to run.
+  if (!modelReady && !modelError) {
+    sessionStorage.setItem('remove-bg:download-confirmed', '1');
+    netWarnEl.hidden = true;
+    if (!modelLoadInFlight) loadSelectedModel();
+  }
+  runAllBtn.disabled = true;
+  hideRecovery();
+  clearOutput();
+  showProcessing('Removing background…', true);
   try {
     await waitForModel();
   } catch (e) {
-    error(e instanceof Error ? e.message : String(e));
+    error(e instanceof Error ? e.message : String(e), 'download');
     return null;
   }
   timings.length = 0;
-  setOutputStatus('Preparing inference…');
   for (let i = 0; i < runs; i++) {
     try {
       await runOneInference();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      error(message);
-      setOutputStatus(`No output: ${message}`);
-      if (currentImageData) runAllBtn.disabled = false;
+      error(message, classifyError(message));
+      updateRunButton();
       return null;
     }
   }
@@ -833,14 +1138,9 @@ window.runSmoke = runSmoke;
 window.smokeModelReady = false;
 window.smokeModelId = '';
 
-// ——— Device report ———
-// One-copy summary of what the browser/device actually did, so real-device
-// testers can paste the result back into the tracker without photographing a
-// screen. No pixels are uploaded: the image never leaves the device; this text
-// is produced and copied locally.
-let adapterReport = '';
-let modelDownloadBytes = 0;
-let modelTotalBytes = 0;
+// ——— Progress state ———
+// The stage line, the progress ring, and the processing panel all read from the
+// same last-checkpoint state, so they never disagree about what is happening.
 let lastLoadStage: LoadStage | null = null;
 let lastProgress: {
   stage: LoadStage;
@@ -852,20 +1152,17 @@ let lastProgress: {
 // The worker measures elapsed time from its own start; this offset maps that
 // timeline onto the page's clock so the ticker below can keep counting.
 let progressClockOffset = 0;
-const downloadStart = performance.now();
 
 function resetProgressClock(): void {
   lastProgress = null;
   lastLoadStage = null;
   progressClockOffset = 0;
-  modelDownloadBytes = 0;
-  modelTotalBytes = 0;
 }
 
 // ——— Progress rendering ———
-// Renders a checkpoint to the stage line and logs each new stage exactly once,
-// so the log reads as an ordered timeline of the load rather than a stream of
-// percentages.
+// Renders a checkpoint to the stage line, updates the progress ring and the
+// step list, and logs each new stage exactly once, so the log reads as an
+// ordered timeline of the load rather than a stream of percentages.
 function updateLoadProgress(msg: {
   stage: LoadStage;
   percent: number;
@@ -874,11 +1171,28 @@ function updateLoadProgress(msg: {
   elapsedMs: number;
   detail?: string;
 }): void {
-  if (msg.bytes !== undefined) modelDownloadBytes = msg.bytes;
-  if (msg.totalBytes) modelTotalBytes = msg.totalBytes;
   if (!lastProgress) progressClockOffset = performance.now() - msg.elapsedMs;
   lastProgress = msg;
   setStage(describeProgress(msg));
+
+  const phase = phaseForStage(msg.stage);
+  const pct = Math.max(0, Math.min(100, Math.round(msg.percent)));
+  if (phase === 'download') {
+    // Only the download has a real, measurable percentage; the ring shows it.
+    showRing(msg.stage === 'cache-check' ? null : pct);
+    setStep('download', 'active', msg.stage === 'downloading' ? `${pct}%` : '');
+    if (msg.stage !== 'downloaded') {
+      showProcessing(`Downloading ${selectedModel?.label ?? 'model'} — ${pct}%`, true);
+    }
+  } else {
+    // Everything else (runtime, session creation) is not a measurable
+    // percentage, so the ring spins indeterminately rather than lying.
+    showRing(null);
+    setStep('download', 'done');
+    setStep('prepare', 'active', msg.detail ?? '');
+    showProcessing(PHASE_LABELS[phase] + '…', true);
+  }
+
   if (msg.stage !== lastLoadStage) {
     lastLoadStage = msg.stage;
     const extra = msg.detail ? ` (${msg.detail})` : '';
@@ -897,46 +1211,6 @@ setInterval(() => {
     describeProgress({ ...lastProgress, elapsedMs: performance.now() - progressClockOffset }),
   );
 }, 500);
-
-copyReportBtn.addEventListener('click', () => {
-  const isolation = window.crossOriginIsolated
-    ? `yes (COOP/COEP headers served)`
-    : `NO — threaded WASM may not engage`;
-  const n = timings.length;
-  const avg = n ? timings.reduce((a, b) => a + b, 0) / n : NaN;
-  const mb = (modelDownloadBytes / 1048576).toFixed(1);
-  const totalMb = modelTotalBytes ? (modelTotalBytes / 1048576).toFixed(1) + ' MB' : 'unknown';
-  const dlSecs = modelDownloadBytes ? ((performance.now() - downloadStart) / 1000).toFixed(1) : 'n/a';
-  const gpuGate = gpuState
-    ? `${gpuState.available ? 'available' : 'unavailable'}${gpuState.adapter ? ` (${gpuState.adapter})` : ''}`
-    : 'not checked';
-  const lines = [
-    '== BiRefNet_lite Phase 2 device report ==',
-    `Build: ${__BUILD_ID__}`,
-    `Page: ${location.origin}${location.pathname}`,
-    `Model: ${window.smokeModelId || 'not loaded'}`,
-    `Provider: ${window.smokeProvider || 'not loaded'}`,
-    `GPU gate: ${gpuGate}`,
-    `GPU runtime served by host: ${runtimeHasWebGpuBundle ? 'yes' : gpuState?.available === false ? 'n/a (no GPU)' : 'no (CPU only)'}`,
-    `Adapter: ${adapterReport || 'n/a (not webgpu)'}`,
-    `Cross-origin isolated: ${isolation}`,
-    `Adapter f16: ${/shader-f16=yes/.test(adapterReport) ? 'yes' : adapterReport ? 'no' : 'n/a'}`,
-    `Warm inferences: ${n}`,
-    n ? `Timings (ms): ${timings.map((t) => t.toFixed(1)).join(', ')}` : 'Timings: n/a',
-    n ? `Average (ms): ${avg.toFixed(1)}` : 'Average: n/a',
-    `Model bytes: ${modelDownloadBytes ? mb + ' MB' : 'n/a'}${modelTotalBytes ? ' of ' + totalMb : ''}`,
-    `Model load total: ${loadTimeMs ? loadTimeMs.toFixed(0) + ' ms' : 'n/a'}`,
-    `Model download: ${dlSecs} s`,
-    `First-cold-start shader compile: see first-inference note in log`,
-    `UA: ${navigator.userAgent}`,
-  ].join('\n');
-  navigator.clipboard?.writeText(lines).then(
-    () => log('Device report copied to clipboard.'),
-    () => log('Could not copy automatically — select the report text from below.'),
-  );
-  log(`\n${lines}`);
-  setStage('Device report copied');
-});
 
 // ——— Boot ———
 // Order: build the provider gate (cheap), load the manifest (source of truth
@@ -990,9 +1264,57 @@ async function boot(): Promise<void> {
   await initWorker();
   log('If the model is not downloaded, run: npm run fetch-models');
 
-  // Auto-load the default selection so a first visit needs no manual pick. The
-  // smoke harness waits on window.smokeModelReady; this resolves it on success.
+  // Decide whether to confirm before the (large) first download. Wi-Fi and
+  // unknown/desktop connections load straight away; a cellular or data-saver
+  // connection asks first, stating the model size. Either way the auto-load is
+  // one step for the user — there is no manual "Load model" click on a first visit.
+  if (shouldConfirmDownload()) {
+    showNetWarn();
+    log('Waiting for confirmation before the model download (metered connection).');
+  } else {
+    autoLoadModel();
+  }
+}
+
+// The default model is downloaded once and then served from this device, so a
+// confirmed download makes every later visit instant.
+function autoLoadModel(): void {
   loadSelectedModel();
 }
+
+function shouldConfirmDownload(): boolean {
+  if (!selectedModel) return false;
+  // Explicit user consent already given this session.
+  if (sessionStorage.getItem('remove-bg:download-confirmed') === '1') return false;
+  // An explicit ?model=/?provider= override is a deliberate, scripted choice;
+  // do not interrupt it with a modal.
+  if (forcedModel || forcedProvider) return false;
+  return assessNetwork({ sizeBytes: selectedModel.size }).warn;
+}
+
+function showNetWarn(): void {
+  if (!selectedModel) return;
+  // The model labels already carry their size, so the confirmation states the
+  // exact byte size without repeating the label.
+  netWarnText.textContent = downloadConfirmationText(selectedModel.size);
+  netWarnEl.hidden = false;
+  netWarnConfirm.focus();
+}
+
+function confirmDownload(): void {
+  sessionStorage.setItem('remove-bg:download-confirmed', '1');
+  netWarnEl.hidden = true;
+  log('Download confirmed by the user; starting the model download.');
+  autoLoadModel();
+}
+
+netWarnConfirm.addEventListener('click', confirmDownload);
+netWarnDismiss.addEventListener('click', () => {
+  netWarnEl.hidden = true;
+  setStage('Paused — tap “Remove background” to download the model when you are ready.');
+  showProcessing('Download paused — your connection may be metered', false);
+  // A dismissal is not a dead end: choosing a photo and pressing Remove
+  // background starts the download.
+});
 
 boot().catch((e) => error(e instanceof Error ? e.message : String(e)));

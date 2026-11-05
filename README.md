@@ -149,7 +149,7 @@ A service worker (`public/sw.js`) keeps them on the device:
 - The load is reported as named checkpoints (see below), so the UI says what is
   happening rather than only a percentage.
 
-### Loading checkpoints
+### Loading checkpoints and the three user-visible phases
 
 The worker emits a `loading-progress` message at each milestone, and the page
 renders it on the stage line and logs each stage once. The stages are:
@@ -157,10 +157,44 @@ renders it on the stage line and logs each stage once. The stages are:
 `queued` → `runtime` → `cache-check` → `downloading` → `downloaded` →
 `creating-session` → `session-ready` → `ready`
 
-Each message carries a monotonic `percent`, the bytes transferred and expected
-total (while downloading), and the elapsed time since loading began, so the UI
-can show e.g. `Downloading model… 42% (78.1 MB / 185.0 MB, 12.3s)`. On a cached
-visit the whole load takes ~1–2 s instead of the first-visit download time.
+The UI groups those stages into the three things a visitor actually cares about,
+so "waiting" is never a blank screen:
+
+1. **Downloading the model** — the one measurable step. A small animated ring
+   appears next to the model name (in the button and in every option of the
+   model list) and fills with the real percentage; the copy reads
+   `Downloading <model> — 42%`.
+2. **Preparing the model** — cache lookup, ONNX Runtime load and session
+   creation. The ring spins indeterminately (there is no honest percentage here)
+   and the copy reads `Preparing the model…`.
+3. **Removing the background** — inference and compositing, shown in a small
+   collapsed **Processing** panel that expands to a live step list
+   (Download model → Prepare model → Remove background → Create image) plus the
+   run log. While it works, the word *Processing* animates its colour.
+
+Each progress message carries a monotonic `percent`, the bytes transferred and
+expected total (while downloading), and the elapsed time since loading began.
+On a cached visit the whole load takes ~1–2 s instead of the first-visit
+download time.
+
+### First-visit download confirmation
+
+Before the first large download the page reads the (Chromium-only) Network
+Information API. Wi-Fi, ethernet, and an unknown/desktop connection load
+straight away; a **cellular or data-saver** connection shows a confirmation
+stating the model size, and the download starts only after **Download**. The
+answer is remembered for the session. The model size is always stated in the
+model list regardless of connection, and pressing **Remove background** also
+starts a paused download. `?model=`/`?provider=` overrides skip the prompt.
+
+### If something goes wrong
+
+Failures are explained in plain language with a one-tap retry instead of a raw
+exception:
+
+- **Download failed** — retry the download, or pick a smaller model.
+- **Out of memory** — close other tabs, try a smaller photo, or use a smaller model.
+- **Engine did not start** — reload the page and try again.
 
 To force a re-download after changing the model or upgrading ONNX Runtime, bump
 `CACHE_VERSION` in `public/sw.js`. Vercel response headers are configured in `vercel.json`; the service worker

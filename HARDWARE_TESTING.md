@@ -45,13 +45,16 @@ button on the page.
 **Per device (any OS with Chrome/Edge):**
 
 1. Open https://work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev/ in Chrome.
-2. Wait for "Model loaded — provider …" in the log (first load downloads
-   ~185 MB; the `#stage` line now shows **real progress + MB** as it streams).
-3. Click **Run smoke test**; wait for 5 warm inferences.
-4. After it finishes, click **Copy device report**, then paste the clipboard
-   directly into the change-2 tracker. It already contains provider, GPU
-   adapter + `shader-f16`, cross-origin isolation, the 5 timings, average,
-   model size, and the UA — no hand-typing and no photo required.
+2. Wait for the model to finish loading (first load downloads ~68 MB; a small
+   ring next to the model name fills with the real percentage, and the
+   **Processing** panel expands to a live step list).
+3. Choose a photo (drop it, or press **Choose a photo**), then press
+   **Remove background**.
+4. Expand the **Processing** panel and copy the technical log (it contains the
+   provider, model id, and the warm timings). For a scripted run, call
+   `window.runSmoke()` from the console and read `window.smokeProvider` /
+   `window.smokeModelId` — the automated harness in
+   `scripts/run-smoke.mjs` uses the same API.
 5. _Optionally_, also capture:
    - page `#stage` text during the first run (shader-compile note prints only
      on the `webgpu` path; append `?provider=webgpu` to force it, or open the
@@ -67,7 +70,7 @@ button on the page.
 
 **Privacy:** the harness never uploads anything. `run-smoke.mjs` additionally
 records every network request and fails the summary if any is non-first-party;
-the on-page device report is composed and copied entirely in the browser.
+the on-page technical log is composed entirely in the browser.
 
 **Automated variant (CPU/WASM only, already in the repo):**
 
@@ -81,9 +84,10 @@ all requests must stay first-party). Note: `run-smoke.mjs` forces WASM/software
 rendering — it is the *class-2* probe. WebGPU probing must be done by opening
 the page in a graphical browser (steps 1–4).
 
-**What to paste back into the report:** the **Copy device report** output (or
-the provider line + 5 timings + device/OS/GPU name from `chrome://gpu`), and
-whether fallback triggered.
+**What to paste back into the report:** the provider line, the warm timings,
+and the device/OS/GPU name from `chrome://gpu` — or, for a scripted run, the
+`window.smokeProvider` / `window.smokeModelId` values and the `runSmoke()`
+result — plus whether a provider fallback triggered.
 
 ## 4. Verified free-hosting facts (official docs, 2026-10-25)
 

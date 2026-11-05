@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatBytes, formatElapsed, describeProgress, STAGE_LABELS } from './load-progress';
+import { formatBytes, formatElapsed, describeProgress, STAGE_LABELS, phaseForStage, PHASE_LABELS } from './load-progress';
 
 describe('formatBytes', () => {
   it('renders bytes, KB and MB', () => {
@@ -64,5 +64,21 @@ describe('describeProgress', () => {
       detail: 'wasm',
     });
     expect(line).toContain('1.0s');
+  });
+});
+
+describe('phaseForStage', () => {
+  it('maps every stage to a labelled phase', () => {
+    for (const stage of Object.keys(STAGE_LABELS)) {
+      const phase = phaseForStage(stage as keyof typeof STAGE_LABELS);
+      expect(PHASE_LABELS[phase]).toBeTruthy();
+    }
+  });
+
+  it('groups download stages under download and session stages under prepare', () => {
+    expect(phaseForStage('downloading')).toBe('download');
+    expect(phaseForStage('cache-check')).toBe('download');
+    expect(phaseForStage('creating-session')).toBe('prepare');
+    expect(phaseForStage('ready')).toBe('prepare');
   });
 });

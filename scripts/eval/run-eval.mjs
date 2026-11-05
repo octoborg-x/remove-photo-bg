@@ -205,7 +205,7 @@ for (const cat of manifest.categories) {
     // re-runs inference on the already-loaded image, so `--runs` measures warm
     // repeats (the first run carries the cold cost).
     const chooserPromise = p.waitForFileChooser({ timeout: 20000 });
-    await p.click('#pickFile');
+    await p.click('#dropZone');
     (await chooserPromise).accept([file]);
     await p.waitForFunction(() => !document.getElementById('runAll').disabled, { timeout: 30000 });
 

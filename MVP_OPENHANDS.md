@@ -1,10 +1,14 @@
 # remove-bg-photo — MVP Build Specification for OpenHands
 
-**Updated:** 2026-10-31  
-**Status:** Phase 1 (model feasibility) is **DONE** — see `PHASE1_REPORT.md`.  
-Phase 2 (product workflow) is **IN PROGRESS**; proceed autonomously through the
-end of Phase 2, then stop and report. See §11 for the expanded Phase 2 scope,
-including the model/runtime selector added on 2026-10-31.  
+**Updated:** 2026-11-02  
+**Status:** Phase 1 (model feasibility) is **DONE** — see `PHASE1_REPORT.md`.
+Phase 2 (product workflow) is **DONE** — see `PHASE2_REPORT.md`. Phase 3
+(notices/privacy + licence audit) is **DONE** — see `PHASE3_REPORT.md`. Phase 4
+(quality: lint, typecheck, unit + browser tests, build) is **DONE** — see
+`PHASE4_REPORT.md`. Phase 5 (delivery) is **DONE** — see `PHASE5_REPORT.md`;
+all five phases are complete. Hardware (WebGPU) tests are postponed until a GPU
+machine is available. See §11 for the Phase 2 scope,
+including the model/runtime selector added on 2026-10-31.
 **Goal:** Build a browser-first background remover for marketplace/product photos.  
 **Budget:** $0 during development; target under $50/month after validation.  
 **Agent:** OpenHands.
@@ -298,8 +302,14 @@ path + SHA-256, browser smoke test, tensor semantics + transparent PNG,
 no image-pixel network requests, model/runtime compatibility). Phase 1 is
 closed; Phase 2 may start.
 
-### Phase 2 — Product workflow (IN PROGRESS — expanded 2026-10-31)
-Implement validation, worker lifecycle, model load, status/progress, preview, PNG/JPG exports, and error states.
+### Phase 2 — Product workflow — ✅ DONE (confirmed 2026-11-02)
+See `PHASE2_REPORT.md` for the verified acceptance items, measured browser
+results (WASM), and the upload-validation/drop-zone gap closed in this run.
+Hardware (WebGPU) tests remain postponed until a GPU machine is available.
+Phase 3 (notices/privacy + licence audit) is **DONE** — see `PHASE3_REPORT.md`.
+
+Phase 2 implemented validation, worker lifecycle, model load, status/progress,
+preview, PNG/JPG exports, and error states.
 
 Expanded Phase 2 scope added on 2026-10-31 (model + runtime selector):
 
@@ -333,31 +343,33 @@ Expanded Phase 2 scope added on 2026-10-31 (model + runtime selector):
 - Keep the existing network/privacy guarantees (no pixels off-device) and the
   worker/session/error-state lifecycle from Phase 1 test harness.
 
-### Phase 3 — Notices/privacy
-Create `MODEL_CARD.md`, `THIRD_PARTY_LEGAL_NOTICES.md`, and `PRIVACY.md` from verified sources. Add footer links and CSP. Preserve required notices. Document the MIT declaration as the project basis without claiming every training-data question is definitively resolved.
+### Phase 3 — Notices/privacy — ✅ DONE
+See `PHASE3_REPORT.md`. Create `MODEL_CARD.md`, `THIRD_PARTY_LEGAL_NOTICES.md`, and `PRIVACY.md` from verified sources. Add footer links and CSP. Preserve required notices. Document the MIT declaration as the project basis without claiming every training-data question is definitively resolved.
 
-### Phase 4 — Quality
-Run lint, typecheck, unit tests, browser tests where available, and production build. Run a real manual model smoke test and record browser/device results. Fix failures rather than suppressing tests.
+### Phase 4 — Quality — ✅ DONE
+See `PHASE4_REPORT.md`. Run lint, typecheck, unit tests, browser tests where available, and production build. Run a real manual model smoke test and record browser/device results. Fix failures rather than suppressing tests.
 
-### Phase 5 — Delivery
+### Phase 5 — Delivery — ✅ DONE
+See `PHASE5_REPORT.md`. README now has a Quick start + browser requirements;
+`.env.example` added (names only, no secret for browser-only inference).
 Update README with install/run/test/build, model-download instructions, browser requirements, privacy, provenance, and notices. `.env.example` should contain names only and should not require a secret for browser-only inference. Report changed files, model revision/hash, actual test results, limitations, and deployment steps. Use a feature branch if available; do not force-push or push directly to the default branch without permission. Do not spend money without approval.
 
 ## 12. Definition of done
 
-- [ ] Supported image can be selected/dropped.
-- [ ] Exact pinned model runs in browser on a tested environment.
-- [ ] Inference does not freeze the UI.
-- [ ] Transparent PNG has real alpha and expected original dimensions.
-- [ ] White-background JPG works.
-- [ ] Invalid input, unsupported device, model failure, and memory failure are handled.
-- [ ] No image pixels leave the device; verified via network inspection.
-- [ ] Model revision, artifact hash, licence source, and runtime versions are recorded.
-- [ ] `MODEL_CARD.md`, `THIRD_PARTY_LEGAL_NOTICES.md`, and `PRIVACY.md` exist and are linked.
-- [ ] All dependency licences/notices checked.
-- [ ] Lint, typecheck, tests, and build pass, or failures are truthfully documented.
-- [ ] README explains setup and commands.
-- [ ] No secrets committed.
-- [ ] Hosting limits and monthly cost estimate checked before public launch.
+- [x] Supported image can be selected/dropped. (`image-validation.ts`; browser tests 1/2/6)
+- [x] Exact pinned model runs in browser on a tested environment. (`models-manifest.json` SHA-256; prod smoke)
+- [x] Inference does not freeze the UI. (Web Worker `public/inference-worker.js`)
+- [x] Transparent PNG has real alpha and expected original dimensions. (browser test 2, colour type 6; 960×1280 smoke)
+- [x] White-background JPG works. (browser test 3)
+- [x] Invalid input, unsupported device, model failure, and memory failure are handled. (browser tests 6–9; `main.ts`)
+- [x] No image pixels leave the device; verified via network inspection. (`no-upload-path.test.ts`; 0 third-party requests)
+- [x] Model revision, artifact hash, licence source, and runtime versions are recorded. (`PHASE5_REPORT.md`; `THIRD_PARTY_LEGAL_NOTICES.md`)
+- [x] `MODEL_CARD.md`, `THIRD_PARTY_LEGAL_NOTICES.md`, and `PRIVACY.md` exist and are linked. (footer links; `copy-legal-docs.mjs`)
+- [x] All dependency licences/notices checked. (`LICENSE_AUDIT.md`; 247 pkgs, all permissive)
+- [x] Lint, typecheck, tests, and build pass, or failures are truthfully documented. (`npm run verify`)
+- [x] README explains setup and commands. (Quick start + Commands table)
+- [x] No secrets committed. (`.env.example` names only; `.env*` gitignored)
+- [x] Hosting limits and monthly cost estimate checked before public launch. (Vercel Hobby; `DEPLOY.md`; Hugging Face model hosting)
 
 Passing means technically ready for a private demo, not a guarantee of legal certainty.
 

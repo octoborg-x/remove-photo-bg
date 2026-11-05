@@ -1,0 +1,6 @@
+# Keep the repo / Vercel build fast: model binaries are re-downloaded
+# at deploy time by scripts/fetch-models.mjs --webgpu --no-models and served
+# from the remote asset origin (HF) at runtime via the service worker.
+public/models/
+node_modules/
+smoke-results/

@@ -1,13 +1,12 @@
-// Removes the model from the built site so it can be deployed to a host with a
-// small per-file limit (Cloudflare Pages: 25 MiB). The model is served from the
-// remote asset origin instead (see VITE_ASSET_BASE), and the service worker
-// proxies it through as a same-origin response.
+// Removes model weights from the deployment bundle. The model is served from
+// the Hugging Face asset origin (VITE_ASSET_BASE), and the service worker
+// fetches and caches it for browser inference.
 //
 // The WASM runtime is NOT stripped: the CPU-only bundle (
 // `ort-wasm-simd-threaded.wasm`, 13.3 MiB) fits under the per-file cap and must
 // be served same-origin for the threaded runtime to work (see fetch-models.mjs).
 //
-// Run after `vite build`; wired into `npm run build:site`.
+// Run after `vite build`; wired into `npm run vercel:build`.
 import { rmSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,8 +29,9 @@ for (const dir of TARGETS) {
   console.log(`Removed dist/${dir}/`);
 }
 
-// Report anything still large enough to trip a small host's per-file limit.
-const MAX_OK = 25 * 1024 * 1024;
+// Report the largest remaining deployment asset. The WebGPU runtime
+// binary is intentionally included in the Vercel bundle.
+const MAX_OK = 30 * 1024 * 1024;
 function walk(dir) {
   let biggest = { size: 0, path: '' };
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -49,6 +49,6 @@ function walk(dir) {
 const largest = walk(DIST);
 console.log(`Largest remaining file: ${largest.path.replace(ROOT + '/', '')} (${largest.size} bytes)`);
 if (largest.size > MAX_OK) {
-  console.error('WARNING: a file still exceeds 25 MiB; Cloudflare Pages will reject it.');
+  console.error('WARNING: a remaining deployment asset exceeds the expected 30 MiB budget.');
   process.exit(1);
 }

@@ -148,6 +148,10 @@ PASS  confirming the download starts the model load
   selected model, and every option states its size in text. This is the honest
   version of "next to each model".
 - **The preflight never blocks a desktop visitor.** "Unknown" connection means
-  "load now"; only positive evidence of a metered link prompts.
+  "load now"; only positive evidence of a metered link prompts. Automated
+  (`navigator.webdriver`) sessions skip the prompt entirely — CI's Chromium
+  reports a metered-looking connection, which would otherwise stall the harness —
+  and the metered-connection browser test opts out of that flag so the prompt
+  path is still exercised.
 - **One inference implementation preserved.** `single-inference-worker.test.ts`
   still guards against a second session-creating worker.

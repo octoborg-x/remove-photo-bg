@@ -23,7 +23,7 @@ npm run dev            # http://localhost:12000  (dev:local → Vite's 5173)
 
 Open the URL the dev server prints (not `index.html` directly — the page needs
 Vite to compile `src/main.ts`). Pick a photo, press **Remove background**, and
-download the transparent PNG or the white-background JPG.
+download the cut-out as PNG (transparent, default), JPG, or WebP.
 
 ```bash
 npm run verify         # lint + typecheck + unit tests + production build
@@ -71,7 +71,9 @@ behavior described below.
   selectable in the UI and via `?provider=wasm` / `?provider=webgpu`. Default:
   WebGPU when the browser exposes an adapter, else WASM.
 - Minimal page + Worker pre/post-processing: mask upscale to original
-  dimensions, alpha composite, transparent PNG export.
+  dimensions, alpha composite, and a **format picker** for the download
+  (PNG with transparency — the default — plus JPG on a white background and
+  WebP when the browser can encode it).
 - Headless smoke harness (`run-smoke.mjs`) that records every network request
   (privacy check) and downloads the resulting PNG.
 - Native-CPU reference inference (`reference-inference.py`) that produces the
@@ -183,9 +185,23 @@ Before the first large download the page reads the (Chromium-only) Network
 Information API. Wi-Fi, ethernet, and an unknown/desktop connection load
 straight away; a **cellular or data-saver** connection shows a confirmation
 stating the model size, and the download starts only after **Download**. The
-answer is remembered for the session. The model size is always stated in the
-model list regardless of connection, and pressing **Remove background** also
-starts a paused download. `?model=`/`?provider=` overrides skip the prompt.
+confirmation is skipped when the model is **already on the device** (a Cache API
+check, so there is nothing left to download) and offers a **Remember my choice**
+checkbox that, once ticked, lets later model downloads proceed over mobile data
+without asking again. Otherwise the answer is remembered for the session. The
+model size is always stated in the model list regardless of connection, and
+pressing **Remove background** also starts a paused download. `?model=`/
+`?provider=` overrides skip the prompt.
+
+### Export format
+
+The download section offers a format radio group — **PNG** (default; keeps the
+transparent cut-out), **JPG** (composited onto white), and **WebP** (keeps
+transparency, smaller file) — and a single download link that re-encodes the
+result when the choice changes, without re-running inference. A format the
+browser cannot encode (WebP on some builds) is shown disabled rather than
+silently producing a mislabelled file. The choice is persisted and can be
+forced with `?format=png|jpeg|webp`.
 
 ### If something goes wrong
 

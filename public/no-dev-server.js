@@ -26,6 +26,9 @@
   stamp.textContent = 'none';
   var stage = document.getElementById('stage');
   var hint = document.getElementById('buildHint');
+  // The hint paragraph ships hidden (it holds a build marker the page does not
+  // show); this is the one path that has something to say, so reveal it.
+  if (hint) hint.hidden = false;
   stage.textContent = 'This page was opened without the dev server';
 
   // The sandbox forwards each port to its own hostname: `work-1-<id>` is port

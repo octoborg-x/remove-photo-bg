@@ -146,6 +146,23 @@
       .exportActions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.75rem; }
       .exportActions [hidden] { display: none; }
 
+      /* Format picker: a radio per export format, shown above the download. */
+      .formatPicker {
+        margin: 0.85rem 0 0; padding: 0.6rem 0.75rem; border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+      .formatPicker legend { font-weight: 600; padding: 0 0.35rem; }
+      .formatOptions { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; }
+      .formatOptions label { display: flex; align-items: baseline; gap: 0.4rem; cursor: pointer; }
+      .formatOptions .formatHint { color: var(--muted); font-size: 0.82rem; }
+      .formatOptions label:has(input:disabled) { color: var(--muted); cursor: not-allowed; }
+
+      .rememberChoice {
+        display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.7rem;
+        font-size: 0.9rem;
+      }
+      .rememberChoice input { flex: none; }
+
       .recovery {
         margin-top: 0.75rem; border: 1px solid var(--err-line); background: var(--err-bg);
         border-radius: 10px; padding: 0.75rem 0.9rem;
@@ -186,9 +203,14 @@
     </header>
 
     <!-- Metered-connection preflight: shown only when a large download is
-         about to happen on a link that may be metered. -->
-    <div id="netWarn" class="netWarn" hidden>
+         about to happen on a link that may be metered and the model is not
+         already on this device. -->
+    <div id="netWarn" class="netWarn" role="dialog" aria-modal="true" aria-labelledby="netWarnText" hidden>
       <p id="netWarnText"></p>
+      <label class="rememberChoice">
+        <input type="checkbox" id="netWarnRemember" />
+        Remember my choice — always download models over mobile data
+      </label>
       <div class="actions">
         <button id="netWarnConfirm" class="primary">Download model</button>
         <button id="netWarnDismiss" class="secondary">Not now</button>
@@ -258,9 +280,14 @@
     <section id="outputSection" class="step" hidden aria-labelledby="step3Title">
       <h2 id="step3Title"><span class="stepNum">3</span> Download your image</h2>
       <div id="outputBox" class="outputBox"></div>
+      <fieldset class="formatPicker">
+        <legend>Format</legend>
+        <!-- Radios are generated from EXPORT_FORMATS in src/main.ts, so the
+             labels and the encoder can never drift apart. -->
+        <div id="formatOptions" class="formatOptions"></div>
+      </fieldset>
       <div class="exportActions">
-        <a id="downloadPng" class="btn primary" download hidden>Download transparent PNG</a>
-        <a id="downloadJpg" class="btn secondary" download hidden>Download white-background JPG</a>
+        <a id="downloadImage" class="btn primary" download hidden>Download image</a>
       </div>
     </section>
 
@@ -304,9 +331,8 @@
       </div>
     </details>
 
-    <p class="hint" id="buildHint" style="margin-top: 1rem">
-      Build <code id="buildStamp">__BUILD_ID__</code> — if this does not match the build you
-      just made, the page is stale; reload with Ctrl+Shift+R.
+    <p class="hint" id="buildHint" hidden>
+      <code id="buildStamp">__BUILD_ID__</code>
     </p>
 
     <footer class="siteFooter">

@@ -94,6 +94,26 @@ export function assessNetwork(opts: PreflightOptions = {}): NetworkAssessment {
   return { connection, warn: metered && large, summary: describeConnection(info, connection) };
 }
 
+export interface DownloadGateOptions extends PreflightOptions {
+  /** The model is already on this device (Cache API), so there is nothing to download. */
+  cached?: boolean;
+  /** The user ticked "remember my choice" on a previous download. */
+  remembered?: boolean;
+  /** Consent already given this session, or a deliberate ?model=/?provider= action. */
+  confirmed?: boolean;
+}
+
+/**
+ * The full preflight decision, in one place so it is unit-testable: prompt only
+ * when the connection looks metered AND the model is not already cached AND the
+ * user has neither confirmed already nor asked to be remembered. Any one of
+ * those makes the download proceed straight away.
+ */
+export function shouldConfirmDownload(opts: DownloadGateOptions = {}): boolean {
+  if (opts.confirmed || opts.remembered || opts.cached) return false;
+  return assessNetwork(opts).warn;
+}
+
 function describeConnection(info: NetworkInformationLike | null, connection: ConnectionClass): string {
   if (!info) return 'network type unknown';
   const parts: string[] = [];

@@ -167,16 +167,15 @@ try {
     );
 
     const exportState = await page.evaluate(() => {
-      const png = document.getElementById('downloadPng');
-      const jpg = document.getElementById('downloadJpg');
+      const dl = document.getElementById('downloadImage');
+      const radios = Array.from(document.querySelectorAll('#formatOptions input[type=radio]'));
       const img = document.querySelector('#outputBox img');
       return {
-        pngHref: png?.getAttribute('href') ?? '',
-        pngDownload: png?.getAttribute('download') ?? '',
-        pngHidden: png ? png.hidden : true,
-        jpgHref: jpg?.getAttribute('href') ?? '',
-        jpgDownload: jpg?.getAttribute('download') ?? '',
-        jpgHidden: jpg ? jpg.hidden : true,
+        dlHref: dl?.getAttribute('href') ?? '',
+        dlDownload: dl?.getAttribute('download') ?? '',
+        dlHidden: dl ? dl.hidden : true,
+        dlText: dl?.textContent ?? '',
+        radios: radios.map((r) => ({ value: r.value, checked: r.checked, disabled: r.disabled })),
         imgSrc: img?.getAttribute('src') ?? '',
         outputSectionHidden: document.getElementById('outputSection')?.hidden ?? true,
         log: document.getElementById('log')?.textContent ?? '',
@@ -184,22 +183,36 @@ try {
     });
     record(
       'JPEG upload → transparent PNG rendered',
-      exportState.imgSrc.startsWith('data:image/png') && exportState.pngHref.startsWith('data:image/png'),
-      exportState.pngDownload,
+      exportState.imgSrc.startsWith('data:image/png') && exportState.dlHref.startsWith('data:image/png'),
+      exportState.dlDownload,
     );
     // PNG colour type byte (offset 25) must be 6 (truecolour + alpha).
-    const pngB64 = exportState.pngHref.split(',')[1] ?? '';
+    const pngB64 = exportState.dlHref.split(',')[1] ?? '';
     const colourType = Buffer.from(pngB64, 'base64')[25];
     record('PNG export has an alpha channel (colour type 6)', colourType === 6, `colourType=${colourType}`);
     record(
-      'download section reveals transparent PNG (default) + white-background JPG',
+      'download section offers PNG (default) + JPG + WebP radios and one download link',
       exportState.outputSectionHidden === false &&
-        exportState.pngHidden === false &&
-        exportState.pngDownload.endsWith('.png') &&
-        exportState.jpgHidden === false &&
-        exportState.jpgHref.startsWith('data:image/jpeg') &&
-        exportState.jpgDownload.endsWith('.jpg'),
-      `${exportState.pngDownload} / ${exportState.jpgDownload}`,
+        exportState.dlHidden === false &&
+        exportState.dlDownload.endsWith('.png') &&
+        exportState.radios.length === 3 &&
+        exportState.radios.some((r) => r.value === 'png' && r.checked) &&
+        exportState.radios.some((r) => r.value === 'jpeg') &&
+        exportState.radios.some((r) => r.value === 'webp'),
+      `${exportState.dlDownload} / [${exportState.radios.map((r) => r.value).join(',')}]`,
+    );
+
+    // Switching the format re-encodes the same result into the chosen format.
+    const jpegState = await page.evaluate(() => {
+      const jpeg = document.querySelector('#formatOptions input[value=jpeg]');
+      jpeg.click();
+      const dl = document.getElementById('downloadImage');
+      return { href: dl?.getAttribute('href') ?? '', download: dl?.getAttribute('download') ?? '' };
+    });
+    record(
+      'selecting JPG re-encodes the download as a white-background JPEG',
+      jpegState.href.startsWith('data:image/jpeg') && jpegState.download.endsWith('.jpg'),
+      jpegState.download,
     );
 
     // The processing panel must be visible and its step list must show the three
@@ -362,9 +375,11 @@ try {
 
   // ——— Scenario 7: metered-connection preflight ———
   // The decision module is unit-tested; this proves the page actually gates the
-  // first download behind a confirmation with the model size, and that
-  // confirming proceeds. The Network Information API is stubbed before scripts
-  // run (it is read-only in the browser).
+  // first download behind a confirmation with the model size, offers the
+  // "remember my choice" checkbox, and that confirming (with remember ticked)
+  // proceeds and persists the choice. The Network Information API is stubbed
+  // before scripts run (it is read-only in the browser), and the Cache API is
+  // cleared first so this is a genuine cold visit rather than a cache hit.
   {
     const page = await browser.newPage();
     await page.evaluateOnNewDocument(() => {
@@ -375,8 +390,23 @@ try {
       // The app skips the prompt in automated sessions (CI's Chromium reports a
       // metered-looking connection). Opt this page out so the prompt path runs.
       Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
+      // Start from a clean remembered-choice state.
+      try {
+        localStorage.removeItem('remove-bg:allow-metered-download');
+      } catch {
+        /* storage unavailable */
+      }
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    // Make the visit cold: drop the model the earlier scenarios cached, before
+    // the app boots. CDP clears Cache Storage without loading the page, so the
+    // model cannot be re-cached mid-flight the way a post-load clear would allow.
+    const cdp = await page.createCDPSession();
+    await cdp.send('Storage.clearDataForOrigin', {
+      origin: pageUrl.origin,
+      storageTypes: 'cache_storage',
+    });
+    await page.reload({ waitUntil: 'load', timeout: 120000 });
     const warnShown = await page
       .waitForFunction(
         () => (document.getElementById('netWarn')?.hidden ?? true) === false,
@@ -392,6 +422,15 @@ try {
       warnShown && /\d+(\.\d+)? MB/.test(warnText),
       warnText.replace(/\s+/g, ' ').slice(0, 90),
     );
+    const hasRemember = await page.evaluate(
+      () => !!document.getElementById('netWarnRemember'),
+    );
+    record('the download confirmation offers a "remember my choice" checkbox', hasRemember);
+
+    // Tick remember, then confirm: the download starts and the choice persists.
+    await page.evaluate(() => {
+      document.getElementById('netWarnRemember').checked = true;
+    });
     await page.click('#netWarnConfirm');
     const startedAfterConfirm = await page
       .waitForFunction('window.smokeModelReady === true', { timeout: 600000 })
@@ -401,6 +440,46 @@ try {
       () => (document.getElementById('netWarn')?.hidden ?? true) === true,
     );
     record('confirming the download starts the model load', startedAfterConfirm && warnGone);
+    const remembered = await page.evaluate(() =>
+      localStorage.getItem('remove-bg:allow-metered-download'),
+    );
+    record('ticking remember persists the choice for future downloads', remembered === 'true');
+    await page.close();
+  }
+
+  // ——— Scenario 8: a cached model skips the metered prompt ———
+  // The remembered choice from Scenario 7 is cleared before each navigation, so
+  // a missing prompt here can only be the on-device cache check, not the pref.
+  {
+    const page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'connection', {
+        configurable: true,
+        get: () => ({ type: 'cellular', effectiveType: '3g', saveData: false }),
+      });
+      Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
+      try {
+        localStorage.removeItem('remove-bg:allow-metered-download');
+      } catch {
+        /* storage unavailable */
+      }
+    });
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    const promptShown = await page
+      .waitForFunction(
+        () => (document.getElementById('netWarn')?.hidden ?? true) === false,
+        { timeout: 5000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    const ready = await page
+      .waitForFunction('window.smokeModelReady === true', { timeout: 600000 })
+      .then(() => true)
+      .catch(() => false);
+    record(
+      'a cached model loads over a metered link without prompting',
+      promptShown === false && ready === true,
+    );
     await page.close();
   }
 } finally {

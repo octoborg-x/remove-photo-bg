@@ -141,6 +141,10 @@ let modelLoadInFlight = false;
 // Set as soon as the worker posts anything at all; distinguishes "never started"
 // from "working on a long download".
 let workerResponded = false;
+// Set when the worker script itself fails to start. A dead worker can never load
+// a model, so the boot path must not auto-load over the error it already put on
+// screen (that would replace the actionable error with a permanent "Loading…").
+let workerFailed = false;
 const modelWaiters: Array<{ resolve: () => void; reject: (e: Error) => void }> = [];
 
 const WARM_RUNS = 1;
@@ -693,6 +697,7 @@ async function initWorker(): Promise<void> {
   // importScripts of the ORT runtime) posts nothing at all and the page waits on
   // its initial "Starting…" text forever.
   worker.onerror = (e) => {
+    workerFailed = true;
     error(`Inference worker failed to start: ${e.message || 'unknown worker error'}`, 'worker');
     settleModel('worker failed to start');
   };
@@ -844,6 +849,9 @@ function providerForce(provider: 'webgpu' | 'wasm'): string | undefined {
  *  no-response watchdog. The model load itself resolves through waitForModel. */
 function loadSelectedModel(): void {
   if (!selectedModel || !worker) return;
+  // A worker that failed to start is not a model-loading problem: keep its error
+  // on screen instead of overwriting it with a load that can never finish.
+  if (workerFailed) return;
   if (modelLoadInFlight) return;
   modelLoadInFlight = true;
   modelReady = false;
@@ -1370,6 +1378,10 @@ async function boot(): Promise<void> {
 // The default model is downloaded once and then served from this device, so a
 // confirmed download makes every later visit instant.
 function autoLoadModel(): void {
+  // A worker that failed to start already has its error on screen; loading a
+  // model through it would only replace that error with a load that never
+  // completes.
+  if (workerFailed) return;
   loadSelectedModel();
 }
 

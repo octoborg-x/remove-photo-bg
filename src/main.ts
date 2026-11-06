@@ -15,7 +15,15 @@ import {
   isMaskAdjust,
   type MaskAdjust,
 } from './features/background-removal/mask-postprocess';
-import { canvasToPngDataUrl, canvasToJpegDataUrl } from './features/background-removal/export-image';
+import {
+  canvasToDataUrl,
+  canEncode,
+  exportFormatInfo,
+  isExportFormat,
+  EXPORT_FORMATS,
+  DEFAULT_EXPORT_FORMAT,
+  type ExportFormat,
+} from './features/background-removal/export-image';
 import {
   validateFileTypeAndSize,
   validateDimensions,
@@ -24,12 +32,13 @@ import {
 import {
   ensureAssetCache,
   cachedAssetCount,
+  isUrlCached,
   onAssetCacheMessage,
   ASSET_BASE,
 } from './features/background-removal/asset-cache';
 import { describeProgress, phaseForStage, PHASE_LABELS } from './features/background-removal/load-progress';
 import {
-  assessNetwork,
+  shouldConfirmDownload,
   downloadConfirmationText,
 } from './features/background-removal/network-preflight';
 import {
@@ -61,8 +70,8 @@ const runAllBtn = document.getElementById('runAll')! as HTMLButtonElement;
 const modelSelect = document.getElementById('modelSelect')! as HTMLSelectElement;
 const providerToggle = document.getElementById('providerToggle')! as HTMLSelectElement;
 const loadModelBtn = document.getElementById('loadModel')! as HTMLButtonElement;
-const downloadPngBtn = document.getElementById('downloadPng')! as HTMLAnchorElement;
-const downloadJpgBtn = document.getElementById('downloadJpg')! as HTMLAnchorElement;
+const downloadImageBtn = document.getElementById('downloadImage')! as HTMLAnchorElement;
+const formatOptionsEl = document.getElementById('formatOptions')!;
 const providerHint = document.getElementById('providerHint')!;
 const maskThresholdInput = document.getElementById('maskThreshold')! as HTMLInputElement;
 const maskThresholdValue = document.getElementById('maskThresholdValue')!;
@@ -83,6 +92,7 @@ const netWarnEl = document.getElementById('netWarn')!;
 const netWarnText = document.getElementById('netWarnText')!;
 const netWarnConfirm = document.getElementById('netWarnConfirm')! as HTMLButtonElement;
 const netWarnDismiss = document.getElementById('netWarnDismiss')! as HTMLButtonElement;
+const netWarnRemember = document.getElementById('netWarnRemember')! as HTMLInputElement;
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
 // markup, so a changed limit never leaves stale copy on the page.
@@ -94,6 +104,10 @@ limitSideEl.textContent = String(DEFAULT_UPLOAD_LIMITS.maxLongestSide);
 const LS_MODEL = 'remove-bg:model';
 const LS_PROVIDER = 'remove-bg:provider';
 const LS_MASK_ADJUST = 'remove-bg:mask-adjust';
+const LS_EXPORT_FORMAT = 'remove-bg:export-format';
+// The user ticked "remember my choice" on the metered-download prompt. Persisted
+// (not per-session) so it applies to every later model download, as asked.
+const LS_ALLOW_METERED = 'remove-bg:allow-metered-download';
 
 function loadPref<T>(key: string, guard: (v: unknown) => v is T): T | null {
   try {
@@ -127,6 +141,10 @@ let modelLoadInFlight = false;
 // Set as soon as the worker posts anything at all; distinguishes "never started"
 // from "working on a long download".
 let workerResponded = false;
+// Set when the worker script itself fails to start. A dead worker can never load
+// a model, so the boot path must not auto-load over the error it already put on
+// screen (that would replace the actionable error with a permanent "Loading…").
+let workerFailed = false;
 const modelWaiters: Array<{ resolve: () => void; reject: (e: Error) => void }> = [];
 
 const WARM_RUNS = 1;
@@ -182,12 +200,90 @@ function applyMaskUi(): void {
 // export, and hides the download section until a fresh mask is rendered.
 function clearOutput(): void {
   outputBox.innerHTML = '';
-  downloadPngBtn.hidden = true;
-  downloadJpgBtn.hidden = true;
-  downloadPngBtn.removeAttribute('href');
-  downloadJpgBtn.removeAttribute('href');
+  downloadImageBtn.hidden = true;
+  downloadImageBtn.removeAttribute('href');
+  lastResultCanvas = null;
+  lastResultPngDataUrl = null;
   outputSection.hidden = true;
 }
+
+// ——— Export format ———
+// The composited cut-out is kept so changing the format re-encodes without
+// re-running inference; the PNG data URL is cached because it doubles as the
+// on-page preview, so it is never encoded twice.
+let lastResultCanvas: HTMLCanvasElement | null = null;
+let lastResultPngDataUrl: string | null = null;
+let exportFormat: ExportFormat = initExportFormat();
+
+function initExportFormat(): ExportFormat {
+  const fromUrl = urlParams.get('format');
+  if (fromUrl) {
+    if (isExportFormat(fromUrl) && isFormatAvailable(fromUrl)) return fromUrl;
+    log(`Ignoring unknown/unavailable ?format="${fromUrl}"; using ${DEFAULT_EXPORT_FORMAT}.`);
+  }
+  const pref = loadPref<ExportFormat>(LS_EXPORT_FORMAT, isExportFormat);
+  if (pref && isFormatAvailable(pref)) return pref;
+  return DEFAULT_EXPORT_FORMAT;
+}
+
+// A format the browser cannot encode (WebP on some builds) is never offered, so
+// the user can never pick a format that silently produces a mislabelled file.
+function isFormatAvailable(format: ExportFormat): boolean {
+  return canEncode(format);
+}
+
+function renderFormatOptions(): void {
+  formatOptionsEl.innerHTML = '';
+  for (const format of EXPORT_FORMATS) {
+    const available = isFormatAvailable(format.id);
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'exportFormat';
+    input.value = format.id;
+    input.checked = format.id === exportFormat;
+    input.disabled = !available;
+    input.addEventListener('change', () => {
+      if (!input.checked) return;
+      setExportFormat(format.id);
+    });
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(format.label));
+    const hint = document.createElement('span');
+    hint.className = 'formatHint';
+    hint.textContent = `— ${available ? format.description : 'not supported by this browser'}`;
+    label.appendChild(hint);
+    formatOptionsEl.appendChild(label);
+  }
+}
+
+function setExportFormat(format: ExportFormat): void {
+  if (format === exportFormat || !isFormatAvailable(format)) return;
+  exportFormat = format;
+  savePref(LS_EXPORT_FORMAT, format);
+  applyFormatUi();
+  log(`Export format: ${exportFormatInfo(format).label}`);
+}
+
+// Repoint the single download link at the current format, re-encoding the stored
+// result when one exists.
+function applyFormatUi(): void {
+  const info = exportFormatInfo(exportFormat);
+  downloadImageBtn.textContent = `Download ${info.label} (${info.description})`;
+  if (lastResultCanvas) {
+    const { width, height } = lastResultCanvas;
+    const href =
+      exportFormat === 'png'
+        ? (lastResultPngDataUrl ?? canvasToDataUrl(lastResultCanvas, 'png'))
+        : canvasToDataUrl(lastResultCanvas, exportFormat);
+    downloadImageBtn.href = href;
+    downloadImageBtn.download = `background-removed-${width}x${height}.${info.extension}`;
+    downloadImageBtn.hidden = false;
+  }
+  renderFormatOptions();
+}
+
+renderFormatOptions();
 
 function log(msg: string): void {
   logEl.textContent += msg + '\n';
@@ -601,6 +697,7 @@ async function initWorker(): Promise<void> {
   // importScripts of the ORT runtime) posts nothing at all and the page waits on
   // its initial "Starting…" text forever.
   worker.onerror = (e) => {
+    workerFailed = true;
     error(`Inference worker failed to start: ${e.message || 'unknown worker error'}`, 'worker');
     settleModel('worker failed to start');
   };
@@ -684,27 +781,24 @@ async function initWorker(): Promise<void> {
       canvas.height = out.height;
       const ctx = canvas.getContext('2d')!;
       ctx.putImageData(out, 0, 0);
-      const png = canvasToPngDataUrl(canvas);
+      lastResultCanvas = canvas;
+      // The PNG is both the on-page preview and the default download, so encode
+      // it once and let applyFormatUi reuse it.
+      lastResultPngDataUrl = canvasToDataUrl(canvas, 'png');
 
       let opaquePx = 0;
       for (let i = 3; i < out.data.length; i += 4) if (out.data[i] > 127) opaquePx++;
 
       outputBox.innerHTML = '';
       const img = document.createElement('img');
-      img.src = png;
+      // The preview is always the transparent PNG so the checkerboard shows the
+      // real cut-out; the download link follows the chosen format.
+      img.src = lastResultPngDataUrl;
       img.alt = 'Background removed';
       outputBox.appendChild(img);
 
-      // Transparent PNG is the default export; the white-background JPG is the
-      // secondary choice. Both live in the download section, not as raw links.
-      downloadPngBtn.href = png;
-      downloadPngBtn.download = `background-removed-${width}x${height}.png`;
-      downloadPngBtn.hidden = false;
-
-      const jpg = canvasToJpegDataUrl(canvas);
-      downloadJpgBtn.href = jpg;
-      downloadJpgBtn.download = `background-removed-${width}x${height}.jpg`;
-      downloadJpgBtn.hidden = false;
+      // One download link, re-encoded whenever the format radio changes.
+      applyFormatUi();
 
       outputSection.hidden = false;
 
@@ -712,7 +806,7 @@ async function initWorker(): Promise<void> {
       setProcessingLabel('Done — your image is ready', false);
       setStage('Done — download your image below.');
 
-      log(`Rendered transparent PNG (${width}x${height}), ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
+      log(`Rendered cut-out (${width}x${height}) as ${exportFormatInfo(exportFormat).label}, ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
       // A uniform mask means the model did not segment anything; say so rather
       // than leaving the user staring at a blank (fully transparent) image.
       if (opaquePx === 0) log('WARNING: the mask is fully transparent, so there is no subject to show.');
@@ -755,6 +849,9 @@ function providerForce(provider: 'webgpu' | 'wasm'): string | undefined {
  *  no-response watchdog. The model load itself resolves through waitForModel. */
 function loadSelectedModel(): void {
   if (!selectedModel || !worker) return;
+  // A worker that failed to start is not a model-loading problem: keep its error
+  // on screen instead of overwriting it with a load that can never finish.
+  if (workerFailed) return;
   if (modelLoadInFlight) return;
   modelLoadInFlight = true;
   modelReady = false;
@@ -1266,9 +1363,11 @@ async function boot(): Promise<void> {
 
   // Decide whether to confirm before the (large) first download. Wi-Fi and
   // unknown/desktop connections load straight away; a cellular or data-saver
-  // connection asks first, stating the model size. Either way the auto-load is
-  // one step for the user — there is no manual "Load model" click on a first visit.
-  if (shouldConfirmDownload()) {
+  // connection asks first, stating the model size — but only when the model is
+  // not already on this device, and not once the user has said "remember".
+  // Either way the auto-load is one step for the user — there is no manual
+  // "Load model" click on a first visit.
+  if (await needsDownloadConfirmation()) {
     showNetWarn();
     log('Waiting for confirmation before the model download (metered connection).');
   } else {
@@ -1279,19 +1378,40 @@ async function boot(): Promise<void> {
 // The default model is downloaded once and then served from this device, so a
 // confirmed download makes every later visit instant.
 function autoLoadModel(): void {
+  // A worker that failed to start already has its error on screen; loading a
+  // model through it would only replace that error with a load that never
+  // completes.
+  if (workerFailed) return;
   loadSelectedModel();
 }
 
-function shouldConfirmDownload(): boolean {
+// Persisted "always allow over mobile data" choice (the prompt's checkbox).
+function meteredDownloadRemembered(): boolean {
+  return loadPref<boolean>(LS_ALLOW_METERED, (v): v is boolean => v === true) === true;
+}
+
+// The full gate: skip the prompt when consent is already given this session, the
+// user asked to be remembered, the model is already cached on this device, or the
+// connection does not look metered.
+async function needsDownloadConfirmation(): Promise<boolean> {
   if (!selectedModel) return false;
-  // Explicit user consent already given this session.
-  if (sessionStorage.getItem('remove-bg:download-confirmed') === '1') return false;
   // An explicit ?model=/?provider= override is a deliberate, scripted choice,
   // and an automated (WebDriver) session must never block on a modal — CI's
   // Chromium reports a metered-looking connection, which would otherwise stall
   // the harness. The metered test opts out of the WebDriver flag itself.
-  if (forcedModel || forcedProvider || navigator.webdriver) return false;
-  return assessNetwork({ sizeBytes: selectedModel.size }).warn;
+  const confirmed =
+    sessionStorage.getItem('remove-bg:download-confirmed') === '1' ||
+    Boolean(forcedModel || forcedProvider || navigator.webdriver);
+  // The model may already be on this device (Cache API), in which case there is
+  // nothing to download and no reason to warn about data usage.
+  const cached = await isUrlCached(selectedModel.url).catch(() => false);
+  if (cached) log('Model already on this device; skipping the download confirmation.');
+  return shouldConfirmDownload({
+    sizeBytes: selectedModel.size,
+    cached,
+    remembered: meteredDownloadRemembered(),
+    confirmed,
+  });
 }
 
 function showNetWarn(): void {
@@ -1299,11 +1419,16 @@ function showNetWarn(): void {
   // The model labels already carry their size, so the confirmation states the
   // exact byte size without repeating the label.
   netWarnText.textContent = downloadConfirmationText(selectedModel.size);
+  netWarnRemember.checked = false;
   netWarnEl.hidden = false;
   netWarnConfirm.focus();
 }
 
 function confirmDownload(): void {
+  if (netWarnRemember.checked) {
+    savePref(LS_ALLOW_METERED, true);
+    log('Remembered: model downloads over mobile data will not ask again.');
+  }
   sessionStorage.setItem('remove-bg:download-confirmed', '1');
   netWarnEl.hidden = true;
   log('Download confirmed by the user; starting the model download.');

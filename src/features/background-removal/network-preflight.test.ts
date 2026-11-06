@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   classifyConnection,
   assessNetwork,
+  shouldConfirmDownload,
   downloadConfirmationText,
 } from './network-preflight';
 
@@ -66,6 +67,37 @@ describe('assessNetwork', () => {
   it('produces a non-empty summary', () => {
     expect(assessNetwork({ info: { effectiveType: '4g', downlink: 3.2 }, sizeBytes: model }).summary)
       .toContain('4g');
+  });
+});
+
+describe('shouldConfirmDownload', () => {
+  const model = 68 * 1024 * 1024;
+  const cellular = { effectiveType: '3g' } as const;
+
+  it('asks on a metered link when the model is not cached', () => {
+    expect(shouldConfirmDownload({ info: cellular, sizeBytes: model })).toBe(true);
+  });
+
+  it('never asks when the model is already on this device', () => {
+    expect(
+      shouldConfirmDownload({ info: cellular, sizeBytes: model, cached: true }),
+    ).toBe(false);
+  });
+
+  it('never asks once the user ticked "remember my choice"', () => {
+    expect(
+      shouldConfirmDownload({ info: cellular, sizeBytes: model, remembered: true }),
+    ).toBe(false);
+  });
+
+  it('never asks once consent is already given this session', () => {
+    expect(
+      shouldConfirmDownload({ info: cellular, sizeBytes: model, confirmed: true }),
+    ).toBe(false);
+  });
+
+  it('never asks on an unmetered link', () => {
+    expect(shouldConfirmDownload({ info: { type: 'wifi' }, sizeBytes: model })).toBe(false);
   });
 });
 

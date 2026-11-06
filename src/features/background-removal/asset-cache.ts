@@ -119,3 +119,27 @@ export async function cachedAssetCount(): Promise<number> {
   }
   return count;
 }
+
+/**
+ * Whether a specific artifact is already on this device, so the metered-link
+ * preflight can skip its "download over mobile data?" prompt when there is
+ * nothing to download. The service worker stores the model under the request URL
+ * it intercepted (the same-origin manifest URL), across the shared asset bucket
+ * and the per-model buckets, so every bucket is searched. `ignoreVary` is
+ * required for the same reason as in the service worker: the dev server sends
+ * `Vary: Origin`, and the URL is the only real cache key.
+ */
+export async function isUrlCached(url: string): Promise<boolean> {
+  // `typeof` keeps this safe in a non-browser (unit-test) context, where the
+  // Cache API and `location` do not exist.
+  if (typeof caches === 'undefined' || typeof location === 'undefined') return false;
+  const absolute = new URL(url, location.href).toString();
+  const names = await caches.keys();
+  for (const name of names) {
+    if (!name.startsWith('remove-bg-assets-') && !name.startsWith('remove-bg-model-')) continue;
+    const cache = await caches.open(name);
+    const hit = await cache.match(absolute, { ignoreVary: true });
+    if (hit) return true;
+  }
+  return false;
+}

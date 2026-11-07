@@ -196,12 +196,6 @@
       .formatOptions .formatHint { color: var(--muted); font-size: 0.82rem; }
       .formatOptions label:has(input:disabled) { color: var(--muted); cursor: not-allowed; }
 
-      .rememberChoice {
-        display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.7rem;
-        font-size: 0.9rem;
-      }
-      .rememberChoice input { flex: none; }
-
       .recovery {
         margin-top: 0.75rem; border: 1px solid var(--err-line); background: var(--err-bg);
         border-radius: 10px; padding: 0.75rem 0.9rem;
@@ -326,10 +320,6 @@
              already on this device. -->
         <div id="netWarn" class="netWarn" role="dialog" aria-modal="true" aria-labelledby="netWarnText" hidden>
           <p id="netWarnText"></p>
-          <label class="rememberChoice">
-            <input type="checkbox" id="netWarnRemember" />
-            Remember my choice — always download the model over mobile data
-          </label>
           <div class="actions">
             <button id="netWarnConfirm" class="primary">Download model</button>
             <button id="netWarnDismiss" class="secondary">Not now</button>

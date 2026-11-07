@@ -7,8 +7,9 @@
 // the page shows. Keeping it DOM-free makes the decision unit-testable.
 //
 // The API is Chromium-only and is often a coarse hint ("4g" means "at least 4G",
-// not "currently on 4G"), so the default is to ask rather than to assume. The
-// user's answer is remembered per session by the caller.
+// not "currently on 4G"), so on an ambiguous link the app asks before a large
+// first download rather than assuming. Consent lasts for the session only; it is
+// never remembered across visits.
 
 import { formatBytes } from './load-progress';
 
@@ -43,26 +44,48 @@ function readConnection(): NetworkInformationLike | null {
 }
 
 /**
- * Classifies the current connection from the Network Information API. Absent or
- * ambiguous data resolves to 'unknown', which the caller treats as unmetered —
- * the API is Chromium-only and reports no `type` on most desktops, so "unknown"
- * must not mean "ask".
+ * Classifies the current connection from the Network Information API plus a
+ * coarse mobile-device hint. Absent or ambiguous data resolves to 'unknown' on
+ * a desktop, which the caller treats as unmetered — the API is Chromium-only
+ * and reports no `type` on most desktops, so "unknown" must not mean "ask".
+ *
+ * On a phone or tablet, however, a fast link with no Wi-Fi signal is treated as
+ * cellular. Chrome on Android caps the reported downlink for cellular and often
+ * omits `type` for privacy, so a 4G phone reports only `effectiveType: '4g'` and
+ * would otherwise be classified 'unknown' and download silently over mobile
+ * data. Erring toward asking on a mobile device is deliberate: the prompt is a
+ * confirmation, not a block, and its copy says the link "may be" metered.
  */
-export function classifyConnection(info: NetworkInformationLike | null): ConnectionClass {
-  if (!info) return 'unknown';
-  if (info.saveData) return 'metered';
-  const type = (info.type || '').toLowerCase();
-  if (type === 'wifi' || type === 'ethernet') return 'wifi';
-  if (type === 'cellular') return 'cellular';
-  // No `type` hint: fall back to the effective-type/downlink heuristics that
-  // every Chromium build provides. A slow effective type or a sub-1.5 Mbit/s
-  // estimate is the best signal that a large download may be metered.
-  const effective = (info.effectiveType || '').toLowerCase();
-  if (effective === 'slow-2g' || effective === '2g' || effective === '3g') return 'cellular';
-  if (typeof info.downlink === 'number' && info.downlink > 0 && info.downlink < 1.5) {
-    return 'cellular';
+export function classifyConnection(
+  info: NetworkInformationLike | null,
+  deviceMobile = false,
+): ConnectionClass {
+  if (info) {
+    if (info.saveData) return 'metered';
+    const type = (info.type || '').toLowerCase();
+    if (type === 'wifi' || type === 'ethernet') return 'wifi';
+    if (type === 'cellular') return 'cellular';
+    // No `type` hint: fall back to the effective-type/downlink heuristics that
+    // every Chromium build provides. A slow effective type or a sub-1.5 Mbit/s
+    // estimate is the best signal that a large download may be metered.
+    const effective = (info.effectiveType || '').toLowerCase();
+    if (effective === 'slow-2g' || effective === '2g' || effective === '3g') return 'cellular';
+    if (typeof info.downlink === 'number' && info.downlink > 0 && info.downlink < 1.5) {
+      return 'cellular';
+    }
   }
+  // No positive Wi-Fi signal. On a mobile device assume mobile data so the user
+  // is asked before a large download (see the note above).
+  if (deviceMobile) return 'cellular';
   return 'unknown';
+}
+
+function readDeviceMobile(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
+  if (uaData && typeof uaData.mobile === 'boolean') return uaData.mobile;
+  const ua = navigator.userAgent || '';
+  return /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
 }
 
 export interface PreflightOptions {
@@ -72,6 +95,12 @@ export interface PreflightOptions {
   warnThresholdBytes?: number;
   /** Injected for tests; defaults to the real Network Information API. */
   info?: NetworkInformationLike | null;
+  /**
+   * Whether this looks like a phone/tablet. Injected for tests; defaults to a
+   * coarse user-agent check. A mobile device with no Wi-Fi signal is treated as
+   * metered (see `classifyConnection`).
+   */
+  deviceMobile?: boolean;
 }
 
 const DEFAULT_WARN_THRESHOLD = 25 * 1024 * 1024;
@@ -86,7 +115,8 @@ const DEFAULT_WARN_THRESHOLD = 25 * 1024 * 1024;
  */
 export function assessNetwork(opts: PreflightOptions = {}): NetworkAssessment {
   const info = opts.info === undefined ? readConnection() : opts.info;
-  const connection = classifyConnection(info);
+  const deviceMobile = opts.deviceMobile === undefined ? readDeviceMobile() : opts.deviceMobile;
+  const connection = classifyConnection(info, deviceMobile);
   const threshold = opts.warnThresholdBytes ?? DEFAULT_WARN_THRESHOLD;
   const size = opts.sizeBytes ?? 0;
   const large = size === 0 || size >= threshold;
@@ -97,8 +127,6 @@ export function assessNetwork(opts: PreflightOptions = {}): NetworkAssessment {
 export interface DownloadGateOptions extends PreflightOptions {
   /** The model is already on this device (Cache API), so there is nothing to download. */
   cached?: boolean;
-  /** The user ticked "remember my choice" on a previous download. */
-  remembered?: boolean;
   /** Consent already given this session, or a deliberate ?model=/?provider= action. */
   confirmed?: boolean;
 }
@@ -106,11 +134,11 @@ export interface DownloadGateOptions extends PreflightOptions {
 /**
  * The full preflight decision, in one place so it is unit-testable: prompt only
  * when the connection looks metered AND the model is not already cached AND the
- * user has neither confirmed already nor asked to be remembered. Any one of
- * those makes the download proceed straight away.
+ * user has not already confirmed this session. Either of those makes the
+ * download proceed straight away.
  */
 export function shouldConfirmDownload(opts: DownloadGateOptions = {}): boolean {
-  if (opts.confirmed || opts.remembered || opts.cached) return false;
+  if (opts.confirmed || opts.cached) return false;
   return assessNetwork(opts).warn;
 }
 
@@ -138,7 +166,7 @@ export function downloadConfirmationText(sizeBytes: number, label?: string): str
   return (
     `Removing backgrounds needs to download the model${named} once — about ${size}.\n\n` +
     'You look like you may be on mobile data, and this download uses your data plan. ' +
-    'It is kept on this device, so it only happens once.\n\n' +
+    'It is kept on this device, so it only happens once. We will ask again next visit.\n\n' +
     'Your photo is never uploaded; everything runs in your browser.'
   );
 }

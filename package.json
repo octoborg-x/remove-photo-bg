@@ -18,6 +18,7 @@
     "eval:analyze": "python3 scripts/eval/analyze-eval.py eval-results/wasm",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "fetch-models": "node scripts/fetch-models.mjs",
+    "build-demo": "node scripts/build-demo-assets.mjs",
     "dev:local": "vite",
     "license:audit": "license-checker-rseidelsohn --production && license-checker-rseidelsohn --summary",
     "vercel:build": "node scripts/fetch-models.mjs --webgpu --no-models && npm run build && node scripts/copy-legal-docs.mjs && node scripts/strip-large-assets.mjs"

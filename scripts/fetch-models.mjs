@@ -11,8 +11,18 @@
 // filename states the weight precision and the compute precision. E.g.
 // `model_512_int0_fp32` is the full-precision teacher (no int quantisation,
 // fp32 compute) and `model_512_int8_fp16` stores the backbone at int8 and the
-// rest at fp16 (fp32 compute). The default is the smallest artifact that keeps
-// zero pixels crossing the 0.5 threshold on the repo test images.
+// rest at fp16 (fp32 compute).
+//
+// Every artifact is the raw export with its PyTorch debug metadata and duplicate
+// initializers removed (`scripts/distill/optimize-onnx.py --scope none`), which
+// is lossless: outputs are bit-identical to the un-stripped file. That is a
+// smaller download at zero numerical cost, so all three sizes shrank.
+//
+// The int8 artifact is NOT the smallest file available. A full int8 decoder, or
+// int8 backbone variants, reach 48-84 MB but flip pixels on the wider 62-image
+// eval set - and on `clothing-04.jpg` the fp32 model is numerically knife-edge,
+// so any weight error there collapses the mask to empty. `model_512_int8_fp16`
+// keeps the shipped backbone scope because the extra size buys robustness.
 //
 // Also copies the onnxruntime-web WASM files we need into public/wasm.
 //
@@ -40,11 +50,11 @@ const MODELS = [
     id: 'model_512_int8_fp16',
     file: 'models/model_512_int8_fp16.onnx',
     url: `${HF_SPACE}/models/model_512_int8_fp16.onnx`,
-    size: 68491168,
-    sha256: '524bd904f68a48c3390bd27ab85d9e8107af0e1b8e79f20197ecdeaad8b17046',
-    label: 'int8+fp16 (small, ~65 MB)',
+    size: 60763193,
+    sha256: '10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26',
+    label: 'int8+fp16 (small, ~58 MB)',
     description:
-      'Weight-only int8 backbone (m.bb.*, m.squeeze_module.*) + fp16 decoder, materialised to fp32. 68.5 MB, 0 pixels flip vs the teacher on the repo test images. Default: smallest artifact with no 0.5-threshold flips.',
+      'Weight-only int8 backbone (m.bb.*, m.squeeze_module.*) + fp16 decoder, materialised to fp32, with PyTorch debug metadata and duplicate initializers stripped. 60.8 MB. The stored weights are unchanged from the 68.5 MB artifact, so its numerical behaviour is identical; the cleanup is lossless.',
     inputSize: 512,
     outputIsProbability: true,
     default: true,
@@ -53,11 +63,11 @@ const MODELS = [
     id: 'model_512_int0_fp16',
     file: 'models/model_512_int0_fp16.onnx',
     url: `${HF_SPACE}/models/model_512_int0_fp16.onnx`,
-    size: 98799684,
-    sha256: '099c89de1d9a3da27af3d5329460f543e5d9390fc45e7ba7d0e7360b378d5f97',
-    label: 'fp16 weights (~94 MB)',
+    size: 92519896,
+    sha256: 'c77e5a8ca6866dc8ff536d9aafefb1591e94d906b7b68528f14cb0be070eeae5',
+    label: 'fp16 weights (~88 MB)',
     description:
-      'Weight-only fp16 storage, fp32 compute (previously shipped as c5_best.onnx). Byte-identical to that artifact.',
+      'Weight-only fp16 storage, fp32 compute, with PyTorch debug metadata stripped. 92.5 MB. Mean IoU 0.99989 vs the fp32 teacher over the 62-image eval set, minimum 0.9977 - the numerically safest compression.',
     inputSize: 512,
     outputIsProbability: true,
     default: false,
@@ -66,11 +76,11 @@ const MODELS = [
     id: 'model_512_int0_fp32',
     file: 'models/model_512_int0_fp32.onnx',
     url: `${HF_SPACE}/models/model_512_int0_fp32.onnx`,
-    size: 193514682,
-    sha256: 'eaafaa10f19c63b77e2bae77bf4b2f59054c208ea08b8c6648f95ef36a3b6b87',
-    label: 'fp32 full (~184 MB)',
+    size: 184339317,
+    sha256: '5f4a5e0f1f39a0aebb2a0087efa2a8553ea6c3012f8fea69dbaa58194fe83d96',
+    label: 'fp32 full (~176 MB)',
     description:
-      'Phase-1 fp32 export of BiRefNet_lite at 512x512 (the teacher, no quantisation). Largest download; reference quality.',
+      'Phase-1 fp32 export of BiRefNet_lite at 512x512 (the teacher, no quantisation), with PyTorch debug metadata and duplicate initializers stripped. Bit-identical outputs to the 193.5 MB original. Largest download; reference quality.',
     inputSize: 512,
     outputIsProbability: true,
     default: false,

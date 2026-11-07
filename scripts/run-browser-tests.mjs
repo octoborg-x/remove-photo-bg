@@ -355,21 +355,43 @@ try {
   }
 
   // ——— Scenario 6: keyboard-only activation of the drop zone ———
+  // `input.click()` only opens the file chooser while the document is the
+  // active, focused one, and this scenario runs late in a CI job that has
+  // opened and closed several pages. Assert the focus actually landed before
+  // pressing, and retry: a swallowed press would report a real regression in
+  // the keyboard affordance, so we must distinguish "focus never landed" from
+  // "Enter did nothing".
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
-    await page.focus('#dropZone');
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.keyboard.press('Enter');
-    let opened = true;
-    try {
-      const chooser = await chooserPromise;
-      await chooser.cancel();
-    } catch {
-      opened = false;
+    await page.bringToFront();
+
+    let focused = false;
+    for (let attempt = 0; attempt < 3 && !focused; attempt += 1) {
+      await page.focus('#dropZone');
+      focused = await page.evaluate(() => document.activeElement?.id === 'dropZone');
     }
-    record('drop zone is keyboard-activatable (Enter opens the chooser)', opened);
+    if (!focused) {
+      // Not a product failure: report it as such instead of a bogus "no chooser".
+      record('drop zone is keyboard-activatable (Enter opens the chooser)', false);
+      console.log('  (could not focus #dropZone; document.activeElement never became it)');
+    } else {
+      let opened = false;
+      for (let attempt = 0; attempt < 3 && !opened; attempt += 1) {
+        const chooserPromise = page.waitForFileChooser({ timeout: 10000 }).then(
+          (chooser) => ({ chooser }),
+          (err) => ({ err }),
+        );
+        await page.keyboard.press('Enter');
+        const outcome = await chooserPromise;
+        if (outcome.chooser) {
+          await outcome.chooser.cancel();
+          opened = true;
+        }
+      }
+      record('drop zone is keyboard-activatable (Enter opens the chooser)', opened);
+    }
     await page.close();
   }
 

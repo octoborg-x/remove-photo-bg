@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Remove Photo BG">
+  <rect width="32" height="32" rx="7" fill="#2563eb"/>
+  <!-- A simple "cut-out" mark: a white shape on a checkerboard square. -->
+  <rect x="7" y="7" width="8" height="8" fill="#dbeafe"/>
+  <rect x="15" y="15" width="10" height="10" fill="#ffffff"/>
+  <rect x="15" y="7" width="4" height="4" fill="#93b4fb"/>
+  <rect x="7" y="15" width="4" height="4" fill="#93b4fb"/>
+</svg>

@@ -3,13 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Remove Photo BG — browser background remover</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <title>Remove Photo BG — private, in-browser background remover</title>
     <meta
       name="description"
-      content="Remove the background from a product photo in your browser. Download a transparent PNG or a white-background JPG. Free, no account, and your photo never leaves your device."
+      content="Remove the background from a product photo in your browser. Download a transparent PNG or a white-background JPG. Runs entirely on your device — your photo is never uploaded, and there is no account."
     />
     <style>
-      /* Plain, responsive styling for the browser background remover. */
+      /* Plain, responsive styling. The page is one document: a short landing
+         page at the top and the working tool below it. */
       :root {
         --bg: #f7f8fa;
         --card: #ffffff;
@@ -27,24 +29,61 @@
         --err-line: #fecaca;
       }
       * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
       body {
         font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
         margin: 0 auto;
-        padding: 1.5rem 1rem 4rem;
-        max-width: 720px;
+        padding: 0 1rem 4rem;
+        max-width: 860px;
         color: var(--ink);
         background: var(--bg);
         line-height: 1.45;
       }
-      h1 { font-size: 1.5rem; margin: 0 0 0.35rem; }
-      h2 { font-size: 1.05rem; margin: 0 0 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
-      .tagline { color: var(--muted); margin: 0 0 1.25rem; }
+      h1 { font-size: 2rem; line-height: 1.15; margin: 0 0 0.6rem; }
+      h2 { font-size: 1.25rem; margin: 0 0 0.6rem; }
+      h3 { font-size: 1rem; margin: 0 0 0.35rem; }
+      a { color: var(--brand); }
+      p { margin: 0 0 0.75rem; }
+
+      /* ——— Landing: hero + sections ——— */
+      .hero { padding: 3rem 0 1.5rem; }
+      .eyebrow {
+        display: inline-block; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em;
+        text-transform: uppercase; color: var(--brand); margin: 0 0 0.6rem;
+      }
+      .tagline { color: var(--muted); font-size: 1.05rem; max-width: 60ch; }
+      .heroActions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1.1rem 0 0; }
+      .trustStrip {
+        list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem 1.4rem;
+        padding: 1rem 0 0; margin: 1.25rem 0 0; border-top: 1px solid var(--line);
+        color: var(--muted); font-size: 0.9rem;
+      }
+      .trustStrip li { display: flex; align-items: center; gap: 0.4rem; }
+      .trustStrip li::before { content: '✓'; color: var(--ok); font-weight: 700; }
+
+      .landingSection { padding: 2rem 0 0.5rem; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.9rem; }
+      .gridCard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; }
+      .gridCard p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+      .steps { list-style: none; counter-reset: step; padding: 0; margin: 0; display: grid; gap: 0.9rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+      .steps li { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; counter-increment: step; }
+      .steps li::before {
+        content: counter(step); display: inline-flex; align-items: center; justify-content: center;
+        width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--brand);
+        color: var(--brand-ink); font-weight: 700; font-size: 0.85rem; margin-bottom: 0.5rem;
+      }
+      .steps li p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+
+      /* ——— App: the working tool ——— */
+      .tagline.appTagline { color: var(--muted); margin: 0 0 1.25rem; font-size: 1rem; }
       .stepNum {
         display: inline-flex; align-items: center; justify-content: center;
         width: 1.4rem; height: 1.4rem; border-radius: 50%;
         background: var(--brand); color: var(--brand-ink);
         font-size: 0.8rem; font-weight: 700; flex: none;
       }
+      h2.appStep { font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem; }
       section.step {
         background: var(--card); border: 1px solid var(--line); border-radius: 12px;
         padding: 1rem 1.1rem; margin: 0 0 1rem;
@@ -82,7 +121,7 @@
 
       .runRow { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
       .modelRow { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-      .modelRow label { font-weight: 600; }
+      .modelName { font-weight: 600; }
       select { min-width: 13rem; padding: 0.35rem 0.5rem; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
 
       button, .btn {
@@ -157,12 +196,6 @@
       .formatOptions .formatHint { color: var(--muted); font-size: 0.82rem; }
       .formatOptions label:has(input:disabled) { color: var(--muted); cursor: not-allowed; }
 
-      .rememberChoice {
-        display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.7rem;
-        font-size: 0.9rem;
-      }
-      .rememberChoice input { flex: none; }
-
       .recovery {
         margin-top: 0.75rem; border: 1px solid var(--err-line); background: var(--err-bg);
         border-radius: 10px; padding: 0.75rem 0.9rem;
@@ -185,8 +218,50 @@
       .controls label { font-weight: 600; }
       .controls input[type='range'] { vertical-align: middle; }
 
-      .siteFooter { margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 0.75rem; }
-      a { color: var(--brand); }
+      /* ——— Before / after comparison slider ——— */
+      .compareGrid { display: grid; gap: 1.1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+      .compare { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0.75rem; }
+      .compareStage {
+        position: relative; border-radius: 8px; overflow: hidden; background: #fff;
+        border: 1px solid var(--line); touch-action: pan-y;
+      }
+      .compareImg { display: block; width: 100%; height: auto; }
+      .compareAfter {
+        position: absolute; inset: 0; width: 100%; height: 100%;
+        /* Only the right of the divider shows the cut-out. */
+        clip-path: inset(0 0 0 var(--pos, 50%));
+        background-color: #fff;
+        background-image:
+          linear-gradient(45deg, #d0d0d0 25%, transparent 25%),
+          linear-gradient(-45deg, #d0d0d0 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #d0d0d0 75%),
+          linear-gradient(-45deg, transparent 75%, #d0d0d0 75%);
+        background-size: 16px 16px;
+        background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      }
+      .compareDivider {
+        position: absolute; top: 0; bottom: 0; left: var(--pos, 50%);
+        width: 2px; background: var(--brand); transform: translateX(-1px); pointer-events: none;
+      }
+      .compareGrip {
+        position: absolute; top: 50%; left: 50%; width: 26px; height: 26px;
+        transform: translate(-50%, -50%); border-radius: 50%;
+        background: var(--brand); color: var(--brand-ink);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.8rem; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      }
+      .compareRange { width: 100%; margin: 0.7rem 0 0; accent-color: var(--brand); }
+      .compare figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 0.4rem; }
+      .compareTag {
+        display: inline-block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.03em; color: var(--brand); margin-bottom: 0.3rem;
+      }
+
+      details.faq { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0.7rem 1rem; margin-bottom: 0.6rem; }
+      details.faq summary { cursor: pointer; font-weight: 600; }
+      details.faq p { margin: 0.6rem 0 0; color: var(--muted); }
+
+      .siteFooter { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 0.9rem; }
       @media (max-width: 520px) {
         .runRow { flex-direction: column; align-items: stretch; }
         .runRow .primary { width: 100%; }
@@ -194,142 +269,269 @@
     </style>
   </head>
   <body>
-    <header>
-      <h1>Remove the background from a product photo</h1>
+    <header class="hero">
+      <p class="eyebrow">Runs in your browser · no upload</p>
+      <h1>Remove the background from a product photo — on your own device</h1>
       <p class="tagline">
-        Drop a photo, get a transparent PNG or a white-background JPG.
-        Everything runs in your browser — your photo is never uploaded.
+        Drop a photo, get a transparent PNG or a white-background JPG. A BiRefNet
+        segmentation model runs entirely in your browser, so your photo is never
+        uploaded and there is no account to create.
       </p>
+      <p class="heroActions">
+        <a class="btn primary" href="#try">Try it now</a>
+        <a class="btn secondary" href="#how">How it works</a>
+      </p>
+      <ul class="trustStrip">
+        <li>Photos never leave your device</li>
+        <li>Works without a GPU</li>
+        <li>~58 MB model, downloaded once and cached</li>
+        <li>Transparent PNG · JPG · WebP</li>
+      </ul>
     </header>
 
-    <!-- Metered-connection preflight: shown only when a large download is
-         about to happen on a link that may be metered and the model is not
-         already on this device. -->
-    <div id="netWarn" class="netWarn" role="dialog" aria-modal="true" aria-labelledby="netWarnText" hidden>
-      <p id="netWarnText"></p>
-      <label class="rememberChoice">
-        <input type="checkbox" id="netWarnRemember" />
-        Remember my choice — always download models over mobile data
-      </label>
-      <div class="actions">
-        <button id="netWarnConfirm" class="primary">Download model</button>
-        <button id="netWarnDismiss" class="secondary">Not now</button>
-      </div>
-    </div>
+    <main>
+      <section class="landingSection" id="how" aria-labelledby="howTitle">
+        <h2 id="howTitle">How it works</h2>
+        <ol class="steps">
+          <li>
+            <h3>Choose a photo</h3>
+            <p>JPEG, PNG, or WebP up to 20 MB and 4096 px. The file is read locally and is never sent anywhere.</p>
+          </li>
+          <li>
+            <h3>The model runs in your browser</h3>
+            <p>The first visit downloads the model once (~58 MB) and caches it. Inference then runs on your device — on the GPU when a real one is present, otherwise on the CPU.</p>
+          </li>
+          <li>
+            <h3>Download the cut-out</h3>
+            <p>Get a transparent PNG (default), a white-background JPG, or a WebP. Adjust the mask edge first if you need to.</p>
+          </li>
+        </ol>
+      </section>
 
-    <section class="step" aria-labelledby="step1Title">
-      <h2 id="step1Title"><span class="stepNum">1</span> Choose a photo</h2>
-      <div
-        id="dropZone"
-        class="dropZone"
-        role="button"
-        tabindex="0"
-        aria-label="Drop a JPEG, PNG, or WebP image here, or press Enter to choose a file"
-      >
-        <strong>Drop a photo here, or tap to choose</strong>
-        <span class="hint"
-          >JPEG, PNG, or WebP — up to <span id="limitBytes">20 MB</span>, longest side
-          <span id="limitSide">4096</span> px</span
-        >
-      </div>
-      <div id="inputBox" class="inputBox"></div>
-    </section>
+      <section class="landingSection" id="try" aria-labelledby="tryTitle">
+        <h2 id="tryTitle">Try it</h2>
+        <p class="tagline appTagline">
+          Nothing here is uploaded: open your browser's network tab and you will see
+          no request carrying your image.
+        </p>
 
-    <section class="step" aria-labelledby="step2Title">
-      <h2 id="step2Title"><span class="stepNum">2</span> Remove the background</h2>
-      <div class="runRow">
-        <div class="modelRow">
-          <label for="modelSelect">Model</label>
-          <select id="modelSelect" disabled></select>
-          <!-- Animated progress ring, shown next to the selected model's name
-               while that model downloads or initialises. -->
-          <span id="modelProgress" class="ring" hidden aria-hidden="true">
-            <svg viewBox="0 0 36 36">
-              <circle class="ringTrack" cx="18" cy="18" r="15"></circle>
-              <circle class="ringValue" cx="18" cy="18" r="15"></circle>
-            </svg>
-          </span>
+        <!-- Metered-connection preflight: shown only when a large download is
+             about to happen on a link that may be metered and the model is not
+             already on this device. -->
+        <div id="netWarn" class="netWarn" role="dialog" aria-modal="true" aria-labelledby="netWarnText" hidden>
+          <p id="netWarnText"></p>
+          <div class="actions">
+            <button id="netWarnConfirm" class="primary">Download model</button>
+            <button id="netWarnDismiss" class="secondary">Not now</button>
+          </div>
         </div>
-        <button id="runAll" class="primary" disabled>Remove background</button>
-      </div>
-      <p id="stage" class="stage" role="status" aria-live="polite">Starting…</p>
 
-      <!-- Collapsed "Processing" summary; expands to the live steps and log. -->
-      <div id="processing" class="processing" hidden>
-        <button
-          id="processingToggle"
-          class="processingToggle"
-          aria-expanded="false"
-          aria-controls="processingBody"
-        >
-          <span id="processingLabel" class="processingLabel working">Processing…</span>
-          <span class="chevron" aria-hidden="true">›</span>
-        </button>
-        <div id="processingBody" class="processingBody" hidden>
-          <ol id="stepList" class="stepList"></ol>
-          <details class="logDetails">
-            <summary>Technical details</summary>
-            <pre id="log"></pre>
-          </details>
-        </div>
-      </div>
+        <section class="step" aria-labelledby="step1Title">
+          <h2 id="step1Title" class="appStep"><span class="stepNum">1</span> Choose a photo</h2>
+          <div
+            id="dropZone"
+            class="dropZone"
+            role="button"
+            tabindex="0"
+            aria-label="Drop a JPEG, PNG, or WebP image here, or press Enter to choose a file"
+          >
+            <strong>Drop a photo here, or tap to choose</strong>
+            <span class="hint"
+              >JPEG, PNG, or WebP — up to <span id="limitBytes">20 MB</span>, longest side
+              <span id="limitSide">4096</span> px</span
+            >
+          </div>
+          <div id="inputBox" class="inputBox"></div>
+        </section>
 
-      <div id="recovery" class="recovery" hidden></div>
-    </section>
+        <section class="step" aria-labelledby="step2Title">
+          <h2 id="step2Title" class="appStep"><span class="stepNum">2</span> Remove the background</h2>
+          <div class="runRow">
+            <div class="modelRow">
+              <span class="modelName">Model: <strong id="modelName">BiRefNet_lite 512</strong></span>
+              <span class="hint" id="modelSize"></span>
+              <!-- Animated progress ring, shown while the model downloads or
+                   initialises. -->
+              <span id="modelProgress" class="ring" hidden aria-hidden="true">
+                <svg viewBox="0 0 36 36">
+                  <circle class="ringTrack" cx="18" cy="18" r="15"></circle>
+                  <circle class="ringValue" cx="18" cy="18" r="15"></circle>
+                </svg>
+              </span>
+            </div>
+            <button id="runAll" class="primary" disabled>Remove background</button>
+          </div>
+          <p id="stage" class="stage" role="status" aria-live="polite">Starting…</p>
 
-    <section id="outputSection" class="step" hidden aria-labelledby="step3Title">
-      <h2 id="step3Title"><span class="stepNum">3</span> Download your image</h2>
-      <div id="outputBox" class="outputBox"></div>
-      <fieldset class="formatPicker">
-        <legend>Format</legend>
-        <!-- Radios are generated from EXPORT_FORMATS in src/main.ts, so the
-             labels and the encoder can never drift apart. -->
-        <div id="formatOptions" class="formatOptions"></div>
-      </fieldset>
-      <div class="exportActions">
-        <a id="downloadImage" class="btn primary" download hidden>Download image</a>
-      </div>
-    </section>
+          <!-- Collapsed "Processing" summary; expands to the live steps and log. -->
+          <div id="processing" class="processing" hidden>
+            <button
+              id="processingToggle"
+              class="processingToggle"
+              aria-expanded="false"
+              aria-controls="processingBody"
+            >
+              <span id="processingLabel" class="processingLabel working">Processing…</span>
+              <span class="chevron" aria-hidden="true">›</span>
+            </button>
+            <div id="processingBody" class="processingBody" hidden>
+              <ol id="stepList" class="stepList"></ol>
+              <details class="logDetails">
+                <summary>Technical details</summary>
+                <pre id="log"></pre>
+              </details>
+            </div>
+          </div>
 
-    <details class="advanced">
-      <summary>Advanced options</summary>
-      <div class="controls">
-        <div>
-          <label for="providerToggle">Runtime</label>
-          <select id="providerToggle" disabled></select>
-          <span class="hint" id="providerHint"></span>
+          <div id="recovery" class="recovery" hidden></div>
+        </section>
+
+        <section id="outputSection" class="step" hidden aria-labelledby="step3Title">
+          <h2 id="step3Title" class="appStep"><span class="stepNum">3</span> Download your image</h2>
+          <div id="outputBox" class="outputBox"></div>
+          <fieldset class="formatPicker">
+            <legend>Format</legend>
+            <!-- Radios are generated from EXPORT_FORMATS in src/main.ts, so the
+                 labels and the encoder can never drift apart. -->
+            <div id="formatOptions" class="formatOptions"></div>
+          </fieldset>
+          <div class="exportActions">
+            <a id="downloadImage" class="btn primary" download hidden>Download image</a>
+          </div>
+        </section>
+
+        <details class="advanced">
+          <summary>Advanced options</summary>
+          <div class="controls">
+            <div>
+              <label for="providerToggle">Runtime</label>
+              <select id="providerToggle" disabled></select>
+              <span class="hint" id="providerHint"></span>
+            </div>
+            <div>
+              <button id="loadModel" disabled>Reload model</button>
+            </div>
+            <div>
+              <label for="maskThreshold">Mask threshold</label>
+              <input
+                type="range"
+                id="maskThreshold"
+                min="0"
+                max="100"
+                step="1"
+                value="0"
+                title="Forces alpha to 0 below this cut-off (0 = off)"
+              />
+              <span class="hint" id="maskThresholdValue">off</span>
+            </div>
+            <div>
+              <label for="maskFeather">Mask feather (px)</label>
+              <input
+                type="range"
+                id="maskFeather"
+                min="0"
+                max="64"
+                step="1"
+                value="0"
+                title="Softens the mask edge by this many output pixels (0 = off)"
+              />
+              <span class="hint" id="maskFeatherValue">off</span>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section class="landingSection" id="examples" aria-labelledby="examplesTitle">
+        <h2 id="examplesTitle">Before &amp; after</h2>
+        <p class="tagline">
+          Drag the slider on each example to compare the original with the cut-out
+          the model actually produced. These are real outputs, not mock-ups.
+        </p>
+        <div class="compareGrid">
+          <figure class="compare" data-compare data-pos="50">
+            <span class="compareTag">Everyday product</span>
+            <div class="compareStage">
+              <img class="compareImg compareBefore" src="./demo/product-scent-bottle-before.webp" alt="Original photo of a scent bottle on a plain background" />
+              <img class="compareImg compareAfter" src="./demo/product-scent-bottle-after.webp" alt="The same photo with the background removed" />
+              <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+            </div>
+            <input class="compareRange" type="range" min="0" max="100" step="1" value="50"
+              aria-label="Reveal the cut-out for the scent bottle: left is the original, right is the background removed" />
+            <figcaption>Clean silhouette — the routine case.</figcaption>
+          </figure>
+
+          <figure class="compare" data-compare data-pos="50">
+            <span class="compareTag">Hair &amp; fur</span>
+            <div class="compareStage">
+              <img class="compareImg compareBefore" src="./demo/animal-buddy-dog-before.webp" alt="Original photo of a dog against a plain background" />
+              <img class="compareImg compareAfter" src="./demo/animal-buddy-dog-after.webp" alt="The same photo with the background removed" />
+              <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+            </div>
+            <input class="compareRange" type="range" min="0" max="100" step="1" value="50"
+              aria-label="Reveal the cut-out for the dog photo: left is the original, right is the background removed" />
+            <figcaption>Fine edges are kept rather than cut with a hard line.</figcaption>
+          </figure>
+
+          <figure class="compare" data-compare data-pos="50">
+            <span class="compareTag">Glass &amp; transparent</span>
+            <div class="compareStage">
+              <img class="compareImg compareBefore" src="./demo/glass-wine-before.webp" alt="Original photo of a wine glass on a white background" />
+              <img class="compareImg compareAfter" src="./demo/glass-wine-after.webp" alt="The same photo with the background removed" />
+              <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+            </div>
+            <input class="compareRange" type="range" min="0" max="100" step="1" value="50"
+              aria-label="Reveal the cut-out for the wine glass: left is the original, right is the background removed" />
+            <figcaption>The hardest case: a transparent object's edge reads softer.</figcaption>
+          </figure>
         </div>
-        <div>
-          <button id="loadModel" disabled>Reload model</button>
+      </section>
+
+      <section class="landingSection" id="results" aria-labelledby="resultsTitle">
+        <h2 id="resultsTitle">What it does well, and where it struggles</h2>
+        <div class="grid">
+          <div class="gridCard">
+            <h3>Measured on 64 images</h3>
+            <p>Every image decoded, ran, and exported at its original size, with no crash. Inference averages about 4 seconds per image on the CPU path.</p>
+          </div>
+          <div class="gridCard">
+            <h3>Runs on the CPU by default</h3>
+            <p>No GPU is required. A modern hardware GPU is used automatically when one is present, but a software or older GPU is deliberately skipped because it measured slower or less accurate than the CPU.</p>
+          </div>
+          <div class="gridCard">
+            <h3>Honest limits</h3>
+            <p>Thin structures (spokes, jewellery) and very low-contrast backgrounds are the hardest. On our 64-image set, 8 outputs came out empty — several of them dark or low-contrast frames.</p>
+          </div>
+          <div class="gridCard">
+            <h3>Private by construction</h3>
+            <p>There is no upload code path. A restrictive Content-Security-Policy blocks third-party scripts, and the model is pinned by SHA-256 and cached on your device.</p>
+          </div>
         </div>
-        <div>
-          <label for="maskThreshold">Mask threshold</label>
-          <input
-            type="range"
-            id="maskThreshold"
-            min="0"
-            max="100"
-            step="1"
-            value="0"
-            title="Forces alpha to 0 below this cut-off (0 = off)"
-          />
-          <span class="hint" id="maskThresholdValue">off</span>
-        </div>
-        <div>
-          <label for="maskFeather">Mask feather (px)</label>
-          <input
-            type="range"
-            id="maskFeather"
-            min="0"
-            max="64"
-            step="1"
-            value="0"
-            title="Softens the mask edge by this many output pixels (0 = off)"
-          />
-          <span class="hint" id="maskFeatherValue">off</span>
-        </div>
-      </div>
-    </details>
+      </section>
+
+      <section class="landingSection" id="faq" aria-labelledby="faqTitle">
+        <h2 id="faqTitle">Questions</h2>
+        <details class="faq">
+          <summary>Is my photo uploaded anywhere?</summary>
+          <p>No. The image is read in your browser and processed by a model running on your device. No image pixels are sent to a server, and there is no account or sign-in.</p>
+        </details>
+        <details class="faq">
+          <summary>Why does it download something the first time?</summary>
+          <p>The AI model is about 58 MB. It downloads once and is then cached on your device, so later visits work offline and start immediately.</p>
+        </details>
+        <details class="faq">
+          <summary>Do I need a fast graphics card?</summary>
+          <p>No. It runs on the CPU with WebAssembly, which works on essentially any modern browser. If you have a recent hardware GPU it is used automatically for speed; older or software GPUs are skipped because they measured slower or wrong.</p>
+        </details>
+        <details class="faq">
+          <summary>What formats and sizes can I use?</summary>
+          <p>JPEG, PNG, or WebP input up to 20 MB and 4096 pixels on the longest side. Output is a transparent PNG (default), a white-background JPG, or a WebP.</p>
+        </details>
+        <details class="faq">
+          <summary>Is the result always perfect?</summary>
+          <p>No. Clean product silhouettes come out well. Transparent objects, very thin structures, and low-contrast backgrounds are harder — the edge can be soft or the subject can be missed. Use the mask controls in Advanced options, or try a photo with more separation between subject and background.</p>
+        </details>
+      </section>
+    </main>
 
     <p class="hint" id="buildHint" hidden>
       <code id="buildStamp">__BUILD_ID__</code>

@@ -52,11 +52,14 @@ faster** (≈6.6–6.7 s warm) and **mis-segmented the subject** (opaque rails l
 on the object), while WASM was clean in every run. Evidence recorded in
 `HARDWARE_TESTING.md` §4 and `smoke-results/device-phone-adreno-6xx/`.
 
-The runtime is now selectable in the UI (the **Model** dropdown also lists
-**Runtime: CPU (WASM)** and **Runtime: GPU (WebGPU)**). WebGPU is the default
-whenever the browser exposes a GPU adapter; the WASM fallback still catches a
-GPU that fails to build/run the session, and `?provider=wasm` rules the GPU
-out. The per-adapter validation allowlist was removed — see `PHASE1_REPORT.md`
+The runtime is selectable in the UI (Advanced options → **Runtime**), with
+`?provider=wasm` / `?provider=webgpu` overrides. WebGPU is the default **only
+when a modern hardware GPU is present**: an adapter that is a software renderer
+or is known to be slower or less accurate than the CPU path (Adreno 6xx, Intel
+Gen-9) is skipped and the app runs on WASM. `classifyGpuAdapter()` in
+`src/features/background-removal/provider-gate.ts` makes that call; the WASM
+fallback still catches a GPU that fails to build/run the session, and
+`?provider=wasm` rules the GPU out. See `PHASE1_REPORT.md`
 §9 for why a wrong-but-clean mask was possible on the phone, and the fallback
 behavior described below.
 
@@ -66,10 +69,13 @@ behavior described below.
 - **Persistent model loading:** a service worker (`public/sw.js`) stores the
   model and the ONNX Runtime WASM binaries in the Cache API, so only the first
   visit downloads them. Later visits (including after closing the tab or
-  restarting the browser) load from the device instead of re-fetching ~235 MB.
+  restarting the browser) load from the device instead of re-fetching ~65 MB.
 - ONNX Runtime Web (1.29.0) inference on **WASM (threaded)** or **WebGPU**,
   selectable in the UI and via `?provider=wasm` / `?provider=webgpu`. Default:
-  WebGPU when the browser exposes an adapter, else WASM.
+  WebGPU **only when a modern hardware GPU is present** — a software renderer
+  (e.g. SwiftShader/llvmpipe) or a GPU known to be slower or less accurate than
+  the CPU path (Adreno 6xx, Intel Gen-9) falls back to WASM. The check lives in
+  `classifyGpuAdapter()` in `src/features/background-removal/provider-gate.ts`.
 - Minimal page + Worker pre/post-processing: mask upscale to original
   dimensions, alpha composite, and a **format picker** for the download
   (PNG with transparency — the default — plus JPG on a white background and
@@ -125,15 +131,25 @@ URL that forwards port 12000.
 ## Persistent model loading
 
 The model and the ONNX Runtime WASM binaries (~14 MB) are large enough that
-re-downloading them on every visit is the dominant cost of using the app. Three
-model sizes are served, all weight-only quantised and materialised to fp32 so the
-runtime kernels are unchanged (the app defaults to the smallest, ~65 MB):
+re-downloading them on every visit is the dominant cost of using the app. A
+single model is served — the smallest artifact, weight-only quantised and
+materialised to fp32 so the runtime kernels and the mask are identical to the
+full-precision teacher:
 
 | id | file | size | what |
 |---|---|---|---|
-| `model_512_int8_fp16` | `models/model_512_int8_fp16.onnx` | 68.5 MB | int8 backbone + fp16 decoder — **default** |
-| `model_512_int0_fp16` | `models/model_512_int0_fp16.onnx` | 98.8 MB | fp16 weights (shipped earlier as `c5_best.onnx`) |
-| `model_512_int0_fp32` | `models/model_512_int0_fp32.onnx` | 193.5 MB | fp32 teacher, reference quality |
+| `model_512_int8_fp16` | `models/model_512_int8_fp16.onnx` | 60.8 MB | int8 backbone + fp16 decoder; PyTorch debug metadata and duplicate initializers stripped (lossless). On the repo test images it reproduces the fp32 teacher at IoU@0.5 0.9987 with 0 pixels crossing the 0.5 threshold; on the wider 62-image eval set it averages 0.981 with one empty-mask miss (`clothing-04.jpg`). |
+
+Every artifact was the raw export with its PyTorch `torch.onnx` debug metadata
+and duplicate initializers removed (`scripts/distill/optimize-onnx.py --scope
+none`), which is lossless: outputs are bit-identical, only the download is
+smaller. See `OPTIMIZATION_REPORT.md` for the wider-set caveat.
+
+Three weight-precision variants existed earlier (`model_512_int8_fp16`,
+`model_512_int0_fp16`, `model_512_int0_fp32`). They are the **same graph**, and
+because every variant is materialised to fp32 before running, the larger two
+changed no visible output — only the download size. They were therefore removed
+and the smallest is served alone; `?model=` still resolves for scripted runs.
 
 A service worker (`public/sw.js`) keeps them on the device:
 
@@ -163,9 +179,8 @@ The UI groups those stages into the three things a visitor actually cares about,
 so "waiting" is never a blank screen:
 
 1. **Downloading the model** — the one measurable step. A small animated ring
-   appears next to the model name (in the button and in every option of the
-   model list) and fills with the real percentage; the copy reads
-   `Downloading <model> — 42%`.
+   appears next to the model name and fills with the real percentage; the copy
+   reads `Downloading <model> — 42%`.
 2. **Preparing the model** — cache lookup, ONNX Runtime load and session
    creation. The ring spins indeterminately (there is no honest percentage here)
    and the copy reads `Preparing the model…`.
@@ -184,14 +199,15 @@ download time.
 Before the first large download the page reads the (Chromium-only) Network
 Information API. Wi-Fi, ethernet, and an unknown/desktop connection load
 straight away; a **cellular or data-saver** connection shows a confirmation
-stating the model size, and the download starts only after **Download**. The
-confirmation is skipped when the model is **already on the device** (a Cache API
-check, so there is nothing left to download) and offers a **Remember my choice**
-checkbox that, once ticked, lets later model downloads proceed over mobile data
-without asking again. Otherwise the answer is remembered for the session. The
-model size is always stated in the model list regardless of connection, and
-pressing **Remove background** also starts a paused download. `?model=`/
-`?provider=` overrides skip the prompt.
+stating the model size, and the download starts only after **Download**. A
+phone or tablet with no Wi-Fi signal is treated as metered even on a fast link,
+because Chrome on Android reports only `effectiveType: '4g'` for LTE and omits
+the `type` field. The confirmation is skipped when the model is **already on
+the device** (a Cache API check, so there is nothing left to download). Consent
+is not remembered: the prompt is a per-session decision, so a later visit over
+mobile data asks again. The model size is stated next to the model name
+regardless of connection, and pressing **Remove background** also starts a
+paused download. `?model=`/ `?provider=` overrides skip the prompt.
 
 ### Export format
 

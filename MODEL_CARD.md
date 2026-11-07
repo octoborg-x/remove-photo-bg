@@ -21,18 +21,21 @@ Current record for the models served by this project. See also
   - Fixed input: 512×512
 - **Type**: third-party ONNX export (fp32) of the upstream checkpoint — **not**
   an upstream file.
-- **Shipped variants**: the three artifacts below are the fp32 export above with
+- **Shipped artifact**: the file below is the fp32 export above with
   **weight-only quantised storage materialised back to fp32 compute**, so the
   runtime kernels, the input/output contract, and the model behaviour are
-  unchanged; only the on-disk size differs. They are served from the
+  unchanged; only the on-disk size differs. It is served from the
   `Octoborg/remove-photo-bg` Hugging Face Space and pinned by SHA-256 in
   `public/models-manifest.json`.
 
   | id (manifest) | size | method | role |
   |---|---|---|---|
-  | `model_512_int8_fp16` | 68,491,168 B (≈65 MB) | per-output-channel **int8** for the backbone (`m.bb.*`, `m.squeeze_module.*`) + **fp16** decoder, all cast back to fp32 | **default** |
-  | `model_512_int0_fp16` | 98,799,684 B (≈94 MB) | weight-only fp16 storage, fp32 compute (shipped earlier as `c5_best.onnx`) | optional |
-  | `model_512_int0_fp32` | 193,514,682 B (≈184 MB) | the fp32 teacher, no quantisation | reference |
+  | `model_512_int8_fp16` | 60,763,193 B (≈58 MB) | per-output-channel **int8** for the backbone (`m.bb.*`, `m.squeeze_module.*`) + **fp16** decoder, all cast back to fp32; PyTorch debug metadata and duplicate initializers stripped (lossless) | **the only model served** |
+
+  Earlier builds also offered `model_512_int0_fp16` and `model_512_int0_fp32`.
+  They are the same graph at higher weight-storage precision; because every
+  variant is materialised to fp32, the larger two produced no visible
+  difference, so they were dropped and the smallest is served alone.
 
   **Measured parity of the default vs the fp32 teacher** (browser, WASM,
   `glass-wine.jpg`): IoU@0.5 **0.998726**, **0** pixels crossing the 0.5
@@ -41,6 +44,12 @@ Current record for the models served by this project. See also
   boundary-dominated) — recorded honestly, not hidden. The output head
   (`expand_*`/`sub_*`/`index_*`) must stay fp16: quantising it flips >1000
   pixels, which is why "quantise everything" collapses.
+  **Wider-set caveat:** on the 62-image eval set the default averages IoU@0.5
+  0.981 vs the teacher and has one catastrophic failure (`clothing-04.jpg`,
+  IoU 0.0). The fp32 teacher is numerically knife-edge on that image — input
+  noise of σ=0.01 already collapses its mask to empty — so the int8 backbone
+  error tips it over. The fp16 variant stays safe (mean 0.99989, min 0.9977).
+  Full measurements in `OPTIMIZATION_REPORT.md`.
 - **Provenance verification performed** (against
   `ZhengPeng7/BiRefNet_lite` `model.safetensors`, 586 tensors):
   - All 379 backbone tensors that map by name are bit-identical (max abs
@@ -98,6 +107,5 @@ question about training data has been adjudicated. Date checked: 2026-10-24
   same-origin by the app's service worker; the WASM runtime ships same-origin
   from the app itself.
 - Re-downloadable and verifiable via `npm run fetch-models` (fails on SHA-256 mismatch).
-- Download sizes: **65 MB default** (`model_512_int8_fp16`), 94 MB
-  (`model_512_int0_fp16`), 184 MB (`model_512_int0_fp32`). The default is under
-  the Phase-1 100 MB download-size flag; the fp32 reference is over it.
+- Download size: **60.8 MB** (`model_512_int8_fp16`), under the Phase-1 100 MB
+  download-size flag.

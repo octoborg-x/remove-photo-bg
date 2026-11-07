@@ -1,9 +1,21 @@
 // Provider availability gate shared by the UI (main.ts) and used at runtime.
-// WebGPU is offered whenever the browser actually exposes it AND returns an
-// adapter from requestAdapter. There is no allowlist/gate list: the WASM
-// fallback at session-creation and run time is the safety mechanism, and it is
-// kept. An adapter that fails to build/run the session degrades to CPU with a
-// clear on-screen message rather than hanging.
+//
+// WebGPU is offered only when the browser exposes an adapter AND that adapter
+// is likely to be *faster and correct* for this model. An adapter that merely
+// exists is not enough: this repo measured a Qualcomm Adreno-6xx phone where
+// WebGPU was slower than CPU and mis-segmented the subject, and an Intel Gen-9
+// integrated GPU that stalls. A software ("fake GPU", e.g. llvmpipe/SwiftShader)
+// adapter is worse still. So the default is:
+//
+//   - no adapter                      -> CPU (WASM)
+//   - software / llvmpipe adapter     -> CPU (WASM)
+//   - known-bad or slow adapter       -> CPU (WASM)
+//   - adapter without shader-f16      -> CPU (WASM)  (model is fp16 internally)
+//   - too-small storage binding limit -> CPU (WASM)
+//   - otherwise (modern hardware GPU) -> GPU (WebGPU)
+//
+// A user (or a scripted `?provider=webgpu`) can still force GPU; the worker's
+// own WASM fallback stays the safety net when a session fails to build/run.
 
 interface GpuAdapterInfo {
   vendor?: string;
@@ -14,6 +26,9 @@ interface GpuAdapterInfo {
 
 interface GpuAdapter {
   info?: GpuAdapterInfo;
+  /** WebGPU feature names, e.g. 'shader-f16'. */
+  features?: Iterable<string>;
+  limits?: { maxStorageBufferBindingSize?: number };
 }
 
 interface NavigatorWithGpu extends Navigator {
@@ -24,9 +39,51 @@ export type WebGpuDetect =
   | { available: true; adapter?: string; reason: string }
   | { available: false; adapter?: undefined; reason: string };
 
+/** Minimum maxStorageBufferBindingSize (bytes) for the fp16 model's buffers. */
+const MIN_STORAGE_BUFFER_BINDING = 1024 * 1024 * 1024; // 1 GiB
+
+// Adapter substrings that must NOT default to GPU: software renderers report a
+// real-looking vendor string ("Google Inc." / "Mesa"), so the device/description
+// is the only reliable tell. Matching is case-insensitive.
+const SOFTWARE_ADAPTER_HINTS = ['llvmpipe', 'swiftshader', 'software', 'basic render', 'microsoft basic'];
+
+// Adapters measured (or widely reported) as slow/incorrect for this model. These
+// fall back to CPU by default; a user can still opt into GPU explicitly.
+const SLOW_ADAPTER_HINTS = ['adreno-6', 'adreno 6', 'intel gen-9', 'intel gen9', 'hd graphics 500', 'hd graphics 600'];
+
 /**
- * Detects WebGPU availability. Never throws: any failure to enumerate the
- * adapter means "not available", and the app falls back to CPU (WASM).
+ * Classifies a WebGPU adapter as usable for this model.
+ *
+ * Returns `{ usable: true }` for modern hardware GPUs and `{ usable: false,
+ * reason }` for software/known-slow adapters or one missing a required
+ * capability, so the caller can explain the choice in the log.
+ */
+export function classifyGpuAdapter(adapter: GpuAdapter | null): { usable: boolean; reason: string } {
+  if (!adapter) return { usable: false, reason: 'no adapter' };
+  const info = adapter.info ?? {};
+  const label = [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(' ') || 'unknown adapter';
+  const haystack = [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(' ').toLowerCase();
+
+  if (SOFTWARE_ADAPTER_HINTS.some((h) => haystack.includes(h))) {
+    return { usable: false, reason: `${label} is a software renderer (no real GPU acceleration)` };
+  }
+  if (SLOW_ADAPTER_HINTS.some((h) => haystack.includes(h))) {
+    return { usable: false, reason: `${label} is known to be slower or incorrect than the CPU path here` };
+  }
+  const features = adapter.features ? Array.from(adapter.features) : null;
+  if (features && !features.includes('shader-f16')) {
+    return { usable: false, reason: `${label} lacks shader-f16, which this fp16 model needs` };
+  }
+  const limit = adapter.limits?.maxStorageBufferBindingSize;
+  if (typeof limit === 'number' && limit > 0 && limit < MIN_STORAGE_BUFFER_BINDING) {
+    return { usable: false, reason: `${label} exposes only ${Math.round(limit / 1048576)} MB of storage buffers` };
+  }
+  return { usable: true, reason: `GPU ready (${label})` };
+}
+
+/**
+ * Detects whether WebGPU is available AND worth using. Never throws: any failure
+ * to enumerate the adapter means "not usable", and the app uses CPU (WASM).
  *
  * `reason` is a short phrase for the log/log-line, e.g. "WebGPU unavailable in
  * this browser" or "GPU ready (…)".
@@ -43,6 +100,10 @@ export async function detectWebGpu(): Promise<WebGpuDetect> {
     }
     const info = adapter.info ?? {};
     const label = [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(' ') || 'unknown adapter';
+    const verdict = classifyGpuAdapter(adapter);
+    if (!verdict.usable) {
+      return { available: false, reason: `WebGPU skipped — ${verdict.reason}` };
+    }
     return {
       available: true,
       adapter: label,

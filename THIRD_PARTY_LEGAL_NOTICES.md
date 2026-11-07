@@ -29,13 +29,13 @@ Each component remains subject to its own licence and notices.
 
   | id (manifest) | file | size (bytes) | SHA-256 | role |
   |---|---|---|---|---|
-  | `model_512_int8_fp16` | `models/model_512_int8_fp16.onnx` | 68,491,168 | `524bd904f68a48c3390bd27ab85d9e8107af0e1b8e79f20197ecdeaad8b17046` | **default**; weight-only int8 backbone (`m.bb.*`, `m.squeeze_module.*`) + fp16 decoder, materialised to fp32 |
-  | `model_512_int0_fp16` | `models/model_512_int0_fp16.onnx` | 98,799,684 | `099c89de1d9a3da27af3d5329460f543e5d9390fc45e7ba7d0e7360b378d5f97` | weight-only fp16 storage, fp32 compute (shipped earlier as `c5_best.onnx`) |
-  | `model_512_int0_fp32` | `models/model_512_int0_fp32.onnx` | 193,514,682 | `eaafaa10f19c63b77e2bae77bf4b2f59054c208ea08b8c6648f95ef36a3b6b87` | Phase-1 fp32 teacher (no quantisation) |
+  | `model_512_int8_fp16` | `models/model_512_int8_fp16.onnx` | 60,763,193 | `10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26` | the only model served; weight-only int8 backbone (`m.bb.*`, `m.squeeze_module.*`) + fp16 decoder, materialised to fp32, PyTorch debug metadata and duplicate initializers stripped (lossless) |
 
   The quantisation method and its measured parity (int8+fp16: IoU@0.5 ≥ 0.9987
-  vs the teacher, 0 pixels crossing the 0.5 threshold on the repo test images)
-  are recorded in `MODEL_CARD.md`.
+  vs the teacher, 0 pixels crossing the 0.5 threshold on the repo test images;
+  IoU@0.5 0.981 mean on the wider 62-image eval set with one empty-mask miss,
+  `clothing-04.jpg`) are recorded in `MODEL_CARD.md`. Two larger
+  weight-precision variants were served earlier and have since been withdrawn.
 - Fixed 512×512 input; output `[1,1,512,512]` probabilities (sigmoid baked in).
 - Upstream vs third-party: third-party ONNX export of the upstream checkpoint
 - Weights provenance: verified against `ZhengPeng7/BiRefNet_lite`

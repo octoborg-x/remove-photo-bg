@@ -6,36 +6,12 @@
       "file": "models/model_512_int8_fp16.onnx",
       "size": 60763193,
       "sha256": "10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26",
-      "label": "int8+fp16 (small, ~58 MB)",
-      "description": "Weight-only int8 backbone (m.bb.*, m.squeeze_module.*) + fp16 decoder, materialised to fp32, with PyTorch debug metadata and duplicate initializers stripped. 60.8 MB. The stored weights are unchanged from the 68.5 MB artifact, so its numerical behaviour is identical; the cleanup is lossless.",
+      "label": "BiRefNet_lite 512 (int8+fp16, ~58 MB)",
+      "description": "Weight-only int8 backbone (m.bb.*, m.squeeze_module.*) + fp16 decoder, materialised to fp32, with PyTorch debug metadata and duplicate initializers stripped (lossless, bit-identical outputs). On the repo test images it reproduces the fp32 teacher exactly; on the wider 62-image set it averages IoU@0.5 0.981 with one empty-mask miss.",
       "inputSize": 512,
       "outputIsProbability": true,
       "default": true,
       "url": "/models/model_512_int8_fp16.onnx"
-    },
-    {
-      "id": "model_512_int0_fp16",
-      "file": "models/model_512_int0_fp16.onnx",
-      "size": 92519896,
-      "sha256": "c77e5a8ca6866dc8ff536d9aafefb1591e94d906b7b68528f14cb0be070eeae5",
-      "label": "fp16 weights (~88 MB)",
-      "description": "Weight-only fp16 storage, fp32 compute, with PyTorch debug metadata stripped. 92.5 MB. Mean IoU 0.99989 vs the fp32 teacher over the 62-image eval set, minimum 0.9977 - the numerically safest compression.",
-      "inputSize": 512,
-      "outputIsProbability": true,
-      "default": false,
-      "url": "/models/model_512_int0_fp16.onnx"
-    },
-    {
-      "id": "model_512_int0_fp32",
-      "file": "models/model_512_int0_fp32.onnx",
-      "size": 184339317,
-      "sha256": "5f4a5e0f1f39a0aebb2a0087efa2a8553ea6c3012f8fea69dbaa58194fe83d96",
-      "label": "fp32 full (~176 MB)",
-      "description": "Phase-1 fp32 export of BiRefNet_lite at 512x512 (the teacher, no quantisation), with PyTorch debug metadata and duplicate initializers stripped. Bit-identical outputs to the 193.5 MB original. Largest download; reference quality.",
-      "inputSize": 512,
-      "outputIsProbability": true,
-      "default": false,
-      "url": "/models/model_512_int0_fp32.onnx"
     }
   ]
 }

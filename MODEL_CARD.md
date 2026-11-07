@@ -21,18 +21,21 @@ Current record for the models served by this project. See also
   - Fixed input: 512×512
 - **Type**: third-party ONNX export (fp32) of the upstream checkpoint — **not**
   an upstream file.
-- **Shipped variants**: the three artifacts below are the fp32 export above with
+- **Shipped artifact**: the file below is the fp32 export above with
   **weight-only quantised storage materialised back to fp32 compute**, so the
   runtime kernels, the input/output contract, and the model behaviour are
-  unchanged; only the on-disk size differs. They are served from the
+  unchanged; only the on-disk size differs. It is served from the
   `Octoborg/remove-photo-bg` Hugging Face Space and pinned by SHA-256 in
   `public/models-manifest.json`.
 
   | id (manifest) | size | method | role |
   |---|---|---|---|
-  | `model_512_int8_fp16` | 60,763,193 B (≈58 MB) | per-output-channel **int8** for the backbone (`m.bb.*`, `m.squeeze_module.*`) + **fp16** decoder, all cast back to fp32, debug metadata and duplicate initializers stripped | **default** |
-  | `model_512_int0_fp16` | 92,519,896 B (≈88 MB) | weight-only fp16 storage, fp32 compute, debug metadata stripped | optional |
-  | `model_512_int0_fp32` | 184,339,317 B (≈176 MB) | the fp32 teacher, no quantisation, debug metadata and duplicate initializers stripped (bit-identical outputs) | reference |
+  | `model_512_int8_fp16` | 60,763,193 B (≈58 MB) | per-output-channel **int8** for the backbone (`m.bb.*`, `m.squeeze_module.*`) + **fp16** decoder, all cast back to fp32; PyTorch debug metadata and duplicate initializers stripped (lossless) | **the only model served** |
+
+  Earlier builds also offered `model_512_int0_fp16` and `model_512_int0_fp32`.
+  They are the same graph at higher weight-storage precision; because every
+  variant is materialised to fp32, the larger two produced no visible
+  difference, so they were dropped and the smallest is served alone.
 
   **Measured parity of the default vs the fp32 teacher** (browser, WASM,
   `glass-wine.jpg`): IoU@0.5 **0.998726**, **0** pixels crossing the 0.5
@@ -104,6 +107,5 @@ question about training data has been adjudicated. Date checked: 2026-10-24
   same-origin by the app's service worker; the WASM runtime ships same-origin
   from the app itself.
 - Re-downloadable and verifiable via `npm run fetch-models` (fails on SHA-256 mismatch).
-- Download sizes: **60.8 MB default** (`model_512_int8_fp16`), 92.5 MB
-  (`model_512_int0_fp16`), 184.3 MB (`model_512_int0_fp32`). The default is under
-  the Phase-1 100 MB download-size flag; the fp32 reference is over it.
+- Download size: **60.8 MB** (`model_512_int8_fp16`), under the Phase-1 100 MB
+  download-size flag.

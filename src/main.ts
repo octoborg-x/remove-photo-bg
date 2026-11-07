@@ -52,6 +52,7 @@ import {
   defaultModelId,
   resolveModelParam,
 } from './features/background-removal/model-manifest';
+import { initCompareSliders } from './features/compare-slider';
 import type {
   LoadStage,
   ModelManifestEntry,
@@ -67,7 +68,8 @@ const inputBox = document.getElementById('inputBox')!;
 const outputBox = document.getElementById('outputBox')!;
 const outputSection = document.getElementById('outputSection')!;
 const runAllBtn = document.getElementById('runAll')! as HTMLButtonElement;
-const modelSelect = document.getElementById('modelSelect')! as HTMLSelectElement;
+const modelNameEl = document.getElementById('modelName')!;
+const modelSizeEl = document.getElementById('modelSize')!;
 const providerToggle = document.getElementById('providerToggle')! as HTMLSelectElement;
 const loadModelBtn = document.getElementById('loadModel')! as HTMLButtonElement;
 const downloadImageBtn = document.getElementById('downloadImage')! as HTMLAnchorElement;
@@ -99,9 +101,8 @@ const netWarnRemember = document.getElementById('netWarnRemember')! as HTMLInput
 limitBytesEl.textContent = `${Math.round(DEFAULT_UPLOAD_LIMITS.maxBytes / 1048576)} MB`;
 limitSideEl.textContent = String(DEFAULT_UPLOAD_LIMITS.maxLongestSide);
 
-// Persisted user preferences: model id, provider, and mask adjustments.
+// Persisted user preferences: provider and mask adjustments.
 // Scrubbed to safe values on read so stale/corrupt entries are ignored.
-const LS_MODEL = 'remove-bg:model';
 const LS_PROVIDER = 'remove-bg:provider';
 const LS_MASK_ADJUST = 'remove-bg:mask-adjust';
 const LS_EXPORT_FORMAT = 'remove-bg:export-format';
@@ -346,7 +347,7 @@ function showRecovery(kind: ErrorKind, message: string): void {
     case 'memory':
       text =
         'This device ran out of memory. Close other tabs or apps to free memory, then ' +
-        'try again. A smaller model in the Model list needs less memory.';
+        'try again. A smaller photo also needs less memory.';
       primaryLabel = 'Try again';
       primaryRun = () => {
         hideRecovery();
@@ -831,8 +832,9 @@ async function initWorker(): Promise<void> {
 }
 
 function setSelectorsDisabled(disabled: boolean): void {
-  modelSelect.disabled = disabled;
-  providerToggle.disabled = disabled;
+  // The runtime toggle is only ever usable when a modern GPU is present; keep it
+  // disabled otherwise so a locked/unlocked state never exposes a dead control.
+  providerToggle.disabled = disabled || (!webGpuUsable() && !forcedProvider);
 }
 
 // What to send as the worker's `forceProvider` for a UI-selected provider.
@@ -906,66 +908,29 @@ function loadSelectedModel(): void {
 }
 
 // ——— Model/provider selection UI ———
-// Pseudo-values in the model dropdown that select a runtime instead of a model.
-// The optgroup separates them from the actual model artifacts; picking one keeps
-// the current model and switches the provider (persisted). The separate
-// provider toggle stays in sync.
-const RUNTIME_OPT_PREFIX = 'runtime:';
-const RUNTIME_WASM = RUNTIME_OPT_PREFIX + 'wasm';
-const RUNTIME_GPU = RUNTIME_OPT_PREFIX + 'webgpu';
+// Only one model is served (the smallest; the larger variants were the same
+// graph with more weight precision and no visible difference), so the UI shows
+// its name rather than a dropdown. The runtime is chosen automatically and can
+// be overridden in Advanced options.
 
 // The browser can run WebGPU AND this host serves the WebGPU-capable ORT
 // bundle. Both gates matter: exposing an adapter means nothing if the worker
-// can't import a runtime that knows the webgpu backend.
+// can't import a runtime that knows the webgpu backend. `gpuState.available` is
+// already false for software/known-slow adapters (see provider-gate.ts), so a
+// "fake GPU" never reaches the WebGPU path by default.
 function webGpuUsable(): boolean {
   return gpuState?.available === true && runtimeHasWebGpuBundle;
 }
 
-function isRuntimeOptionAvailable(v: string): boolean {
-  return v === RUNTIME_WASM || (v === RUNTIME_GPU && webGpuUsable());
-}
-
-// After a one-shot runtime switch the dropdown returns to showing the current
-// model, so the value column always names an actual artifact (the provider has
-// its own control + hint).
-function snapModelSelectToModel(): void {
-  if (selectedModel) modelSelect.value = selectedModel.id;
-}
-
-function populateModelSelect(): void {
-  const previous = modelSelect.value;
-  modelSelect.innerHTML = '';
-  const modelGroup = document.createElement('optgroup');
-  modelGroup.label = 'Models';
-  for (const m of models) {
-    const opt = document.createElement('option');
-    opt.value = m.id;
-    opt.textContent = m.label;
-    if (m.description) opt.title = m.description;
-    modelGroup.appendChild(opt);
-  }
-  modelSelect.appendChild(modelGroup);
-  const runtimeGroup = document.createElement('optgroup');
-  runtimeGroup.label = 'Runtime (model stays the same)';
-  const wasm = document.createElement('option');
-  wasm.value = RUNTIME_WASM;
-  wasm.textContent = 'CPU (WASM)';
-  runtimeGroup.appendChild(wasm);
-  if (webGpuUsable()) {
-    const gpu = document.createElement('option');
-    gpu.value = RUNTIME_GPU;
-    gpu.textContent = 'GPU (WebGPU)';
-    runtimeGroup.appendChild(gpu);
-  }
-  modelSelect.appendChild(runtimeGroup);
-  modelSelect.value = previous && (resolveModelParam(models, previous) || previous === RUNTIME_WASM || previous === RUNTIME_GPU)
-    ? previous
-    : selectedModel ? selectedModel.id : '';
+function renderModelName(): void {
+  if (!selectedModel) return;
+  modelNameEl.textContent = selectedModel.label;
+  modelSizeEl.textContent = `${(selectedModel.size / 1048576).toFixed(0)} MB download, cached after the first visit`;
 }
 
 function applyProviderUi(): void {
-  // WebGPU is offered whenever the browser exposes an adapter AND this host
-  // serves the WebGPU-capable bundle (no allowlist).
+  // WebGPU is offered only when the adapter is a modern hardware GPU AND this
+  // host serves the WebGPU-capable bundle.
   const offerWebGpu = webGpuUsable();
   providerToggle.innerHTML = '';
   if (offerWebGpu) providerToggle.append(new Option('GPU (WebGPU)', 'webgpu'));
@@ -991,7 +956,8 @@ function resolveProvider(): 'webgpu' | 'wasm' {
   const pref = loadPref<unknown>(LS_PROVIDER, isProviderChoice);
   if (pref === 'wasm') return 'wasm';
   if (pref === 'webgpu' && webGpuUsable()) return 'webgpu';
-  // Default: prefer the GPU when it is usable, else CPU.
+  // Default: GPU only when the adapter is a modern hardware GPU (webGpuUsable),
+  // else CPU. A "fake"/software or known-slow GPU lands on CPU here.
   return webGpuUsable() ? 'webgpu' : 'wasm';
 }
 
@@ -1001,41 +967,11 @@ function resolveModel(): ModelManifestEntry {
     log(`Model forced to: ${byParam.id} (from ?model=)`);
     return byParam;
   }
-  if (forcedModel) log(`Unknown model "${forcedModel}" from ?model=; using default.`);
-  const pref = loadPref<string>(LS_MODEL, (v): v is string => typeof v === 'string');
-  const fromPref = pref ? resolveModelParam(models, pref) : null;
-  if (fromPref) return fromPref;
-  const def = defaultModelId(models);
-  return resolveModelParam(models, def) ?? models[0];
+  if (forcedModel) log(`Unknown model "${forcedModel}" from ?model=; using the only served model.`);
+  // One model is served; ?model= still resolves for scripted runs, but there is
+  // no preference to honour beyond it.
+  return resolveModelParam(models, defaultModelId(models)) ?? models[0];
 }
-
-modelSelect.addEventListener('change', () => {
-  const value = modelSelect.value;
-  // A runtime pseudo-option: keep the model, switch the runtime.
-  if (value === RUNTIME_WASM || value === RUNTIME_GPU) {
-    const nextProvider: 'webgpu' | 'wasm' = value === RUNTIME_GPU ? 'webgpu' : 'wasm';
-    if (nextProvider === 'webgpu' && !isRuntimeOptionAvailable(value)) {
-      log('GPU (WebGPU) is not available on this device; keeping current provider.');
-      snapModelSelectToModel();
-      return;
-    }
-    if (nextProvider !== selectedProvider) {
-      selectedProvider = nextProvider;
-      savePref(LS_PROVIDER, selectedProvider);
-      log(`Runtime selected: ${PROVIDER_LABELS[selectedProvider]}`);
-      applyProviderUi();
-      loadSelectedModel();
-    }
-    snapModelSelectToModel();
-    return;
-  }
-  const next = resolveModelParam(models, value);
-  if (!next || next.id === selectedModel?.id) return;
-  selectedModel = next;
-  savePref(LS_MODEL, next.id);
-  log(`Model selected: ${next.id}`);
-  loadSelectedModel();
-});
 
 providerToggle.addEventListener('change', () => {
   if (!isProviderChoice(providerToggle.value) || providerToggle.value === selectedProvider) return;
@@ -1319,10 +1255,14 @@ setStage('Starting…');
 log(`Build ${__BUILD_ID__}`);
 log('Detecting GPU…');
 
+// The landing page's before/after comparisons are pure DOM and independent of
+// the model, so wire them immediately rather than waiting on boot().
+initCompareSliders();
+
 async function boot(): Promise<void> {
   // GPU gate first: it decides which provider is offered and the default.
   gpuState = await detectWebGpu();
-  log(gpuState.reason + (gpuState.adapter ? ` (${gpuState.adapter})` : ''));
+  log(gpuState.reason);
   if (gpuState.available) {
     // Only request the WebGPU-capable ORT bundle when this host can actually
     // serve it (see webGpuRuntimeHosted). Probed before the worker starts so a
@@ -1348,12 +1288,13 @@ async function boot(): Promise<void> {
   log(`Mask adjust: threshold ${maskAdjust.threshold || 'off'}, feather ${maskAdjust.feather || 'off'}`);
 
   // Resolve defaults: provider can come from ?provider=, then localStorage,
-  // then the GPU gate; model likewise from ?model=, then localStorage, then the
-  // manifest default (the smallest artifact, model_512_int8_fp16.onnx).
+  // then the GPU gate (GPU only for a modern hardware adapter, else CPU). The
+  // model is the single served artifact (model_512_int8_fp16.onnx), overridable
+  // with ?model= for scripted runs.
   selectedProvider = resolveProvider();
   selectedModel = resolveModel();
 
-  populateModelSelect();
+  renderModelName();
   applyProviderUi();
   log(`Provider default: ${selectedProvider}`);
   log(`Model default: ${selectedModel.id}`);

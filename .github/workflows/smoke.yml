@@ -72,18 +72,16 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      # Fetch the pinned models into public/ BEFORE build, so vite copies them
-      # into dist/ for preview to serve. The models are ~65 + ~94 + ~185 MB and
-      # gitignored, so every fresh checkout starts without them.
+      # Fetch the pinned model into public/ BEFORE build, so vite copies it
+      # into dist/ for preview to serve. The model is ~65 MB and gitignored, so
+      # every fresh checkout starts without it.
       - run: npm run fetch-models
       - run: npm run build
-      # Fail fast if any model did not survive the build; the preview can't
+      # Fail fast if the model did not survive the build; the preview can't
       # serve what isn't in dist/.
       - name: Verify model artifacts
         run: |
           test -s dist/models/model_512_int8_fp16.onnx
-          test -s dist/models/model_512_int0_fp16.onnx
-          test -s dist/models/model_512_int0_fp32.onnx
           test -s dist/models-manifest.json
       # puppeteer-core needs an executable at the harnesses' default CHROME_BIN.
       - run: |
@@ -106,10 +104,7 @@ jobs:
           done
           # All CI runs force ?provider=wasm to keep results deterministic
           # across software-rendered GitHub-hosted runners.
-          # Default (auto-loaded manifest default, model_512_int8_fp16).
+          # Default (auto-loaded single model, model_512_int8_fp16).
           node scripts/run-smoke.mjs "http://localhost:4173/?provider=wasm" --out smoke-results/ci-default
-          # Explicit other models; ?model= drives the app's own override.
-          node scripts/run-smoke.mjs "http://localhost:4173/?provider=wasm&model=model_512_int0_fp16" --out smoke-results/ci-fp16
-          node scripts/run-smoke.mjs "http://localhost:4173/?provider=wasm&model=model_512_int0_fp32" --out smoke-results/ci-fp32
           # Mask adjustments wired from the URL (exercises the load path).
           node scripts/run-smoke.mjs "http://localhost:4173/?provider=wasm&maskThreshold=30&maskFeather=4" --out smoke-results/ci-mask

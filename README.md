@@ -199,14 +199,15 @@ download time.
 Before the first large download the page reads the (Chromium-only) Network
 Information API. Wi-Fi, ethernet, and an unknown/desktop connection load
 straight away; a **cellular or data-saver** connection shows a confirmation
-stating the model size, and the download starts only after **Download**. The
-confirmation is skipped when the model is **already on the device** (a Cache API
-check, so there is nothing left to download) and offers a **Remember my choice**
-checkbox that, once ticked, lets later model downloads proceed over mobile data
-without asking again. Otherwise the answer is remembered for the session. The
-model size is stated next to the model name regardless of connection, and
-pressing **Remove background** also starts a paused download. `?model=`/
-`?provider=` overrides skip the prompt.
+stating the model size, and the download starts only after **Download**. A
+phone or tablet with no Wi-Fi signal is treated as metered even on a fast link,
+because Chrome on Android reports only `effectiveType: '4g'` for LTE and omits
+the `type` field. The confirmation is skipped when the model is **already on
+the device** (a Cache API check, so there is nothing left to download). Consent
+is not remembered: the prompt is a per-session decision, so a later visit over
+mobile data asks again. The model size is stated next to the model name
+regardless of connection, and pressing **Remove background** also starts a
+paused download. `?model=`/ `?provider=` overrides skip the prompt.
 
 ### Export format
 

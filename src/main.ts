@@ -94,7 +94,6 @@ const netWarnEl = document.getElementById('netWarn')!;
 const netWarnText = document.getElementById('netWarnText')!;
 const netWarnConfirm = document.getElementById('netWarnConfirm')! as HTMLButtonElement;
 const netWarnDismiss = document.getElementById('netWarnDismiss')! as HTMLButtonElement;
-const netWarnRemember = document.getElementById('netWarnRemember')! as HTMLInputElement;
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
 // markup, so a changed limit never leaves stale copy on the page.
@@ -106,9 +105,6 @@ limitSideEl.textContent = String(DEFAULT_UPLOAD_LIMITS.maxLongestSide);
 const LS_PROVIDER = 'remove-bg:provider';
 const LS_MASK_ADJUST = 'remove-bg:mask-adjust';
 const LS_EXPORT_FORMAT = 'remove-bg:export-format';
-// The user ticked "remember my choice" on the metered-download prompt. Persisted
-// (not per-session) so it applies to every later model download, as asked.
-const LS_ALLOW_METERED = 'remove-bg:allow-metered-download';
 
 function loadPref<T>(key: string, guard: (v: unknown) => v is T): T | null {
   try {
@@ -1326,14 +1322,9 @@ function autoLoadModel(): void {
   loadSelectedModel();
 }
 
-// Persisted "always allow over mobile data" choice (the prompt's checkbox).
-function meteredDownloadRemembered(): boolean {
-  return loadPref<boolean>(LS_ALLOW_METERED, (v): v is boolean => v === true) === true;
-}
-
 // The full gate: skip the prompt when consent is already given this session, the
-// user asked to be remembered, the model is already cached on this device, or the
-// connection does not look metered.
+// model is already cached on this device, or the connection does not look
+// metered. Consent is per-session; it is never remembered across visits.
 async function needsDownloadConfirmation(): Promise<boolean> {
   if (!selectedModel) return false;
   // An explicit ?model=/?provider= override is a deliberate, scripted choice,
@@ -1350,7 +1341,6 @@ async function needsDownloadConfirmation(): Promise<boolean> {
   return shouldConfirmDownload({
     sizeBytes: selectedModel.size,
     cached,
-    remembered: meteredDownloadRemembered(),
     confirmed,
   });
 }
@@ -1360,16 +1350,11 @@ function showNetWarn(): void {
   // The model labels already carry their size, so the confirmation states the
   // exact byte size without repeating the label.
   netWarnText.textContent = downloadConfirmationText(selectedModel.size);
-  netWarnRemember.checked = false;
   netWarnEl.hidden = false;
   netWarnConfirm.focus();
 }
 
 function confirmDownload(): void {
-  if (netWarnRemember.checked) {
-    savePref(LS_ALLOW_METERED, true);
-    log('Remembered: model downloads over mobile data will not ask again.');
-  }
   sessionStorage.setItem('remove-bg:download-confirmed', '1');
   netWarnEl.hidden = true;
   log('Download confirmed by the user; starting the model download.');

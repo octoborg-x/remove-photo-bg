@@ -397,27 +397,26 @@ try {
 
   // ——— Scenario 7: metered-connection preflight ———
   // The decision module is unit-tested; this proves the page actually gates the
-  // first download behind a confirmation with the model size, offers the
-  // "remember my choice" checkbox, and that confirming (with remember ticked)
-  // proceeds and persists the choice. The Network Information API is stubbed
-  // before scripts run (it is read-only in the browser), and the Cache API is
-  // cleared first so this is a genuine cold visit rather than a cache hit.
+  // first download behind a confirmation with the model size, and that
+  // confirming proceeds. The Network Information API is stubbed before scripts
+  // run (it is read-only in the browser) with the exact regression shape: a
+  // fast link reporting only `effectiveType: '4g'` and no `type`, on a mobile
+  // device, which must still warn. The Cache API is cleared first so this is a
+  // genuine cold visit rather than a cache hit.
   {
     const page = await browser.newPage();
     await page.evaluateOnNewDocument(() => {
       Object.defineProperty(navigator, 'connection', {
         configurable: true,
-        get: () => ({ type: 'cellular', effectiveType: '3g', saveData: false }),
+        get: () => ({ effectiveType: '4g', saveData: false }),
+      });
+      Object.defineProperty(navigator, 'userAgentData', {
+        configurable: true,
+        get: () => ({ mobile: true }),
       });
       // The app skips the prompt in automated sessions (CI's Chromium reports a
       // metered-looking connection). Opt this page out so the prompt path runs.
       Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
-      // Start from a clean remembered-choice state.
-      try {
-        localStorage.removeItem('remove-bg:allow-metered-download');
-      } catch {
-        /* storage unavailable */
-      }
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     // Make the visit cold: drop the model the earlier scenarios cached, before
@@ -447,12 +446,9 @@ try {
     const hasRemember = await page.evaluate(
       () => !!document.getElementById('netWarnRemember'),
     );
-    record('the download confirmation offers a "remember my choice" checkbox', hasRemember);
+    record('the download confirmation no longer offers a "remember" checkbox', !hasRemember);
 
-    // Tick remember, then confirm: the download starts and the choice persists.
-    await page.evaluate(() => {
-      document.getElementById('netWarnRemember').checked = true;
-    });
+    // Confirm: the download starts and the prompt goes away.
     await page.click('#netWarnConfirm');
     const startedAfterConfirm = await page
       .waitForFunction('window.smokeModelReady === true', { timeout: 600000 })
@@ -462,29 +458,23 @@ try {
       () => (document.getElementById('netWarn')?.hidden ?? true) === true,
     );
     record('confirming the download starts the model load', startedAfterConfirm && warnGone);
-    const remembered = await page.evaluate(() =>
-      localStorage.getItem('remove-bg:allow-metered-download'),
-    );
-    record('ticking remember persists the choice for future downloads', remembered === 'true');
     await page.close();
   }
 
   // ——— Scenario 8: a cached model skips the metered prompt ———
-  // The remembered choice from Scenario 7 is cleared before each navigation, so
-  // a missing prompt here can only be the on-device cache check, not the pref.
+  // A missing prompt here can only be the on-device cache check.
   {
     const page = await browser.newPage();
     await page.evaluateOnNewDocument(() => {
       Object.defineProperty(navigator, 'connection', {
         configurable: true,
-        get: () => ({ type: 'cellular', effectiveType: '3g', saveData: false }),
+        get: () => ({ effectiveType: '4g', saveData: false }),
+      });
+      Object.defineProperty(navigator, 'userAgentData', {
+        configurable: true,
+        get: () => ({ mobile: true }),
       });
       Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
-      try {
-        localStorage.removeItem('remove-bg:allow-metered-download');
-      } catch {
-        /* storage unavailable */
-      }
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     const promptShown = await page

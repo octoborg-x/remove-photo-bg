@@ -1,6 +1,6 @@
 // Decides whether to warn before the first model download.
 //
-// The model is tens of megabytes (68.5 MB for the default), which is real money
+// The model is tens of megabytes (~58 MB for the single shipped artifact), which is real money
 // on a metered cellular link and instant on Wi-Fi. This module is the pure
 // decision layer: it reads the (non-standard) Network Information API, decides
 // whether the connection looks metered, and produces the exact confirmation copy

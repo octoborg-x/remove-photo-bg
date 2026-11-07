@@ -29,15 +29,13 @@ Each component remains subject to its own licence and notices.
 
   | id (manifest) | file | size (bytes) | SHA-256 | role |
   |---|---|---|---|---|
-  | `model_512_int8_fp16` | `models/model_512_int8_fp16.onnx` | 60,763,193 | `10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26` | **default**; weight-only int8 backbone (`m.bb.*`, `m.squeeze_module.*`) + fp16 decoder, materialised to fp32, debug metadata and duplicate initializers stripped |
-  | `model_512_int0_fp16` | `models/model_512_int0_fp16.onnx` | 92,519,896 | `c77e5a8ca6866dc8ff536d9aafefb1591e94d906b7b68528f14cb0be070eeae5` | weight-only fp16 storage, fp32 compute, debug metadata stripped |
-  | `model_512_int0_fp32` | `models/model_512_int0_fp32.onnx` | 184,339,317 | `5f4a5e0f1f39a0aebb2a0087efa2a8553ea6c3012f8fea69dbaa58194fe83d96` | Phase-1 fp32 teacher (no quantisation), debug metadata and duplicate initializers stripped (bit-identical outputs) |
+  | `model_512_int8_fp16` | `models/model_512_int8_fp16.onnx` | 60,763,193 | `10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26` | the only model served; weight-only int8 backbone (`m.bb.*`, `m.squeeze_module.*`) + fp16 decoder, materialised to fp32, PyTorch debug metadata and duplicate initializers stripped (lossless) |
 
   The quantisation method and its measured parity (int8+fp16: IoU@0.5 ≥ 0.9987
-  vs the teacher, 0 pixels crossing the 0.5 threshold on the repo test images)
-  are recorded in `MODEL_CARD.md`. On the wider 62-image eval set the same
-  artifact averages IoU@0.5 0.981 with a minimum of 0.0 (`clothing-04.jpg`,
-  where the fp32 model is numerically knife-edge); see `OPTIMIZATION_REPORT.md`.
+  vs the teacher, 0 pixels crossing the 0.5 threshold on the repo test images;
+  IoU@0.5 0.981 mean on the wider 62-image eval set with one empty-mask miss,
+  `clothing-04.jpg`) are recorded in `MODEL_CARD.md`. Two larger
+  weight-precision variants were served earlier and have since been withdrawn.
 - Fixed 512×512 input; output `[1,1,512,512]` probabilities (sigmoid baked in).
 - Upstream vs third-party: third-party ONNX export of the upstream checkpoint
 - Weights provenance: verified against `ZhengPeng7/BiRefNet_lite`

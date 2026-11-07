@@ -7,7 +7,7 @@ figure on the page changes.
 
 | Page claim | Value | Source |
 |---|---|---|
-| Model download size | ~65 MB (68,491,168 B) | `public/models-manifest.json`, `MODEL_CARD.md` |
+| Model download size | ~58 MB (60,763,193 B) | `public/models-manifest.json`, `MODEL_CARD.md` |
 | One model served, quality equal to the larger variants | int8+fp16 vs fp32 teacher: IoU@0.5 0.9987, 0 pixels crossing the 0.5 threshold | `MODEL_CARD.md` ("Measured parity…") |
 | Inference ~4 s per image (CPU/WASM) | 3.6–4.0 s warm on a desktop CPU; ~6.9 s on a phone | `PHASE2_REPORT.md`, `README.md`, `HARDWARE_TESTING.md` §4 |
 | Works without a GPU; older/software GPUs skipped | `classifyGpuAdapter()` denies software renderers and known-slow GPUs; verified in-browser | `src/features/background-removal/provider-gate.ts`, this change |
@@ -28,9 +28,15 @@ mock-ups:
 
 ## Model provenance note
 
-`npm run fetch-models` pins `model_512_int8_fp16.onnx` by SHA-256. The file the
-Hugging Face Space currently serves hashes differently from the pinned value, so
-`fetch-models` fails closed on a fresh download. This must be reconciled (either
-re-pin the manifest to the served artifact after re-verifying its parity, or
-re-upload the pinned artifact) before a fresh CI checkout can build. The local
-verification used the currently served file.
+`npm run fetch-models` pins `model_512_int8_fp16.onnx` at **60,763,193 B /
+`10f1cf12…12bc26`**, which is exactly the file the `Octoborg/remove-photo-bg`
+Hugging Face Space serves — verified by a full download (SHA-256 match). This
+pin is the value introduced by **PR #67** ("Shrink shipped ONNX artifacts
+losslessly and re-pin them"), which is still **open/unmerged** at the time of
+writing. The earlier mismatch was simply that `main` still carried the
+pre-#67 pin (`524bd904…b17046`, 68,491,168 B) while the Space already served the
+smaller artifact. `main` needs PR #67 merged (or an equivalent pin commit) to
+carry the same hash; this branch does.
+
+PR #67 also carries `OPTIMIZATION_REPORT.md` and the `scripts/distill/*` parity
+tooling that the caveat below refers to; merge it to keep the docs' links live.

@@ -73,7 +73,7 @@ jobs:
           cache: npm
       - run: npm ci
       # Fetch the pinned model into public/ BEFORE build, so vite copies it
-      # into dist/ for preview to serve. The model is ~65 MB and gitignored, so
+      # into dist/ for preview to serve. The model is ~58 MB and gitignored, so
       # every fresh checkout starts without it.
       - run: npm run fetch-models
       - run: npm run build

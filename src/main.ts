@@ -4,7 +4,7 @@
 //   provider buckets/persistence)
 // - sends images to the worker for inference
 // - composites the mask and renders/downloads a transparent PNG (and JPG)
-// - reports timings and the execution provider
+import './style.css';
 import { imageDataToTensor, MODEL_SIZE } from './features/background-removal/image-preprocess';
 import {
   probabilityToMask,
@@ -1062,6 +1062,33 @@ function bindMaskControl(input: HTMLInputElement, valueEl: Element, kind: 'thres
 
 bindMaskControl(maskThresholdInput, maskThresholdValue, 'threshold');
 bindMaskControl(maskFeatherInput, maskFeatherValue, 'feather');
+
+// Compact advanced options popover menu toggled via gear on top-left of image
+const settingsGearBtn = document.getElementById('settingsGearBtn');
+const advancedMenu = document.getElementById('advancedMenu');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+
+if (settingsGearBtn && advancedMenu) {
+  settingsGearBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isHidden = advancedMenu.hasAttribute('hidden');
+    if (isHidden) {
+      advancedMenu.removeAttribute('hidden');
+    } else {
+      advancedMenu.setAttribute('hidden', '');
+    }
+  });
+
+  closeSettingsBtn?.addEventListener('click', () => {
+    advancedMenu.setAttribute('hidden', '');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!advancedMenu.hasAttribute('hidden') && !advancedMenu.contains(e.target as Node) && e.target !== settingsGearBtn) {
+      advancedMenu.setAttribute('hidden', '');
+    }
+  });
+}
 
 type PendingRun = { resolve: (ms: number) => void; reject: (err: Error) => void };
 const pendingRuns = new Map<number, PendingRun>();

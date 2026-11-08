@@ -54,16 +54,15 @@ export function contentSecurityPolicy(assetBase) {
     // Inline styles are set on elements by main.ts (e.g. hiding the download
     // link) and in index.html; no inline scripts are used, so script-src stays
     // otherwise strict.
-    "style-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' blob: data:",
     `connect-src ${connect}`,
     // onnxruntime-web spawns pthread workers and a blob: worker from the origin.
     "worker-src 'self' blob:",
-    "font-src 'self'",
+    "font-src 'self' https://fonts.gstatic.com data:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
     "manifest-src 'self'",
   ].join('; ');
 }

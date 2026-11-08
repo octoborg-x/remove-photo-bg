@@ -35,9 +35,11 @@ importScripts(RUNTIME === 'webgpu' ? '/wasm/ort.all.min.js' : '/wasm/ort.wasm.mi
 // worker), so `ort` is available directly. Do NOT redeclare it.
 
 ort.env.wasm.wasmPaths = '/wasm/';
-// Use all available cores for the threaded WASM build.
-if (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) {
+// Use all available cores for the threaded WASM build when SharedArrayBuffer is available.
+if (typeof SharedArrayBuffer !== 'undefined' && typeof navigator !== 'undefined' && navigator.hardwareConcurrency) {
   ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency);
+} else {
+  ort.env.wasm.numThreads = 1;
 }
 // On battery-saver laptops the default adapter is often the integrated GPU, which
 // cannot fit this model's 411 MB intermediate tensors. Ask for the discrete GPU.

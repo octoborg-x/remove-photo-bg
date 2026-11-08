@@ -52,6 +52,7 @@ import {
   defaultModelId,
   resolveModelParam,
 } from './features/background-removal/model-manifest';
+import { initCompareSliders } from './features/compare-slider';
 import type {
   LoadStage,
   ModelManifestEntry,
@@ -64,12 +65,13 @@ declare const __BUILD_ID__: string;
 const stageEl = document.getElementById('stage')!;
 const logEl = document.getElementById('log')! as HTMLPreElement;
 const inputBox = document.getElementById('inputBox')!;
+const procSurface = document.getElementById('procSurface')!;
+const procShimmer = document.getElementById('procShimmer')!;
 const outputBox = document.getElementById('outputBox')!;
 const outputSection = document.getElementById('outputSection')!;
-const runAllBtn = document.getElementById('runAll')! as HTMLButtonElement;
-const modelSelect = document.getElementById('modelSelect')! as HTMLSelectElement;
+const modelNameEl = document.getElementById('modelName')!;
+const modelSizeEl = document.getElementById('modelSize')!;
 const providerToggle = document.getElementById('providerToggle')! as HTMLSelectElement;
-const loadModelBtn = document.getElementById('loadModel')! as HTMLButtonElement;
 const downloadImageBtn = document.getElementById('downloadImage')! as HTMLAnchorElement;
 const formatOptionsEl = document.getElementById('formatOptions')!;
 const providerHint = document.getElementById('providerHint')!;
@@ -82,32 +84,68 @@ const limitBytesEl = document.getElementById('limitBytes')!;
 const limitSideEl = document.getElementById('limitSide')!;
 const modelProgressEl = document.getElementById('modelProgress')!;
 const modelProgressValue = modelProgressEl.querySelector('.ringValue') as SVGCircleElement;
-const processingEl = document.getElementById('processing')!;
-const processingToggle = document.getElementById('processingToggle')! as HTMLButtonElement;
 const processingLabel = document.getElementById('processingLabel')!;
-const processingBody = document.getElementById('processingBody')!;
 const stepListEl = document.getElementById('stepList')!;
 const recoveryEl = document.getElementById('recovery')!;
 const netWarnEl = document.getElementById('netWarn')!;
 const netWarnText = document.getElementById('netWarnText')!;
 const netWarnConfirm = document.getElementById('netWarnConfirm')! as HTMLButtonElement;
 const netWarnDismiss = document.getElementById('netWarnDismiss')! as HTMLButtonElement;
-const netWarnRemember = document.getElementById('netWarnRemember')! as HTMLInputElement;
+const toastHost = document.getElementById('toastHost')!;
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
 // markup, so a changed limit never leaves stale copy on the page.
 limitBytesEl.textContent = `${Math.round(DEFAULT_UPLOAD_LIMITS.maxBytes / 1048576)} MB`;
 limitSideEl.textContent = String(DEFAULT_UPLOAD_LIMITS.maxLongestSide);
 
-// Persisted user preferences: model id, provider, and mask adjustments.
+// ——— Floating notifications ———
+// Top-left, fixed, stacked vertically. Each dismisses itself after 10 s and has a
+// close button; several at once stack downward in the order they arrived.
+type ToastKind = 'info' | 'warn' | 'error';
+const TOAST_DEFAULT_MS = 10000;
+
+function showToast(
+  message: string,
+  opts: { kind?: ToastKind; title?: string; durationMs?: number } = {},
+): void {
+  const kind = opts.kind ?? 'info';
+  const toast = document.createElement('div');
+  toast.className = kind === 'info' ? 'toast' : `toast ${kind}`;
+  toast.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+
+  const body = document.createElement('div');
+  body.className = 'toastBody';
+  if (opts.title) {
+    const title = document.createElement('strong');
+    title.className = 'toastTitle';
+    title.textContent = opts.title;
+    body.appendChild(title);
+  }
+  body.appendChild(document.createTextNode(message));
+
+  const close = document.createElement('button');
+  close.className = 'toastClose';
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Dismiss notification');
+  close.textContent = '×';
+
+  const remove = (): void => {
+    clearTimeout(timer);
+    toast.remove();
+  };
+  close.addEventListener('click', remove);
+
+  toast.appendChild(body);
+  toast.appendChild(close);
+  toastHost.appendChild(toast);
+  const timer = setTimeout(remove, opts.durationMs ?? TOAST_DEFAULT_MS);
+}
+
+// Persisted user preferences: provider and mask adjustments.
 // Scrubbed to safe values on read so stale/corrupt entries are ignored.
-const LS_MODEL = 'remove-bg:model';
 const LS_PROVIDER = 'remove-bg:provider';
 const LS_MASK_ADJUST = 'remove-bg:mask-adjust';
 const LS_EXPORT_FORMAT = 'remove-bg:export-format';
-// The user ticked "remember my choice" on the metered-download prompt. Persisted
-// (not per-session) so it applies to every later model download, as asked.
-const LS_ALLOW_METERED = 'remove-bg:allow-metered-download';
 
 function loadPref<T>(key: string, guard: (v: unknown) => v is T): T | null {
   try {
@@ -346,7 +384,7 @@ function showRecovery(kind: ErrorKind, message: string): void {
     case 'memory':
       text =
         'This device ran out of memory. Close other tabs or apps to free memory, then ' +
-        'try again. A smaller model in the Model list needs less memory.';
+        'try again. A smaller photo also needs less memory.';
       primaryLabel = 'Try again';
       primaryRun = () => {
         hideRecovery();
@@ -427,10 +465,10 @@ function hideRing(): void {
 }
 
 // ——— Processing panel ———
-// One collapsed "Processing…" word (with an animated colour while work is in
-// progress). Expanding it lists the live steps — downloading, preparing, and
-// removing the background — plus the technical log, so the three phases are
-// distinguishable at a glance and no bottom-of-page text block is needed.
+// The "Technical details" summary is the live status label for the current
+// process. Expanding it lists the steps in the order they ran — downloading,
+// preparing, removing the background, creating the image — plus the model
+// identity and the raw log, so the phases are distinguishable at a glance.
 type StepId = 'download' | 'prepare' | 'inference' | 'export';
 type StepState = 'todo' | 'active' | 'done';
 interface Step {
@@ -440,7 +478,6 @@ interface Step {
   detail: string;
 }
 let steps: Step[] = [];
-let processingVisible = false;
 
 function stepLabel(id: StepId): string {
   switch (id) {
@@ -499,24 +536,17 @@ function resetSteps(): void {
   renderSteps();
 }
 
-function showProcessing(label: string, working: boolean): void {
-  if (!processingVisible) {
-    processingEl.hidden = false;
-    processingVisible = true;
-  }
-  setProcessingLabel(label, working);
-}
-
+// Sets the live status label on the technical-details summary. The summary is
+// always visible, so there is nothing to show/hide.
 function setProcessingLabel(label: string, working: boolean): void {
   processingLabel.textContent = label;
   processingLabel.classList.toggle('working', working);
 }
 
-processingToggle.addEventListener('click', () => {
-  const expanded = processingToggle.getAttribute('aria-expanded') === 'true';
-  processingToggle.setAttribute('aria-expanded', String(!expanded));
-  processingBody.hidden = expanded;
-});
+// The shimmer overlay marks "the model is working on this image".
+function setShimmer(on: boolean): void {
+  procShimmer.hidden = !on;
+}
 
 const OOM_PATTERN = /bad_alloc|out of memory|outofmemory|allocation failed|allocation error/i;
 const DOWNLOAD_PATTERN =
@@ -562,6 +592,7 @@ function showInputImage(img: HTMLImageElement): void {
   // Append the already-decoded element itself. Cloning it would create a new
   // element that has to re-fetch the (possibly revoked) blob: URL and renders broken.
   inputBox.appendChild(img);
+  procSurface.hidden = false;
 }
 
 async function loadImageFromFile(file: File): Promise<void> {
@@ -602,7 +633,6 @@ async function loadImageFromFile(file: File): Promise<void> {
   if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
   currentObjectUrl = url;
   showInputImage(img);
-  updateRunButton();
   // A new photo invalidates the previous result and any error panel, but must
   // not wipe the step list while the model is still loading: keep the download
   // step active so the panel keeps showing the load in progress.
@@ -615,9 +645,11 @@ async function loadImageFromFile(file: File): Promise<void> {
   }
   // Clear any previous error text so a successful load after a rejected one does
   // not leave a stale error on the stage line.
-  setStage(modelReady ? 'Photo ready — tap “Remove background”' : 'Photo ready — waiting for the model…');
+  setStage(modelReady ? 'Removing the background…' : 'Photo ready — waiting for the model…');
   // Do not log the filename (MVP §8: no filenames, EXIF, or raw user input).
   log(`Loaded image: ${canvas.width}x${canvas.height}`);
+  // Choosing the photo is the action: start removing the background right away.
+  autoStartIfReady();
 }
 
 async function loadImageFromUrl(url: string): Promise<void> {
@@ -636,7 +668,6 @@ async function loadImageFromUrl(url: string): Promise<void> {
   currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   currentImage = img;
   showInputImage(img);
-  updateRunButton();
   log(`Loaded image from URL: ${url} (${canvas.width}x${canvas.height})`);
 }
 
@@ -660,12 +691,12 @@ function settleModel(error: string | null): void {
   }
 }
 
-// The run button is the page's primary action. It is enabled as soon as a photo
-// is chosen — not only once the model is ready — so pressing it while the model
-// is still downloading (or after a paused preflight) starts the run and waits.
-// A fatal model error keeps it disabled; the recovery panel offers the retry.
-function updateRunButton(): void {
-  runAllBtn.disabled = !currentImage || modelError !== null;
+// The primary action is the upload itself: choosing a photo starts the run
+// automatically, so there is no second button to press. A fatal model error is
+// the one case where a photo must not silently start a run — the recovery panel
+// offers the retry.
+function autoStartIfReady(): void {
+  if (currentImage && modelError === null) void runSmoke();
 }
 
 async function initWorker(): Promise<void> {
@@ -687,11 +718,14 @@ async function initWorker(): Promise<void> {
 
   // Classic worker (plain JS in /public) so onnxruntime-web's wasm loaders are
   // fetched as static files instead of being transformed by Vite. The runtime
-  // bundle is chosen here: a usable GPU adapter means the WebGPU-capable ORT
-  // bundle (a ~26.5 MiB jsep wasm that hosts with a per-file cap cannot serve);
-  // the worker degrades a webgpu request to WASM with a clear message when that
-  // bundle is absent.
-  const runtimeQuery = webGpuUsable() ? '?runtime=webgpu' : '';
+  // bundle is chosen here: any selectable GPU adapter means the WebGPU-capable
+  // ORT bundle (a ~26.5 MiB jsep wasm that hosts with a per-file cap cannot
+  // serve). `ort.all.min.js` only fetches that jsep wasm when a webgpu session is
+  // actually created, so the larger bundle costs nothing while the CPU runs; the
+  // worker degrades a webgpu request to WASM with a clear message when the bundle
+  // is absent. webGpuSelectable (not webGpuUsable) is used because the user can
+  // switch to the GPU after boot, so the worker must already carry the backend.
+  const runtimeQuery = webGpuSelectable() ? '?runtime=webgpu' : '';
   worker = new Worker('/inference-worker.js' + runtimeQuery, { type: 'classic' });
   // Without these a worker that fails to start (404 on the script, a failed
   // importScripts of the ORT runtime) posts nothing at all and the page waits on
@@ -725,14 +759,10 @@ async function initWorker(): Promise<void> {
       setStep('prepare', 'done', `running on ${msg.provider}`);
       hideRing();
       hideRecovery();
-      if (processingVisible) {
-        setProcessingLabel(
-          currentImageData ? 'Ready — tap “Remove background”' : 'Model ready — choose a photo',
-          false,
-        );
-      }
-      updateRunButton();
-      loadModelBtn.disabled = false;
+      setProcessingLabel(
+        currentImageData ? 'Removing the background…' : 'Model ready — choose a photo',
+        false,
+      );
       setSelectorsDisabled(false);
       settleModel(null);
     } else if (msg.kind === 'adapter-warning') {
@@ -804,6 +834,7 @@ async function initWorker(): Promise<void> {
 
       setStep('export', 'done');
       setProcessingLabel('Done — your image is ready', false);
+      setShimmer(false);
       setStage('Done — download your image below.');
 
       log(`Rendered cut-out (${width}x${height}) as ${exportFormatInfo(exportFormat).label}, ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
@@ -815,24 +846,24 @@ async function initWorker(): Promise<void> {
       // caller reports them once. Anything else is surfaced here.
       if (msg.runId !== undefined) failPendingRuns(new Error(msg.message));
       else error(msg.message, msg.fatal ? classifyError(msg.message) : 'generic');
+      setShimmer(false);
       if (msg.fatal) {
         settleModel(msg.message);
-        updateRunButton();
-        loadModelBtn.disabled = false;
         setSelectorsDisabled(false);
         hideRing();
-      } else {
-        // A run-level failure (e.g. an allocation error) does not kill the
-        // session; the worker retries on CPU, so keep the app usable.
-        updateRunButton();
       }
+      // A run-level failure (e.g. an allocation error) does not kill the
+      // session; the worker retries on CPU, so the app stays usable.
     }
   };
 }
 
 function setSelectorsDisabled(disabled: boolean): void {
-  modelSelect.disabled = disabled;
-  providerToggle.disabled = disabled;
+  // The runtime toggle is usable whenever the GPU path is reachable (an adapter
+  // exists AND this host serves the WebGPU bundle), even if the CPU is the better
+  // default; the user may still choose the GPU. It stays disabled when no GPU
+  // path exists at all, so a locked/unlocked state never exposes a dead control.
+  providerToggle.disabled = disabled || (!webGpuSelectable() && !forcedProvider);
 }
 
 // What to send as the worker's `forceProvider` for a UI-selected provider.
@@ -866,7 +897,7 @@ function loadSelectedModel(): void {
   hideRecovery();
   resetSteps();
   setStep('download', 'active');
-  showProcessing(`Downloading ${selectedModel.label}…`, true);
+  setProcessingLabel(`Downloading ${selectedModel.label}…`, true);
   showRing(null);
   setStage(`Loading model ${selectedModel.id}…`);
   log(`Loading model: ${selectedModel.id} (${selectedModel.url})`);
@@ -874,7 +905,6 @@ function loadSelectedModel(): void {
   if (forcedProvider) log(`Provider forced to: ${forcedProvider} (from ?provider=)`);
   else if (force === 'wasm') log('Provider: CPU (WASM)');
   setSelectorsDisabled(true);
-  loadModelBtn.disabled = true;
   worker.postMessage({
     kind: 'set-model',
     modelUrl: selectedModel.url,
@@ -897,7 +927,6 @@ function loadSelectedModel(): void {
     hideRing();
     setProcessingLabel('Could not start', false);
     setSelectorsDisabled(false);
-    loadModelBtn.disabled = false;
     showRecovery(
       'worker',
       'The background-removal engine did not respond. Reload the page, then try again.',
@@ -906,81 +935,75 @@ function loadSelectedModel(): void {
 }
 
 // ——— Model/provider selection UI ———
-// Pseudo-values in the model dropdown that select a runtime instead of a model.
-// The optgroup separates them from the actual model artifacts; picking one keeps
-// the current model and switches the provider (persisted). The separate
-// provider toggle stays in sync.
-const RUNTIME_OPT_PREFIX = 'runtime:';
-const RUNTIME_WASM = RUNTIME_OPT_PREFIX + 'wasm';
-const RUNTIME_GPU = RUNTIME_OPT_PREFIX + 'webgpu';
+// Only one model is served (the smallest; the larger variants were the same
+// graph with more weight precision and no visible difference), so the UI shows
+// its name rather than a dropdown. The runtime is chosen automatically and can
+// be overridden in Advanced options.
 
-// The browser can run WebGPU AND this host serves the WebGPU-capable ORT
-// bundle. Both gates matter: exposing an adapter means nothing if the worker
-// can't import a runtime that knows the webgpu backend.
+// Whether the GPU path is the *default*. Both gates matter: exposing an adapter
+// means nothing if the worker can't import a runtime that knows the webgpu
+// backend, and `gpuState.available` is already false for software/known-slow
+// adapters (see provider-gate.ts), so a "fake GPU" never becomes the default.
 function webGpuUsable(): boolean {
   return gpuState?.available === true && runtimeHasWebGpuBundle;
 }
 
-function isRuntimeOptionAvailable(v: string): boolean {
-  return v === RUNTIME_WASM || (v === RUNTIME_GPU && webGpuUsable());
+// Whether the GPU can be *chosen at all*: an adapter exists and this host serves
+// the WebGPU-capable bundle. A software/known-slow adapter is still selectable —
+// the user is warned of the trade-off (see warnOnGpuChoice) instead of being
+// blocked.
+function webGpuSelectable(): boolean {
+  return gpuState?.adapterPresent === true && runtimeHasWebGpuBundle;
 }
 
-// After a one-shot runtime switch the dropdown returns to showing the current
-// model, so the value column always names an actual artifact (the provider has
-// its own control + hint).
-function snapModelSelectToModel(): void {
-  if (selectedModel) modelSelect.value = selectedModel.id;
-}
-
-function populateModelSelect(): void {
-  const previous = modelSelect.value;
-  modelSelect.innerHTML = '';
-  const modelGroup = document.createElement('optgroup');
-  modelGroup.label = 'Models';
-  for (const m of models) {
-    const opt = document.createElement('option');
-    opt.value = m.id;
-    opt.textContent = m.label;
-    if (m.description) opt.title = m.description;
-    modelGroup.appendChild(opt);
-  }
-  modelSelect.appendChild(modelGroup);
-  const runtimeGroup = document.createElement('optgroup');
-  runtimeGroup.label = 'Runtime (model stays the same)';
-  const wasm = document.createElement('option');
-  wasm.value = RUNTIME_WASM;
-  wasm.textContent = 'CPU (WASM)';
-  runtimeGroup.appendChild(wasm);
-  if (webGpuUsable()) {
-    const gpu = document.createElement('option');
-    gpu.value = RUNTIME_GPU;
-    gpu.textContent = 'GPU (WebGPU)';
-    runtimeGroup.appendChild(gpu);
-  }
-  modelSelect.appendChild(runtimeGroup);
-  modelSelect.value = previous && (resolveModelParam(models, previous) || previous === RUNTIME_WASM || previous === RUNTIME_GPU)
-    ? previous
-    : selectedModel ? selectedModel.id : '';
+function renderModelName(): void {
+  if (!selectedModel) return;
+  modelNameEl.textContent = selectedModel.label;
+  modelSizeEl.textContent = `${(selectedModel.size / 1048576).toFixed(0)} MB download, cached after the first visit`;
 }
 
 function applyProviderUi(): void {
-  // WebGPU is offered whenever the browser exposes an adapter AND this host
-  // serves the WebGPU-capable bundle (no allowlist).
-  const offerWebGpu = webGpuUsable();
+  // WebGPU is offered whenever the GPU path is reachable (webGpuSelectable), not
+  // only when it is the better default. The CPU remains the default for an
+  // inadequate adapter, and choosing the GPU surfaces the reason as a toast.
+  const offerWebGpu = webGpuSelectable();
   providerToggle.innerHTML = '';
   if (offerWebGpu) providerToggle.append(new Option('GPU (WebGPU)', 'webgpu'));
   const wasm = new Option('CPU (WASM)', 'wasm');
   providerToggle.append(wasm);
   providerToggle.value = selectedProvider;
   providerToggle.disabled = !offerWebGpu && !forcedProvider;
-  providerHint.textContent = gpuState
-    ? gpuState.reason +
-      (gpuState.available && !runtimeHasWebGpuBundle
-        ? ' — host cannot serve the WebGPU runtime, using CPU.'
-        : selectedProvider === 'webgpu'
-          ? ' — GPU selected.'
-          : ' — CPU selected.')
-    : 'GPU status unknown — using CPU.';
+  // Keep this line a neutral status. The reason a GPU was not chosen by default
+  // (software renderer, known-slow adapter, missing capability) is shown as a
+  // popup when the user actually switches to the GPU (see warnOnGpuChoice), not
+  // as a permanent hint next to the control.
+  providerHint.textContent = !gpuState
+    ? 'GPU status unknown — using CPU.'
+    : !runtimeHasWebGpuBundle
+      ? 'This host cannot serve the WebGPU runtime — using CPU.'
+      : selectedProvider === 'webgpu'
+        ? gpuState.available
+          ? `GPU selected (${gpuState.adapter}).`
+          : 'GPU selected.'
+        : 'CPU selected.';
+}
+
+// Explains the CPU-is-better trade-off when the user deliberately picks the GPU
+// on an adapter the gate did not endorse (software renderer, known-slow, or one
+// missing a capability). Returns null when the choice is the endorsed default.
+function gpuChoiceWarning(): string | null {
+  if (!gpuState || gpuState.available) return null;
+  if (!gpuState.adapterPresent) return null;
+  return (
+    `${gpuState.reason.replace(/^WebGPU skipped — /, '')}. ` +
+    'The CPU path is usually faster and more accurate for this model here, but you ' +
+    'asked for the GPU, so it will be used.'
+  );
+}
+
+function warnOnGpuChoice(): void {
+  const warning = gpuChoiceWarning();
+  if (warning) showToast(warning, { kind: 'warn', title: 'Using GPU (WebGPU)' });
 }
 
 function resolveProvider(): 'webgpu' | 'wasm' {
@@ -990,8 +1013,9 @@ function resolveProvider(): 'webgpu' | 'wasm' {
   }
   const pref = loadPref<unknown>(LS_PROVIDER, isProviderChoice);
   if (pref === 'wasm') return 'wasm';
-  if (pref === 'webgpu' && webGpuUsable()) return 'webgpu';
-  // Default: prefer the GPU when it is usable, else CPU.
+  if (pref === 'webgpu' && webGpuSelectable()) return 'webgpu';
+  // Default: GPU only when the adapter is a modern hardware GPU (webGpuUsable),
+  // else CPU. A "fake"/software or known-slow GPU lands on CPU here.
   return webGpuUsable() ? 'webgpu' : 'wasm';
 }
 
@@ -1001,53 +1025,20 @@ function resolveModel(): ModelManifestEntry {
     log(`Model forced to: ${byParam.id} (from ?model=)`);
     return byParam;
   }
-  if (forcedModel) log(`Unknown model "${forcedModel}" from ?model=; using default.`);
-  const pref = loadPref<string>(LS_MODEL, (v): v is string => typeof v === 'string');
-  const fromPref = pref ? resolveModelParam(models, pref) : null;
-  if (fromPref) return fromPref;
-  const def = defaultModelId(models);
-  return resolveModelParam(models, def) ?? models[0];
+  if (forcedModel) log(`Unknown model "${forcedModel}" from ?model=; using the only served model.`);
+  // One model is served; ?model= still resolves for scripted runs, but there is
+  // no preference to honour beyond it.
+  return resolveModelParam(models, defaultModelId(models)) ?? models[0];
 }
-
-modelSelect.addEventListener('change', () => {
-  const value = modelSelect.value;
-  // A runtime pseudo-option: keep the model, switch the runtime.
-  if (value === RUNTIME_WASM || value === RUNTIME_GPU) {
-    const nextProvider: 'webgpu' | 'wasm' = value === RUNTIME_GPU ? 'webgpu' : 'wasm';
-    if (nextProvider === 'webgpu' && !isRuntimeOptionAvailable(value)) {
-      log('GPU (WebGPU) is not available on this device; keeping current provider.');
-      snapModelSelectToModel();
-      return;
-    }
-    if (nextProvider !== selectedProvider) {
-      selectedProvider = nextProvider;
-      savePref(LS_PROVIDER, selectedProvider);
-      log(`Runtime selected: ${PROVIDER_LABELS[selectedProvider]}`);
-      applyProviderUi();
-      loadSelectedModel();
-    }
-    snapModelSelectToModel();
-    return;
-  }
-  const next = resolveModelParam(models, value);
-  if (!next || next.id === selectedModel?.id) return;
-  selectedModel = next;
-  savePref(LS_MODEL, next.id);
-  log(`Model selected: ${next.id}`);
-  loadSelectedModel();
-});
 
 providerToggle.addEventListener('change', () => {
   if (!isProviderChoice(providerToggle.value) || providerToggle.value === selectedProvider) return;
   selectedProvider = providerToggle.value;
   savePref(LS_PROVIDER, selectedProvider);
   log(`Provider selected: ${PROVIDER_LABELS[selectedProvider]}`);
+  if (selectedProvider === 'webgpu') warnOnGpuChoice();
   applyProviderUi();
   loadSelectedModel();
-});
-
-loadModelBtn.addEventListener('click', () => {
-  if (selectedModel) loadSelectedModel();
 });
 
 // ——— Mask adjust controls ———
@@ -1113,9 +1104,6 @@ function finishedRun(): void {
   log(`Average: ${avg.toFixed(1)} ms`);
   log(`Provider: ${window.smokeProvider || '<reported above>'}`);
   log(`Model: ${model}`);
-  // A second run (the harness runs warm) already produced a result; make sure
-  // the button is re-enabled even when no result-ready message follows.
-  updateRunButton();
 }
 
 function chooseFile(): void {
@@ -1148,10 +1136,6 @@ dropZone.addEventListener('drop', async (e) => {
   dropZone.classList.remove('dragover');
   const f = e.dataTransfer?.files?.[0];
   if (f) await loadImageFromFile(f);
-});
-
-runAllBtn.addEventListener('click', () => {
-  runSmoke();
 });
 
 // === Programmatic API for automated/headless runs ===
@@ -1192,19 +1176,19 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
     return null;
   }
   // A model download that was paused at the metered-connection prompt resumes
-  // here: pressing Remove background is an explicit request to run.
+  // here: running is an explicit request to use the model.
   if (!modelReady && !modelError) {
     sessionStorage.setItem('remove-bg:download-confirmed', '1');
     netWarnEl.hidden = true;
     if (!modelLoadInFlight) loadSelectedModel();
   }
-  runAllBtn.disabled = true;
   hideRecovery();
   clearOutput();
-  showProcessing('Removing background…', true);
+  setShimmer(true);
   try {
     await waitForModel();
   } catch (e) {
+    setShimmer(false);
     error(e instanceof Error ? e.message : String(e), 'download');
     return null;
   }
@@ -1214,8 +1198,8 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
       await runOneInference();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
+      setShimmer(false);
       error(message, classifyError(message));
-      updateRunButton();
       return null;
     }
   }
@@ -1279,7 +1263,7 @@ function updateLoadProgress(msg: {
     showRing(msg.stage === 'cache-check' ? null : pct);
     setStep('download', 'active', msg.stage === 'downloading' ? `${pct}%` : '');
     if (msg.stage !== 'downloaded') {
-      showProcessing(`Downloading ${selectedModel?.label ?? 'model'} — ${pct}%`, true);
+      setProcessingLabel(`Downloading ${selectedModel?.label ?? 'model'} — ${pct}%`, true);
     }
   } else {
     // Everything else (runtime, session creation) is not a measurable
@@ -1287,7 +1271,7 @@ function updateLoadProgress(msg: {
     showRing(null);
     setStep('download', 'done');
     setStep('prepare', 'active', msg.detail ?? '');
-    showProcessing(PHASE_LABELS[phase] + '…', true);
+    setProcessingLabel(PHASE_LABELS[phase] + '…', true);
   }
 
   if (msg.stage !== lastLoadStage) {
@@ -1319,11 +1303,17 @@ setStage('Starting…');
 log(`Build ${__BUILD_ID__}`);
 log('Detecting GPU…');
 
+// The landing page's before/after comparisons are pure DOM and independent of
+// the model, so wire them immediately rather than waiting on boot().
+initCompareSliders();
+
 async function boot(): Promise<void> {
   // GPU gate first: it decides which provider is offered and the default.
   gpuState = await detectWebGpu();
-  log(gpuState.reason + (gpuState.adapter ? ` (${gpuState.adapter})` : ''));
-  if (gpuState.available) {
+  log(gpuState.reason);
+  // Probe whenever an adapter exists — even one the gate did not endorse — so the
+  // GPU stays selectable in Advanced options (the user is warned, not blocked).
+  if (gpuState.adapterPresent) {
     // Only request the WebGPU-capable ORT bundle when this host can actually
     // serve it (see webGpuRuntimeHosted). Probed before the worker starts so a
     // host without the jsep binary never 404s the worker's importScripts.
@@ -1348,12 +1338,13 @@ async function boot(): Promise<void> {
   log(`Mask adjust: threshold ${maskAdjust.threshold || 'off'}, feather ${maskAdjust.feather || 'off'}`);
 
   // Resolve defaults: provider can come from ?provider=, then localStorage,
-  // then the GPU gate; model likewise from ?model=, then localStorage, then the
-  // manifest default (the smallest artifact, model_512_int8_fp16.onnx).
+  // then the GPU gate (GPU only for a modern hardware adapter, else CPU). The
+  // model is the single served artifact (model_512_int8_fp16.onnx), overridable
+  // with ?model= for scripted runs.
   selectedProvider = resolveProvider();
   selectedModel = resolveModel();
 
-  populateModelSelect();
+  renderModelName();
   applyProviderUi();
   log(`Provider default: ${selectedProvider}`);
   log(`Model default: ${selectedModel.id}`);
@@ -1385,14 +1376,9 @@ function autoLoadModel(): void {
   loadSelectedModel();
 }
 
-// Persisted "always allow over mobile data" choice (the prompt's checkbox).
-function meteredDownloadRemembered(): boolean {
-  return loadPref<boolean>(LS_ALLOW_METERED, (v): v is boolean => v === true) === true;
-}
-
 // The full gate: skip the prompt when consent is already given this session, the
-// user asked to be remembered, the model is already cached on this device, or the
-// connection does not look metered.
+// model is already cached on this device, or the connection does not look
+// metered. Consent is per-session; it is never remembered across visits.
 async function needsDownloadConfirmation(): Promise<boolean> {
   if (!selectedModel) return false;
   // An explicit ?model=/?provider= override is a deliberate, scripted choice,
@@ -1409,7 +1395,6 @@ async function needsDownloadConfirmation(): Promise<boolean> {
   return shouldConfirmDownload({
     sizeBytes: selectedModel.size,
     cached,
-    remembered: meteredDownloadRemembered(),
     confirmed,
   });
 }
@@ -1419,16 +1404,11 @@ function showNetWarn(): void {
   // The model labels already carry their size, so the confirmation states the
   // exact byte size without repeating the label.
   netWarnText.textContent = downloadConfirmationText(selectedModel.size);
-  netWarnRemember.checked = false;
   netWarnEl.hidden = false;
   netWarnConfirm.focus();
 }
 
 function confirmDownload(): void {
-  if (netWarnRemember.checked) {
-    savePref(LS_ALLOW_METERED, true);
-    log('Remembered: model downloads over mobile data will not ask again.');
-  }
   sessionStorage.setItem('remove-bg:download-confirmed', '1');
   netWarnEl.hidden = true;
   log('Download confirmed by the user; starting the model download.');
@@ -1438,10 +1418,10 @@ function confirmDownload(): void {
 netWarnConfirm.addEventListener('click', confirmDownload);
 netWarnDismiss.addEventListener('click', () => {
   netWarnEl.hidden = true;
-  setStage('Paused — tap “Remove background” to download the model when you are ready.');
-  showProcessing('Download paused — your connection may be metered', false);
-  // A dismissal is not a dead end: choosing a photo and pressing Remove
-  // background starts the download.
+  setStage('Paused — choose a photo to download the model and remove its background.');
+  setProcessingLabel('Download paused — your connection may be metered', false);
+  // A dismissal is not a dead end: choosing a photo starts the download and the
+  // run automatically.
 });
 
 boot().catch((e) => error(e instanceof Error ? e.message : String(e)));

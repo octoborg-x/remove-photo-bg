@@ -33,6 +33,22 @@ describe('classifyConnection', () => {
     expect(classifyConnection({ effectiveType: '4g', downlink: 0.5 })).toBe('cellular');
     expect(classifyConnection({ effectiveType: '4g', downlink: 10 })).toBe('unknown');
   });
+
+  it('treats a fast link on a mobile device with no wifi signal as cellular', () => {
+    // Chrome on Android reports only effectiveType '4g' for LTE and omits `type`.
+    expect(classifyConnection({ effectiveType: '4g' }, true)).toBe('cellular');
+    expect(classifyConnection(null, true)).toBe('cellular');
+    expect(classifyConnection({}, true)).toBe('cellular');
+  });
+
+  it('still respects a positive wifi signal on a mobile device', () => {
+    expect(classifyConnection({ type: 'wifi', effectiveType: '4g' }, true)).toBe('wifi');
+  });
+
+  it('does not treat a desktop with no wifi signal as cellular', () => {
+    expect(classifyConnection({ effectiveType: '4g' }, false)).toBe('unknown');
+    expect(classifyConnection({ effectiveType: '4g' })).toBe('unknown');
+  });
 });
 
 describe('assessNetwork', () => {
@@ -53,6 +69,12 @@ describe('assessNetwork', () => {
   it('does not warn on an unknown connection (desktop Chromium reports no type)', () => {
     expect(assessNetwork({ info: {}, sizeBytes: model }).warn).toBe(false);
     expect(assessNetwork({ info: { effectiveType: '4g' }, sizeBytes: model }).warn).toBe(false);
+  });
+
+  it('warns on a mobile device with a fast link and no wifi signal', () => {
+    const r = assessNetwork({ info: { effectiveType: '4g' }, deviceMobile: true, sizeBytes: model });
+    expect(r.connection).toBe('cellular');
+    expect(r.warn).toBe(true);
   });
 
   it('does not warn for a small download even on cellular', () => {
@@ -84,16 +106,16 @@ describe('shouldConfirmDownload', () => {
     ).toBe(false);
   });
 
-  it('never asks once the user ticked "remember my choice"', () => {
-    expect(
-      shouldConfirmDownload({ info: cellular, sizeBytes: model, remembered: true }),
-    ).toBe(false);
-  });
-
   it('never asks once consent is already given this session', () => {
     expect(
       shouldConfirmDownload({ info: cellular, sizeBytes: model, confirmed: true }),
     ).toBe(false);
+  });
+
+  it('asks on a mobile device with no wifi signal even when the link looks fast', () => {
+    expect(
+      shouldConfirmDownload({ info: { effectiveType: '4g' }, deviceMobile: true, sizeBytes: model }),
+    ).toBe(true);
   });
 
   it('never asks on an unmetered link', () => {

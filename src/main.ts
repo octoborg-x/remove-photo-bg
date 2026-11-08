@@ -71,7 +71,6 @@ const runAllBtn = document.getElementById('runAll')! as HTMLButtonElement;
 const modelNameEl = document.getElementById('modelName')!;
 const modelSizeEl = document.getElementById('modelSize')!;
 const providerToggle = document.getElementById('providerToggle')! as HTMLSelectElement;
-const loadModelBtn = document.getElementById('loadModel')! as HTMLButtonElement;
 const downloadImageBtn = document.getElementById('downloadImage')! as HTMLAnchorElement;
 const formatOptionsEl = document.getElementById('formatOptions')!;
 const providerHint = document.getElementById('providerHint')!;
@@ -94,11 +93,55 @@ const netWarnEl = document.getElementById('netWarn')!;
 const netWarnText = document.getElementById('netWarnText')!;
 const netWarnConfirm = document.getElementById('netWarnConfirm')! as HTMLButtonElement;
 const netWarnDismiss = document.getElementById('netWarnDismiss')! as HTMLButtonElement;
+const toastHost = document.getElementById('toastHost')!;
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
 // markup, so a changed limit never leaves stale copy on the page.
 limitBytesEl.textContent = `${Math.round(DEFAULT_UPLOAD_LIMITS.maxBytes / 1048576)} MB`;
 limitSideEl.textContent = String(DEFAULT_UPLOAD_LIMITS.maxLongestSide);
+
+// ——— Floating notifications ———
+// Top-left, fixed, stacked vertically. Each dismisses itself after 10 s and has a
+// close button; several at once stack downward in the order they arrived.
+type ToastKind = 'info' | 'warn' | 'error';
+const TOAST_DEFAULT_MS = 10000;
+
+function showToast(
+  message: string,
+  opts: { kind?: ToastKind; title?: string; durationMs?: number } = {},
+): void {
+  const kind = opts.kind ?? 'info';
+  const toast = document.createElement('div');
+  toast.className = kind === 'info' ? 'toast' : `toast ${kind}`;
+  toast.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+
+  const body = document.createElement('div');
+  body.className = 'toastBody';
+  if (opts.title) {
+    const title = document.createElement('strong');
+    title.className = 'toastTitle';
+    title.textContent = opts.title;
+    body.appendChild(title);
+  }
+  body.appendChild(document.createTextNode(message));
+
+  const close = document.createElement('button');
+  close.className = 'toastClose';
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Dismiss notification');
+  close.textContent = '×';
+
+  const remove = (): void => {
+    clearTimeout(timer);
+    toast.remove();
+  };
+  close.addEventListener('click', remove);
+
+  toast.appendChild(body);
+  toast.appendChild(close);
+  toastHost.appendChild(toast);
+  const timer = setTimeout(remove, opts.durationMs ?? TOAST_DEFAULT_MS);
+}
 
 // Persisted user preferences: provider and mask adjustments.
 // Scrubbed to safe values on read so stale/corrupt entries are ignored.
@@ -684,11 +727,14 @@ async function initWorker(): Promise<void> {
 
   // Classic worker (plain JS in /public) so onnxruntime-web's wasm loaders are
   // fetched as static files instead of being transformed by Vite. The runtime
-  // bundle is chosen here: a usable GPU adapter means the WebGPU-capable ORT
-  // bundle (a ~26.5 MiB jsep wasm that hosts with a per-file cap cannot serve);
-  // the worker degrades a webgpu request to WASM with a clear message when that
-  // bundle is absent.
-  const runtimeQuery = webGpuUsable() ? '?runtime=webgpu' : '';
+  // bundle is chosen here: any selectable GPU adapter means the WebGPU-capable
+  // ORT bundle (a ~26.5 MiB jsep wasm that hosts with a per-file cap cannot
+  // serve). `ort.all.min.js` only fetches that jsep wasm when a webgpu session is
+  // actually created, so the larger bundle costs nothing while the CPU runs; the
+  // worker degrades a webgpu request to WASM with a clear message when the bundle
+  // is absent. webGpuSelectable (not webGpuUsable) is used because the user can
+  // switch to the GPU after boot, so the worker must already carry the backend.
+  const runtimeQuery = webGpuSelectable() ? '?runtime=webgpu' : '';
   worker = new Worker('/inference-worker.js' + runtimeQuery, { type: 'classic' });
   // Without these a worker that fails to start (404 on the script, a failed
   // importScripts of the ORT runtime) posts nothing at all and the page waits on
@@ -729,7 +775,6 @@ async function initWorker(): Promise<void> {
         );
       }
       updateRunButton();
-      loadModelBtn.disabled = false;
       setSelectorsDisabled(false);
       settleModel(null);
     } else if (msg.kind === 'adapter-warning') {
@@ -815,7 +860,6 @@ async function initWorker(): Promise<void> {
       if (msg.fatal) {
         settleModel(msg.message);
         updateRunButton();
-        loadModelBtn.disabled = false;
         setSelectorsDisabled(false);
         hideRing();
       } else {
@@ -828,9 +872,11 @@ async function initWorker(): Promise<void> {
 }
 
 function setSelectorsDisabled(disabled: boolean): void {
-  // The runtime toggle is only ever usable when a modern GPU is present; keep it
-  // disabled otherwise so a locked/unlocked state never exposes a dead control.
-  providerToggle.disabled = disabled || (!webGpuUsable() && !forcedProvider);
+  // The runtime toggle is usable whenever the GPU path is reachable (an adapter
+  // exists AND this host serves the WebGPU bundle), even if the CPU is the better
+  // default; the user may still choose the GPU. It stays disabled when no GPU
+  // path exists at all, so a locked/unlocked state never exposes a dead control.
+  providerToggle.disabled = disabled || (!webGpuSelectable() && !forcedProvider);
 }
 
 // What to send as the worker's `forceProvider` for a UI-selected provider.
@@ -872,7 +918,6 @@ function loadSelectedModel(): void {
   if (forcedProvider) log(`Provider forced to: ${forcedProvider} (from ?provider=)`);
   else if (force === 'wasm') log('Provider: CPU (WASM)');
   setSelectorsDisabled(true);
-  loadModelBtn.disabled = true;
   worker.postMessage({
     kind: 'set-model',
     modelUrl: selectedModel.url,
@@ -895,7 +940,6 @@ function loadSelectedModel(): void {
     hideRing();
     setProcessingLabel('Could not start', false);
     setSelectorsDisabled(false);
-    loadModelBtn.disabled = false;
     showRecovery(
       'worker',
       'The background-removal engine did not respond. Reload the page, then try again.',
@@ -909,13 +953,20 @@ function loadSelectedModel(): void {
 // its name rather than a dropdown. The runtime is chosen automatically and can
 // be overridden in Advanced options.
 
-// The browser can run WebGPU AND this host serves the WebGPU-capable ORT
-// bundle. Both gates matter: exposing an adapter means nothing if the worker
-// can't import a runtime that knows the webgpu backend. `gpuState.available` is
-// already false for software/known-slow adapters (see provider-gate.ts), so a
-// "fake GPU" never reaches the WebGPU path by default.
+// Whether the GPU path is the *default*. Both gates matter: exposing an adapter
+// means nothing if the worker can't import a runtime that knows the webgpu
+// backend, and `gpuState.available` is already false for software/known-slow
+// adapters (see provider-gate.ts), so a "fake GPU" never becomes the default.
 function webGpuUsable(): boolean {
   return gpuState?.available === true && runtimeHasWebGpuBundle;
+}
+
+// Whether the GPU can be *chosen at all*: an adapter exists and this host serves
+// the WebGPU-capable bundle. A software/known-slow adapter is still selectable —
+// the user is warned of the trade-off (see warnOnGpuChoice) instead of being
+// blocked.
+function webGpuSelectable(): boolean {
+  return gpuState?.adapterPresent === true && runtimeHasWebGpuBundle;
 }
 
 function renderModelName(): void {
@@ -925,23 +976,47 @@ function renderModelName(): void {
 }
 
 function applyProviderUi(): void {
-  // WebGPU is offered only when the adapter is a modern hardware GPU AND this
-  // host serves the WebGPU-capable bundle.
-  const offerWebGpu = webGpuUsable();
+  // WebGPU is offered whenever the GPU path is reachable (webGpuSelectable), not
+  // only when it is the better default. The CPU remains the default for an
+  // inadequate adapter, and choosing the GPU surfaces the reason as a toast.
+  const offerWebGpu = webGpuSelectable();
   providerToggle.innerHTML = '';
   if (offerWebGpu) providerToggle.append(new Option('GPU (WebGPU)', 'webgpu'));
   const wasm = new Option('CPU (WASM)', 'wasm');
   providerToggle.append(wasm);
   providerToggle.value = selectedProvider;
   providerToggle.disabled = !offerWebGpu && !forcedProvider;
-  providerHint.textContent = gpuState
-    ? gpuState.reason +
-      (gpuState.available && !runtimeHasWebGpuBundle
-        ? ' — host cannot serve the WebGPU runtime, using CPU.'
-        : selectedProvider === 'webgpu'
-          ? ' — GPU selected.'
-          : ' — CPU selected.')
-    : 'GPU status unknown — using CPU.';
+  // Keep this line a neutral status. The reason a GPU was not chosen by default
+  // (software renderer, known-slow adapter, missing capability) is shown as a
+  // popup when the user actually switches to the GPU (see warnOnGpuChoice), not
+  // as a permanent hint next to the control.
+  providerHint.textContent = !gpuState
+    ? 'GPU status unknown — using CPU.'
+    : !runtimeHasWebGpuBundle
+      ? 'This host cannot serve the WebGPU runtime — using CPU.'
+      : selectedProvider === 'webgpu'
+        ? gpuState.available
+          ? `GPU selected (${gpuState.adapter}).`
+          : 'GPU selected.'
+        : 'CPU selected.';
+}
+
+// Explains the CPU-is-better trade-off when the user deliberately picks the GPU
+// on an adapter the gate did not endorse (software renderer, known-slow, or one
+// missing a capability). Returns null when the choice is the endorsed default.
+function gpuChoiceWarning(): string | null {
+  if (!gpuState || gpuState.available) return null;
+  if (!gpuState.adapterPresent) return null;
+  return (
+    `${gpuState.reason.replace(/^WebGPU skipped — /, '')}. ` +
+    'The CPU path is usually faster and more accurate for this model here, but you ' +
+    'asked for the GPU, so it will be used.'
+  );
+}
+
+function warnOnGpuChoice(): void {
+  const warning = gpuChoiceWarning();
+  if (warning) showToast(warning, { kind: 'warn', title: 'Using GPU (WebGPU)' });
 }
 
 function resolveProvider(): 'webgpu' | 'wasm' {
@@ -951,7 +1026,7 @@ function resolveProvider(): 'webgpu' | 'wasm' {
   }
   const pref = loadPref<unknown>(LS_PROVIDER, isProviderChoice);
   if (pref === 'wasm') return 'wasm';
-  if (pref === 'webgpu' && webGpuUsable()) return 'webgpu';
+  if (pref === 'webgpu' && webGpuSelectable()) return 'webgpu';
   // Default: GPU only when the adapter is a modern hardware GPU (webGpuUsable),
   // else CPU. A "fake"/software or known-slow GPU lands on CPU here.
   return webGpuUsable() ? 'webgpu' : 'wasm';
@@ -974,12 +1049,9 @@ providerToggle.addEventListener('change', () => {
   selectedProvider = providerToggle.value;
   savePref(LS_PROVIDER, selectedProvider);
   log(`Provider selected: ${PROVIDER_LABELS[selectedProvider]}`);
+  if (selectedProvider === 'webgpu') warnOnGpuChoice();
   applyProviderUi();
   loadSelectedModel();
-});
-
-loadModelBtn.addEventListener('click', () => {
-  if (selectedModel) loadSelectedModel();
 });
 
 // ——— Mask adjust controls ———
@@ -1259,7 +1331,9 @@ async function boot(): Promise<void> {
   // GPU gate first: it decides which provider is offered and the default.
   gpuState = await detectWebGpu();
   log(gpuState.reason);
-  if (gpuState.available) {
+  // Probe whenever an adapter exists — even one the gate did not endorse — so the
+  // GPU stays selectable in Advanced options (the user is warned, not blocked).
+  if (gpuState.adapterPresent) {
     // Only request the WebGPU-capable ORT bundle when this host can actually
     // serve it (see webGpuRuntimeHosted). Probed before the worker starts so a
     // host without the jsep binary never 404s the worker's importScripts.

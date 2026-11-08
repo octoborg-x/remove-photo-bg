@@ -62,6 +62,55 @@
       .trustStrip li { display: flex; align-items: center; gap: 0.4rem; }
       .trustStrip li::before { content: '✓'; color: var(--ok); font-weight: 700; }
 
+      /* Centred hero: the headline and the "Drop a photo" line are the first
+         thing read, so they sit centred with a small AI glyph on the headline. */
+      .heroTitle { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+      .heroTagline { text-align: center; margin-left: auto; margin-right: auto; }
+      .aiGlyph {
+        display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem;
+        padding: 0.2rem 0.6rem; border-radius: 999px;
+        background: #eaf1ff; color: var(--brand);
+        font-size: 0.8rem; font-weight: 800; letter-spacing: 0.06em;
+      }
+      .aiGlyph svg { width: 0.95rem; height: 0.95rem; }
+
+      /* Model identity block: name, variant subtitle, one-line description, id. */
+      .modelMeta { margin: 0.5rem 0 0; }
+      .modelSubtitle { margin: 0; font-weight: 600; font-size: 0.9rem; }
+      .modelDesc { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.88rem; }
+      .modelId { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.82rem; }
+      .modelId code { background: #f4f5f7; padding: 0.05rem 0.3rem; border-radius: 5px; }
+
+      /* Drop-zone limits: three short lines, with the size cap in red. */
+      .dropHint { display: flex; flex-direction: column; gap: 0.1rem; }
+      .dropHintLine { display: block; }
+      .maxBadge { color: var(--err); font-weight: 700; }
+
+      /* Floating notifications: top-left, fixed, stacked vertically. */
+      .toastHost {
+        position: fixed; top: 1rem; left: 1rem; z-index: 1000;
+        display: flex; flex-direction: column; gap: 0.6rem;
+        max-width: min(360px, calc(100vw - 2rem));
+        pointer-events: none;
+      }
+      .toast {
+        pointer-events: auto; display: flex; align-items: flex-start; gap: 0.6rem;
+        background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--brand);
+        border-radius: 10px; padding: 0.7rem 0.9rem; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+      }
+      .toast.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+      .toast.error { border-left-color: var(--err); background: var(--err-bg); }
+      .toast .toastBody { flex: 1; font-size: 0.9rem; }
+      .toast .toastTitle { display: block; font-weight: 700; margin-bottom: 0.15rem; }
+      .toast .toastClose {
+        border: 0; background: transparent; cursor: pointer; color: var(--muted);
+        font-size: 1.1rem; line-height: 1; padding: 0 0.1rem; flex: none;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .toast { animation: toastIn 0.18s ease; }
+      }
+      @keyframes toastIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+
       .landingSection { padding: 2rem 0 0.5rem; }
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.9rem; }
       .gridCard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; }
@@ -269,10 +318,22 @@
     </style>
   </head>
   <body>
+    <!-- Floating notifications (top-left, stacked). Filled by src/main.ts. -->
+    <div id="toastHost" class="toastHost" aria-live="polite" aria-atomic="false"></div>
+
     <header class="hero">
       <p class="eyebrow">Runs in your browser · no upload</p>
-      <h1>Remove the background from a product photo — on your own device</h1>
-      <p class="tagline">
+      <div class="heroTitle">
+        <span class="aiGlyph" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7z" />
+            <path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+          </svg>
+          AI
+        </span>
+        <h1>Remove the background from a product photo — on your own device</h1>
+      </div>
+      <p class="tagline heroTagline">
         Drop a photo, get a transparent PNG or a white-background JPG. A BiRefNet
         segmentation model runs entirely in your browser, so your photo is never
         uploaded and there is no account to create.
@@ -284,30 +345,12 @@
       <ul class="trustStrip">
         <li>Photos never leave your device</li>
         <li>Works without a GPU</li>
-        <li>~58 MB model, downloaded once and cached</li>
+        <li>~58 MB model on browser</li>
         <li>Transparent PNG · JPG · WebP</li>
       </ul>
     </header>
 
     <main>
-      <section class="landingSection" id="how" aria-labelledby="howTitle">
-        <h2 id="howTitle">How it works</h2>
-        <ol class="steps">
-          <li>
-            <h3>Choose a photo</h3>
-            <p>JPEG, PNG, or WebP up to 20 MB and 4096 px. The file is read locally and is never sent anywhere.</p>
-          </li>
-          <li>
-            <h3>The model runs in your browser</h3>
-            <p>The first visit downloads the model once (~58 MB) and caches it. Inference then runs on your device — on the GPU when a real one is present, otherwise on the CPU.</p>
-          </li>
-          <li>
-            <h3>Download the cut-out</h3>
-            <p>Get a transparent PNG (default), a white-background JPG, or a WebP. Adjust the mask edge first if you need to.</p>
-          </li>
-        </ol>
-      </section>
-
       <section class="landingSection" id="try" aria-labelledby="tryTitle">
         <h2 id="tryTitle">Try it</h2>
         <p class="tagline appTagline">
@@ -336,10 +379,11 @@
             aria-label="Drop a JPEG, PNG, or WebP image here, or press Enter to choose a file"
           >
             <strong>Drop a photo here, or tap to choose</strong>
-            <span class="hint"
-              >JPEG, PNG, or WebP — up to <span id="limitBytes">20 MB</span>, longest side
-              <span id="limitSide">4096</span> px</span
-            >
+            <span class="hint dropHint">
+              <span class="dropHintLine">JPEG, PNG, or WebP</span>
+              <span class="dropHintLine maxBadge">Max <span id="limitBytes">20 MB</span></span>
+              <span class="dropHintLine">Longest side <span id="limitSide">4096</span> px</span>
+            </span>
           </div>
           <div id="inputBox" class="inputBox"></div>
         </section>
@@ -348,7 +392,7 @@
           <h2 id="step2Title" class="appStep"><span class="stepNum">2</span> Remove the background</h2>
           <div class="runRow">
             <div class="modelRow">
-              <span class="modelName">Model: <strong id="modelName">BiRefNet_lite 512</strong></span>
+              <span class="modelName">Model: <strong id="modelName">QMix Cut-512</strong></span>
               <span class="hint" id="modelSize"></span>
               <!-- Animated progress ring, shown while the model downloads or
                    initialises. -->
@@ -360,6 +404,11 @@
               </span>
             </div>
             <button id="runAll" class="primary" disabled>Remove background</button>
+          </div>
+          <div class="modelMeta">
+            <p class="modelSubtitle">BiRefNet Lite · Hybrid INT8/FP16 · ONNX</p>
+            <p class="modelDesc">A compact, browser-oriented background segmentation model.</p>
+            <p class="modelId">Technical model ID: <code id="modelIdText">qmix-cut-512</code></p>
           </div>
           <p id="stage" class="stage" role="status" aria-live="polite">Starting…</p>
 
@@ -407,9 +456,6 @@
               <label for="providerToggle">Runtime</label>
               <select id="providerToggle" disabled></select>
               <span class="hint" id="providerHint"></span>
-            </div>
-            <div>
-              <button id="loadModel" disabled>Reload model</button>
             </div>
             <div>
               <label for="maskThreshold">Mask threshold</label>
@@ -486,6 +532,24 @@
         </div>
       </section>
 
+      <section class="landingSection" id="how" aria-labelledby="howTitle">
+        <h2 id="howTitle">How it works</h2>
+        <ol class="steps">
+          <li>
+            <h3>Choose a photo</h3>
+            <p>JPEG, PNG, or WebP up to 20 MB and 4096 px. The file is read locally and is never sent anywhere.</p>
+          </li>
+          <li>
+            <h3>The model runs in your browser</h3>
+            <p>The first visit downloads the model once (~58 MB) and caches it. Inference then runs on your device — on the GPU when a real one is present, otherwise on the CPU.</p>
+          </li>
+          <li>
+            <h3>Download the cut-out</h3>
+            <p>Get a transparent PNG (default), a white-background JPG, or a WebP. Adjust the mask edge first if you need to.</p>
+          </li>
+        </ol>
+      </section>
+
       <section class="landingSection" id="results" aria-labelledby="resultsTitle">
         <h2 id="resultsTitle">What it does well, and where it struggles</h2>
         <div class="grid">
@@ -495,7 +559,7 @@
           </div>
           <div class="gridCard">
             <h3>Runs on the CPU by default</h3>
-            <p>No GPU is required. A modern hardware GPU is used automatically when one is present, but a software or older GPU is deliberately skipped because it measured slower or less accurate than the CPU.</p>
+            <p>No GPU is required. A modern hardware GPU is used automatically when one is present; a software or older GPU is left on the CPU by default because it measured slower or less accurate here, but you can still switch to it in Advanced options.</p>
           </div>
           <div class="gridCard">
             <h3>Honest limits</h3>
@@ -520,11 +584,11 @@
         </details>
         <details class="faq">
           <summary>Do I need a fast graphics card?</summary>
-          <p>No. It runs on the CPU with WebAssembly, which works on essentially any modern browser. If you have a recent hardware GPU it is used automatically for speed; older or software GPUs are skipped because they measured slower or wrong.</p>
+          <p>No. It runs on the CPU with WebAssembly, which works on essentially any modern browser. If you have a recent hardware GPU it is used automatically for speed. Older or software GPUs are left on the CPU by default because they measured slower or wrong, but you can still force the GPU in Advanced options.</p>
         </details>
         <details class="faq">
           <summary>What formats and sizes can I use?</summary>
-          <p>JPEG, PNG, or WebP input up to 20 MB and 4096 pixels on the longest side. Output is a transparent PNG (default), a white-background JPG, or a WebP.</p>
+          <p>JPEG, PNG, or WebP input. Maximum 20 MB, longest side 4096 pixels. Output is a transparent PNG (default), a white-background JPG, or a WebP.</p>
         </details>
         <details class="faq">
           <summary>Is the result always perfect?</summary>

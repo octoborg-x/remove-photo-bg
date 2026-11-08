@@ -48,14 +48,17 @@ const HF_SPACE = 'https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve
 
 const MODELS = [
   {
-    id: 'model_512_int8_fp16',
+    // QMix Cut-512 is the product name for this optimised BiRefNet Lite variant.
+    // The physical file keeps its precision-stating name (re-uploading the same
+    // bytes to the HF Space under a new name would serve no purpose).
+    id: 'qmix-cut-512',
     file: 'models/model_512_int8_fp16.onnx',
     url: `${HF_SPACE}/models/model_512_int8_fp16.onnx`,
     size: 60763193,
     sha256: '10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26',
-    label: 'BiRefNet_lite 512 (int8+fp16, ~58 MB)',
+    label: 'QMix Cut-512',
     description:
-      'Weight-only int8 backbone (m.bb.*, m.squeeze_module.*) + fp16 decoder, materialised to fp32, with PyTorch debug metadata and duplicate initializers stripped (lossless, bit-identical outputs). On the repo test images it reproduces the fp32 teacher exactly; on the wider 62-image set it averages IoU@0.5 0.981 with one empty-mask miss.',
+      'A compact, browser-oriented background segmentation model: an optimised BiRefNet Lite variant with a weight-only int8 backbone (m.bb.*, m.squeeze_module.*) + fp16 decoder, materialised to fp32, with PyTorch debug metadata and duplicate initializers stripped (lossless, bit-identical outputs). On the repo test images it reproduces the fp32 teacher exactly; on the wider 62-image set it averages IoU@0.5 0.981 with one empty-mask miss.',
     inputSize: 512,
     outputIsProbability: true,
     default: true,

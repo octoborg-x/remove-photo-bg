@@ -9,7 +9,12 @@
 
 Each component remains subject to its own licence and notices.
 
-## BiRefNet_lite model
+## BiRefNet_lite model (served as QMix Cut-512)
+
+The served artifact is named **QMix Cut-512** (manifest id `qmix-cut-512`). It is
+**not** a newly trained model: it is the optimised **BiRefNet Lite** export
+described below, and the BiRefNet attribution in this section applies to it in
+full. The file keeps its precision-stating name (`model_512_int8_fp16.onnx`).
 
 - Upstream repository: ZhengPeng7 / BiRefNet — https://github.com/ZhengPeng7/BiRefNet
 - Model page: https://huggingface.co/ZhengPeng7/BiRefNet_lite
@@ -29,7 +34,7 @@ Each component remains subject to its own licence and notices.
 
   | id (manifest) | file | size (bytes) | SHA-256 | role |
   |---|---|---|---|---|
-  | `model_512_int8_fp16` | `models/model_512_int8_fp16.onnx` | 60,763,193 | `10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26` | the only model served; weight-only int8 backbone (`m.bb.*`, `m.squeeze_module.*`) + fp16 decoder, materialised to fp32, PyTorch debug metadata and duplicate initializers stripped (lossless) |
+  | `qmix-cut-512` (file `model_512_int8_fp16.onnx`) | `models/model_512_int8_fp16.onnx` | 60,763,193 | `10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26` | the only model served; weight-only int8 backbone (`m.bb.*`, `m.squeeze_module.*`) + fp16 decoder, materialised to fp32, PyTorch debug metadata and duplicate initializers stripped (lossless) |
 
   The quantisation method and its measured parity (int8+fp16: IoU@0.5 ≥ 0.9987
   vs the teacher, 0 pixels crossing the 0.5 threshold on the repo test images;

@@ -36,8 +36,8 @@ interface NavigatorWithGpu extends Navigator {
 }
 
 export type WebGpuDetect =
-  | { available: true; adapter?: string; reason: string }
-  | { available: false; adapter?: undefined; reason: string };
+  | { available: true; adapter?: string; adapterPresent: true; reason: string }
+  | { available: false; adapter?: undefined; adapterPresent: boolean; reason: string };
 
 /** Minimum maxStorageBufferBindingSize (bytes) for the fp16 model's buffers. */
 const MIN_STORAGE_BUFFER_BINDING = 1024 * 1024 * 1024; // 1 GiB
@@ -91,26 +91,31 @@ export function classifyGpuAdapter(adapter: GpuAdapter | null): { usable: boolea
 export async function detectWebGpu(): Promise<WebGpuDetect> {
   const nav = navigator as NavigatorWithGpu;
   if (typeof navigator === 'undefined' || !('gpu' in nav) || !nav.gpu?.requestAdapter) {
-    return { available: false, reason: 'WebGPU is not available in this browser' };
+    return { available: false, adapterPresent: false, reason: 'WebGPU is not available in this browser' };
   }
   try {
     const adapter = await nav.gpu.requestAdapter();
     if (!adapter) {
-      return { available: false, reason: 'WebGPU is enabled but no adapter was found' };
+      return { available: false, adapterPresent: false, reason: 'WebGPU is enabled but no adapter was found' };
     }
     const info = adapter.info ?? {};
     const label = [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(' ') || 'unknown adapter';
     const verdict = classifyGpuAdapter(adapter);
     if (!verdict.usable) {
-      return { available: false, reason: `WebGPU skipped — ${verdict.reason}` };
+      // An adapter exists but is not a good default (software/known-slow/missing
+      // capability). The CPU stays the default, but the GPU remains selectable:
+      // the UI offers it with `adapterPresent: true` and explains the trade-off
+      // when the user switches.
+      return { available: false, adapterPresent: true, reason: `WebGPU skipped — ${verdict.reason}` };
     }
     return {
       available: true,
       adapter: label,
+      adapterPresent: true,
       reason: `WebGPU available (${label})`,
     };
   } catch {
-    return { available: false, reason: 'WebGPU adapter detection failed' };
+    return { available: false, adapterPresent: false, reason: 'WebGPU adapter detection failed' };
   }
 }
 

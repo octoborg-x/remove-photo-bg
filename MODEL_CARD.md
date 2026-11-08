@@ -1,8 +1,20 @@
-# MODEL_CARD — BiRefNet_lite (ONNX, 512×512)
+# MODEL_CARD — QMix Cut-512 (BiRefNet_lite, ONNX, 512×512)
 
-Current record for the models served by this project. See also
+Current record for the model served by this project. See also
 `THIRD_PARTY_LEGAL_NOTICES.md` (hashes/licences), `LICENSE_AUDIT.md`
 (dependency/model audit), and `PHASE1_REPORT.md` (measured results and verdict).
+
+## Product name vs architecture
+
+- **Product name**: **QMix Cut-512** — the name shown in the UI (`#modelName`).
+- **Technical model ID**: `qmix-cut-512` — the manifest `id` and the value the
+  UI prints as the "Technical model ID".
+- **Architecture**: this is **not** a newly trained model. It is an optimised
+  **BiRefNet Lite** variant (the optimised export described under "Shipped
+  artifact" below). BiRefNet attribution is retained throughout this card and in
+  `THIRD_PARTY_LEGAL_NOTICES.md`.
+- The physical file keeps its precision-stating name
+  (`model_512_int8_fp16.onnx`); only the product name/ID changed.
 
 ## Identity
 
@@ -28,9 +40,9 @@ Current record for the models served by this project. See also
   `Octoborg/remove-photo-bg` Hugging Face Space and pinned by SHA-256 in
   `public/models-manifest.json`.
 
-  | id (manifest) | size | method | role |
-  |---|---|---|---|
-  | `model_512_int8_fp16` | 60,763,193 B (≈58 MB) | per-output-channel **int8** for the backbone (`m.bb.*`, `m.squeeze_module.*`) + **fp16** decoder, all cast back to fp32; PyTorch debug metadata and duplicate initializers stripped (lossless) | **the only model served** |
+  | id (manifest) | file | size | method | role |
+  |---|---|---|---|---|
+  | `qmix-cut-512` (product name **QMix Cut-512**) | `model_512_int8_fp16.onnx` | 60,763,193 B (≈58 MB) | per-output-channel **int8** for the backbone (`m.bb.*`, `m.squeeze_module.*`) + **fp16** decoder, all cast back to fp32; PyTorch debug metadata and duplicate initializers stripped (lossless) | **the only model served** |
 
   Earlier builds also offered `model_512_int0_fp16` and `model_512_int0_fp32`.
   They are the same graph at higher weight-storage precision; because every

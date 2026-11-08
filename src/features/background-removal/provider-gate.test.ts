@@ -90,6 +90,7 @@ describe('detectWebGpu', () => {
     vi.stubGlobal('navigator', {});
     const r = await detectWebGpu();
     expect(r.available).toBe(false);
+    expect(r.adapterPresent).toBe(false);
     expect(r.reason).toMatch(/not available/i);
   });
 
@@ -97,6 +98,7 @@ describe('detectWebGpu', () => {
     vi.stubGlobal('navigator', { gpu: { requestAdapter: async () => null } });
     const r = await detectWebGpu();
     expect(r.available).toBe(false);
+    expect(r.adapterPresent).toBe(false);
     expect(r.reason).toMatch(/no adapter/i);
   });
 
@@ -110,8 +112,25 @@ describe('detectWebGpu', () => {
     });
     const r = await detectWebGpu();
     expect(r.available).toBe(true);
+    expect(r.adapterPresent).toBe(true);
     expect(r.adapter).toContain('apple');
     expect(r.adapter).toContain('m1');
+  });
+
+  it('keeps the GPU selectable (adapterPresent) when a slow adapter is not the default', async () => {
+    vi.stubGlobal('navigator', {
+      gpu: {
+        requestAdapter: async () => ({
+          info: { vendor: 'qualcomm', architecture: 'adreno-6xx', device: 'Qualcomm Adreno 640' },
+          features: ['shader-f16'],
+          limits: { maxStorageBufferBindingSize: 2 * 1024 * 1024 * 1024 },
+        }),
+      },
+    });
+    const r = await detectWebGpu();
+    expect(r.available).toBe(false);
+    expect(r.adapterPresent).toBe(true);
+    expect(r.reason).toMatch(/slower|incorrect/i);
   });
 
   it('never throws when adapter enumeration rejects', async () => {
@@ -120,6 +139,7 @@ describe('detectWebGpu', () => {
     });
     const r = await detectWebGpu();
     expect(r.available).toBe(false);
+    expect(r.adapterPresent).toBe(false);
     expect(r.reason).toMatch(/failed/i);
   });
 });

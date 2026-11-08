@@ -202,33 +202,65 @@
       .ring.indeterminate .ringValue { stroke-dasharray: 24 94.25; stroke-dashoffset: 0; }
       @keyframes ringSpin { to { transform: rotate(360deg); } }
 
-      /* Processing panel: collapsed word with an animated colour, expands to steps. */
-      .processing { margin-top: 0.85rem; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-      .processingToggle {
-        width: 100%; display: flex; align-items: center; justify-content: space-between;
-        gap: 0.5rem; border: 0; border-radius: 0; background: #fbfcfe; padding: 0.6rem 0.8rem;
-        font-weight: 600;
+      /* Processing surface: the uploaded preview with an animated shimmer while
+         the model works, so the wait reads like an editor rather than a form. */
+      .procSurface { position: relative; margin-top: 0.75rem; }
+      .procSurface[hidden] { display: none; }
+      .procShimmer {
+        position: absolute; inset: 0; border-radius: 10px; pointer-events: none;
+        background: linear-gradient(
+          110deg,
+          transparent 18%,
+          rgba(37, 99, 235, 0.1) 38%,
+          rgba(147, 180, 251, 0.28) 50%,
+          rgba(37, 99, 235, 0.1) 62%,
+          transparent 82%
+        );
+        background-size: 220% 100%;
       }
+      .procShimmer[hidden] { display: none; }
+      @media (prefers-reduced-motion: no-preference) {
+        .procShimmer { animation: shimmerSweep 1.5s linear infinite; }
+      }
+      @keyframes shimmerSweep { from { background-position: 140% 0; } to { background-position: -40% 0; } }
+
+      /* Technical details: collapsed by default, sits in the upload block with
+         smaller type. The summary is the live status label for the current
+         process; expanding lists the steps in the order they ran. */
+      details.techDetails {
+        margin-top: 0.6rem; border: 1px solid var(--line); border-radius: 10px;
+        background: #fbfcfe; font-size: 0.82rem;
+      }
+      details.techDetails > summary {
+        cursor: pointer; list-style: none; display: flex; align-items: center;
+        justify-content: space-between; gap: 0.5rem; padding: 0.5rem 0.7rem;
+        font-weight: 600; color: var(--muted);
+      }
+      details.techDetails > summary::-webkit-details-marker { display: none; }
+      details.techDetails[open] > summary { border-bottom: 1px solid var(--line); }
+      .techDetails .chevron { transition: transform 0.15s ease; flex: none; color: var(--muted); }
+      details.techDetails[open] .chevron { transform: rotate(90deg); }
       .processingLabel.working { animation: pulseInk 1.6s ease-in-out infinite; }
       @keyframes pulseInk { 0%, 100% { color: var(--brand); } 50% { color: #93b4fb; } }
       @media (prefers-reduced-motion: reduce) {
         .processingLabel.working { animation: none; color: var(--brand); }
       }
-      .processingToggle .chevron { transition: transform 0.15s ease; }
-      .processingToggle[aria-expanded='true'] .chevron { transform: rotate(90deg); }
-      .processingBody { padding: 0.35rem 0.9rem 0.9rem; }
-      .processingBody[hidden] { display: none; }
-      .stepList { list-style: none; margin: 0.2rem 0 0.6rem; padding: 0; }
-      .stepList li { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.18rem 0; color: var(--muted); }
-      .stepList li .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--line); flex: none; }
+      .processingBody { padding: 0.5rem 0.7rem 0.7rem; }
+      .stepList { list-style: none; margin: 0.2rem 0 0.5rem; padding: 0; font-size: 0.8rem; }
+      .stepList li { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.12rem 0; color: var(--muted); }
+      .stepList li .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--line); flex: none; }
       .stepList li[data-state='active'] { color: var(--ink); font-weight: 600; }
       .stepList li[data-state='active'] .dot { background: var(--brand); }
       .stepList li[data-state='done'] .dot { background: var(--ok); }
       .stepList li .stepDetail { color: var(--muted); font-weight: 400; }
-      .logDetails summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+      .techDetails .modelMeta { margin: 0.35rem 0 0.5rem; }
+      .techDetails .modelSubtitle { font-size: 0.82rem; }
+      .techDetails .modelDesc { font-size: 0.78rem; }
+      .techDetails .modelId { font-size: 0.74rem; }
+      .techDetails .stage { font-size: 0.8rem; margin: 0.35rem 0 0.5rem; }
       #log {
-        background: #f4f5f7; border-radius: 8px; padding: 0.6rem; white-space: pre-wrap;
-        font-size: 0.78rem; max-height: 15rem; overflow: auto; margin: 0.5rem 0 0;
+        background: #f4f5f7; border-radius: 8px; padding: 0.5rem; white-space: pre-wrap;
+        font-size: 0.72rem; max-height: 14rem; overflow: auto; margin: 0.35rem 0 0;
       }
 
       .exportActions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.75rem; }
@@ -310,6 +342,15 @@
       details.faq summary { cursor: pointer; font-weight: 600; }
       details.faq p { margin: 0.6rem 0 0; color: var(--muted); }
 
+      /* "How it works" / "What it does well" cards. */
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 1rem; }
+      .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.1rem 1.2rem; }
+      .card h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+      .card p { margin: 0; color: var(--muted); }
+      .card ol { margin: 0; padding-left: 1.1rem; color: var(--muted); }
+      .card ol li { margin: 0.35rem 0; }
+      .card ol li strong { color: var(--ink); }
+
       .siteFooter { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 0.9rem; }
       @media (max-width: 520px) {
         .runRow { flex-direction: column; align-items: stretch; }
@@ -385,58 +426,56 @@
               <span class="dropHintLine">Longest side <span id="limitSide">4096</span> px</span>
             </span>
           </div>
-          <div id="inputBox" class="inputBox"></div>
-        </section>
 
-        <section class="step" aria-labelledby="step2Title">
-          <h2 id="step2Title" class="appStep"><span class="stepNum">2</span> Remove the background</h2>
-          <div class="runRow">
-            <div class="modelRow">
-              <span class="modelName">Model: <strong id="modelName">QMix Cut-512</strong></span>
-              <span class="hint" id="modelSize"></span>
-              <!-- Animated progress ring, shown while the model downloads or
-                   initialises. -->
-              <span id="modelProgress" class="ring" hidden aria-hidden="true">
-                <svg viewBox="0 0 36 36">
-                  <circle class="ringTrack" cx="18" cy="18" r="15"></circle>
-                  <circle class="ringValue" cx="18" cy="18" r="15"></circle>
-                </svg>
-              </span>
-            </div>
-            <button id="runAll" class="primary" disabled>Remove background</button>
+          <!-- The photo appears here and the background is removed automatically;
+               a shimmer sweeps the preview while the model works. -->
+          <div id="procSurface" class="procSurface" hidden>
+            <div id="inputBox" class="inputBox"></div>
+            <div id="procShimmer" class="procShimmer" hidden aria-hidden="true"></div>
           </div>
-          <div class="modelMeta">
-            <p class="modelSubtitle">BiRefNet Lite · Hybrid INT8/FP16 · ONNX</p>
-            <p class="modelDesc">A compact, browser-oriented background segmentation model.</p>
-            <p class="modelId">Technical model ID: <code id="modelIdText">qmix-cut-512</code></p>
-          </div>
-          <p id="stage" class="stage" role="status" aria-live="polite">Starting…</p>
 
-          <!-- Collapsed "Processing" summary; expands to the live steps and log. -->
-          <div id="processing" class="processing" hidden>
-            <button
-              id="processingToggle"
-              class="processingToggle"
-              aria-expanded="false"
-              aria-controls="processingBody"
-            >
-              <span id="processingLabel" class="processingLabel working">Processing…</span>
+          <!-- Technical details: the summary is the live status label for the
+               current process; expanding lists the steps in the order they ran,
+               plus the model identity and the raw log. -->
+          <details id="techDetails" class="techDetails">
+            <summary>
+              <span
+                id="processingLabel"
+                class="processingLabel"
+                role="status"
+                aria-live="polite"
+              >Starting…</span>
               <span class="chevron" aria-hidden="true">›</span>
-            </button>
-            <div id="processingBody" class="processingBody" hidden>
+            </summary>
+            <div class="processingBody">
+              <div class="modelRow">
+                <span class="modelName">Model: <strong id="modelName">QMix Cut-512</strong></span>
+                <span class="hint" id="modelSize"></span>
+                <!-- Animated progress ring, shown while the model downloads or
+                     initialises. -->
+                <span id="modelProgress" class="ring" hidden aria-hidden="true">
+                  <svg viewBox="0 0 36 36">
+                    <circle class="ringTrack" cx="18" cy="18" r="15"></circle>
+                    <circle class="ringValue" cx="18" cy="18" r="15"></circle>
+                  </svg>
+                </span>
+              </div>
+              <div class="modelMeta">
+                <p class="modelSubtitle">BiRefNet Lite · Hybrid INT8/FP16 · ONNX</p>
+                <p class="modelDesc">A compact, browser-oriented background segmentation model.</p>
+                <p class="modelId">Technical model ID: <code id="modelIdText">qmix-cut-512</code></p>
+              </div>
+              <p id="stage" class="stage" role="status" aria-live="polite">Starting…</p>
               <ol id="stepList" class="stepList"></ol>
-              <details class="logDetails">
-                <summary>Technical details</summary>
-                <pre id="log"></pre>
-              </details>
+              <pre id="log"></pre>
             </div>
-          </div>
+          </details>
 
           <div id="recovery" class="recovery" hidden></div>
         </section>
 
-        <section id="outputSection" class="step" hidden aria-labelledby="step3Title">
-          <h2 id="step3Title" class="appStep"><span class="stepNum">3</span> Download your image</h2>
+        <section id="outputSection" class="step" hidden aria-labelledby="step2Title">
+          <h2 id="step2Title" class="appStep"><span class="stepNum">2</span> Download your image</h2>
           <div id="outputBox" class="outputBox"></div>
           <fieldset class="formatPicker">
             <legend>Format</legend>

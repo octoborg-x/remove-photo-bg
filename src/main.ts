@@ -65,9 +65,10 @@ declare const __BUILD_ID__: string;
 const stageEl = document.getElementById('stage')!;
 const logEl = document.getElementById('log')! as HTMLPreElement;
 const inputBox = document.getElementById('inputBox')!;
+const procSurface = document.getElementById('procSurface')!;
+const procShimmer = document.getElementById('procShimmer')!;
 const outputBox = document.getElementById('outputBox')!;
 const outputSection = document.getElementById('outputSection')!;
-const runAllBtn = document.getElementById('runAll')! as HTMLButtonElement;
 const modelNameEl = document.getElementById('modelName')!;
 const modelSizeEl = document.getElementById('modelSize')!;
 const providerToggle = document.getElementById('providerToggle')! as HTMLSelectElement;
@@ -83,10 +84,7 @@ const limitBytesEl = document.getElementById('limitBytes')!;
 const limitSideEl = document.getElementById('limitSide')!;
 const modelProgressEl = document.getElementById('modelProgress')!;
 const modelProgressValue = modelProgressEl.querySelector('.ringValue') as SVGCircleElement;
-const processingEl = document.getElementById('processing')!;
-const processingToggle = document.getElementById('processingToggle')! as HTMLButtonElement;
 const processingLabel = document.getElementById('processingLabel')!;
-const processingBody = document.getElementById('processingBody')!;
 const stepListEl = document.getElementById('stepList')!;
 const recoveryEl = document.getElementById('recovery')!;
 const netWarnEl = document.getElementById('netWarn')!;
@@ -467,10 +465,10 @@ function hideRing(): void {
 }
 
 // ——— Processing panel ———
-// One collapsed "Processing…" word (with an animated colour while work is in
-// progress). Expanding it lists the live steps — downloading, preparing, and
-// removing the background — plus the technical log, so the three phases are
-// distinguishable at a glance and no bottom-of-page text block is needed.
+// The "Technical details" summary is the live status label for the current
+// process. Expanding it lists the steps in the order they ran — downloading,
+// preparing, removing the background, creating the image — plus the model
+// identity and the raw log, so the phases are distinguishable at a glance.
 type StepId = 'download' | 'prepare' | 'inference' | 'export';
 type StepState = 'todo' | 'active' | 'done';
 interface Step {
@@ -480,7 +478,6 @@ interface Step {
   detail: string;
 }
 let steps: Step[] = [];
-let processingVisible = false;
 
 function stepLabel(id: StepId): string {
   switch (id) {
@@ -539,24 +536,17 @@ function resetSteps(): void {
   renderSteps();
 }
 
-function showProcessing(label: string, working: boolean): void {
-  if (!processingVisible) {
-    processingEl.hidden = false;
-    processingVisible = true;
-  }
-  setProcessingLabel(label, working);
-}
-
+// Sets the live status label on the technical-details summary. The summary is
+// always visible, so there is nothing to show/hide.
 function setProcessingLabel(label: string, working: boolean): void {
   processingLabel.textContent = label;
   processingLabel.classList.toggle('working', working);
 }
 
-processingToggle.addEventListener('click', () => {
-  const expanded = processingToggle.getAttribute('aria-expanded') === 'true';
-  processingToggle.setAttribute('aria-expanded', String(!expanded));
-  processingBody.hidden = expanded;
-});
+// The shimmer overlay marks "the model is working on this image".
+function setShimmer(on: boolean): void {
+  procShimmer.hidden = !on;
+}
 
 const OOM_PATTERN = /bad_alloc|out of memory|outofmemory|allocation failed|allocation error/i;
 const DOWNLOAD_PATTERN =
@@ -602,6 +592,7 @@ function showInputImage(img: HTMLImageElement): void {
   // Append the already-decoded element itself. Cloning it would create a new
   // element that has to re-fetch the (possibly revoked) blob: URL and renders broken.
   inputBox.appendChild(img);
+  procSurface.hidden = false;
 }
 
 async function loadImageFromFile(file: File): Promise<void> {
@@ -642,7 +633,6 @@ async function loadImageFromFile(file: File): Promise<void> {
   if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
   currentObjectUrl = url;
   showInputImage(img);
-  updateRunButton();
   // A new photo invalidates the previous result and any error panel, but must
   // not wipe the step list while the model is still loading: keep the download
   // step active so the panel keeps showing the load in progress.
@@ -655,9 +645,11 @@ async function loadImageFromFile(file: File): Promise<void> {
   }
   // Clear any previous error text so a successful load after a rejected one does
   // not leave a stale error on the stage line.
-  setStage(modelReady ? 'Photo ready — tap “Remove background”' : 'Photo ready — waiting for the model…');
+  setStage(modelReady ? 'Removing the background…' : 'Photo ready — waiting for the model…');
   // Do not log the filename (MVP §8: no filenames, EXIF, or raw user input).
   log(`Loaded image: ${canvas.width}x${canvas.height}`);
+  // Choosing the photo is the action: start removing the background right away.
+  autoStartIfReady();
 }
 
 async function loadImageFromUrl(url: string): Promise<void> {
@@ -676,7 +668,6 @@ async function loadImageFromUrl(url: string): Promise<void> {
   currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   currentImage = img;
   showInputImage(img);
-  updateRunButton();
   log(`Loaded image from URL: ${url} (${canvas.width}x${canvas.height})`);
 }
 
@@ -700,12 +691,12 @@ function settleModel(error: string | null): void {
   }
 }
 
-// The run button is the page's primary action. It is enabled as soon as a photo
-// is chosen — not only once the model is ready — so pressing it while the model
-// is still downloading (or after a paused preflight) starts the run and waits.
-// A fatal model error keeps it disabled; the recovery panel offers the retry.
-function updateRunButton(): void {
-  runAllBtn.disabled = !currentImage || modelError !== null;
+// The primary action is the upload itself: choosing a photo starts the run
+// automatically, so there is no second button to press. A fatal model error is
+// the one case where a photo must not silently start a run — the recovery panel
+// offers the retry.
+function autoStartIfReady(): void {
+  if (currentImage && modelError === null) void runSmoke();
 }
 
 async function initWorker(): Promise<void> {
@@ -768,13 +759,10 @@ async function initWorker(): Promise<void> {
       setStep('prepare', 'done', `running on ${msg.provider}`);
       hideRing();
       hideRecovery();
-      if (processingVisible) {
-        setProcessingLabel(
-          currentImageData ? 'Ready — tap “Remove background”' : 'Model ready — choose a photo',
-          false,
-        );
-      }
-      updateRunButton();
+      setProcessingLabel(
+        currentImageData ? 'Removing the background…' : 'Model ready — choose a photo',
+        false,
+      );
       setSelectorsDisabled(false);
       settleModel(null);
     } else if (msg.kind === 'adapter-warning') {
@@ -846,6 +834,7 @@ async function initWorker(): Promise<void> {
 
       setStep('export', 'done');
       setProcessingLabel('Done — your image is ready', false);
+      setShimmer(false);
       setStage('Done — download your image below.');
 
       log(`Rendered cut-out (${width}x${height}) as ${exportFormatInfo(exportFormat).label}, ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
@@ -857,16 +846,14 @@ async function initWorker(): Promise<void> {
       // caller reports them once. Anything else is surfaced here.
       if (msg.runId !== undefined) failPendingRuns(new Error(msg.message));
       else error(msg.message, msg.fatal ? classifyError(msg.message) : 'generic');
+      setShimmer(false);
       if (msg.fatal) {
         settleModel(msg.message);
-        updateRunButton();
         setSelectorsDisabled(false);
         hideRing();
-      } else {
-        // A run-level failure (e.g. an allocation error) does not kill the
-        // session; the worker retries on CPU, so keep the app usable.
-        updateRunButton();
       }
+      // A run-level failure (e.g. an allocation error) does not kill the
+      // session; the worker retries on CPU, so the app stays usable.
     }
   };
 }
@@ -910,7 +897,7 @@ function loadSelectedModel(): void {
   hideRecovery();
   resetSteps();
   setStep('download', 'active');
-  showProcessing(`Downloading ${selectedModel.label}…`, true);
+  setProcessingLabel(`Downloading ${selectedModel.label}…`, true);
   showRing(null);
   setStage(`Loading model ${selectedModel.id}…`);
   log(`Loading model: ${selectedModel.id} (${selectedModel.url})`);
@@ -1117,9 +1104,6 @@ function finishedRun(): void {
   log(`Average: ${avg.toFixed(1)} ms`);
   log(`Provider: ${window.smokeProvider || '<reported above>'}`);
   log(`Model: ${model}`);
-  // A second run (the harness runs warm) already produced a result; make sure
-  // the button is re-enabled even when no result-ready message follows.
-  updateRunButton();
 }
 
 function chooseFile(): void {
@@ -1152,10 +1136,6 @@ dropZone.addEventListener('drop', async (e) => {
   dropZone.classList.remove('dragover');
   const f = e.dataTransfer?.files?.[0];
   if (f) await loadImageFromFile(f);
-});
-
-runAllBtn.addEventListener('click', () => {
-  runSmoke();
 });
 
 // === Programmatic API for automated/headless runs ===
@@ -1196,19 +1176,19 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
     return null;
   }
   // A model download that was paused at the metered-connection prompt resumes
-  // here: pressing Remove background is an explicit request to run.
+  // here: running is an explicit request to use the model.
   if (!modelReady && !modelError) {
     sessionStorage.setItem('remove-bg:download-confirmed', '1');
     netWarnEl.hidden = true;
     if (!modelLoadInFlight) loadSelectedModel();
   }
-  runAllBtn.disabled = true;
   hideRecovery();
   clearOutput();
-  showProcessing('Removing background…', true);
+  setShimmer(true);
   try {
     await waitForModel();
   } catch (e) {
+    setShimmer(false);
     error(e instanceof Error ? e.message : String(e), 'download');
     return null;
   }
@@ -1218,8 +1198,8 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
       await runOneInference();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
+      setShimmer(false);
       error(message, classifyError(message));
-      updateRunButton();
       return null;
     }
   }
@@ -1283,7 +1263,7 @@ function updateLoadProgress(msg: {
     showRing(msg.stage === 'cache-check' ? null : pct);
     setStep('download', 'active', msg.stage === 'downloading' ? `${pct}%` : '');
     if (msg.stage !== 'downloaded') {
-      showProcessing(`Downloading ${selectedModel?.label ?? 'model'} — ${pct}%`, true);
+      setProcessingLabel(`Downloading ${selectedModel?.label ?? 'model'} — ${pct}%`, true);
     }
   } else {
     // Everything else (runtime, session creation) is not a measurable
@@ -1291,7 +1271,7 @@ function updateLoadProgress(msg: {
     showRing(null);
     setStep('download', 'done');
     setStep('prepare', 'active', msg.detail ?? '');
-    showProcessing(PHASE_LABELS[phase] + '…', true);
+    setProcessingLabel(PHASE_LABELS[phase] + '…', true);
   }
 
   if (msg.stage !== lastLoadStage) {
@@ -1438,10 +1418,10 @@ function confirmDownload(): void {
 netWarnConfirm.addEventListener('click', confirmDownload);
 netWarnDismiss.addEventListener('click', () => {
   netWarnEl.hidden = true;
-  setStage('Paused — tap “Remove background” to download the model when you are ready.');
-  showProcessing('Download paused — your connection may be metered', false);
-  // A dismissal is not a dead end: choosing a photo and pressing Remove
-  // background starts the download.
+  setStage('Paused — choose a photo to download the model and remove its background.');
+  setProcessingLabel('Download paused — your connection may be metered', false);
+  // A dismissal is not a dead end: choosing a photo starts the download and the
+  // run automatically.
 });
 
 boot().catch((e) => error(e instanceof Error ? e.message : String(e)));

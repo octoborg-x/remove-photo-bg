@@ -432,9 +432,13 @@ copyrighted materials. See [LICENSE](./LICENSE) for the terms.
   several near-square eval photos (`accessory-08`, `ordinary-product-08`,
   `thin-structure-04`) likewise segmented to nothing. Pre-processing now fits
   the image into the square preserving its aspect ratio (letterbox) and crops
-  the border off the mask before upscaling. On ordinary photos the two
-  agree to ~0.99 IoU, so this only rescues the degenerate cases; the logo now
-  comes back at ~59% opaque. See `image-preprocess.ts` / `mask-postprocess.ts`.
+  the border off the mask before upscaling. The letterbox border is filled by
+  **replicating the content's edge pixels** outward rather than a flat colour: a
+  flat (black) border made the model flood the mask on wide images (the 1005×260
+  logo came back ~56% foreground with an opaque backdrop at ~249/255; edge
+  replication gives ~24% with a clean 0-alpha backdrop). On ordinary photos the
+  two agree to ~0.99 IoU, so this only affects the degenerate cases. See
+  `image-preprocess.ts` / `mask-postprocess.ts`.
 - **Known quality limitation (measured):** the 512 input reproduces the 1024
   mask at IoU 0.992 with sub-1/255 mean difference, but its edge is genuinely
   softer — the transition band at the subject boundary is ~1.5–1.8× wider

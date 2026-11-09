@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
+import tailwindcss from '@tailwindcss/vite';
 import { contentSecurityPolicy } from './scripts/write-headers.mjs';
 
 // Stamped into the page at build/serve time so a stale document is obvious: the
@@ -15,6 +16,7 @@ export default defineConfig(({ mode }) => {
   base: './',
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   plugins: [
+    tailwindcss(),
     {
       name: 'build-stamp',
       transformIndexHtml(html) {
@@ -27,15 +29,9 @@ export default defineConfig(({ mode }) => {
   },
   server: {
     // Expose vite dev server so the page (and chrome headless) can reach it.
-    host: true,
-    port: 5173,
-    // The public work-host proxy URLs reverse-proxy to these ports; Vite
-    // otherwise rejects requests whose Host header is not an allowlisted name.
-    allowedHosts: [
-      'work-1-aybthnpldbthpfgf.prod-runtime.all-hands.dev',
-      'work-2-aybthnpldbthpfgf.prod-runtime.all-hands.dev',
-      '.prod-runtime.all-hands.dev',
-    ],
+    host: '0.0.0.0',
+    port: 3000,
+    allowedHosts: true,
     headers: {
       // Cross-origin isolation enables SharedArrayBuffer, which onnxruntime-web
       // requires for its threaded WASM runtime (SIMD + multithreading).

@@ -59,11 +59,10 @@ export function contentSecurityPolicy(assetBase) {
     `connect-src ${connect}`,
     // onnxruntime-web spawns pthread workers and a blob: worker from the origin.
     "worker-src 'self' blob:",
-    "font-src 'self'",
+    "font-src 'self' data:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
     "manifest-src 'self'",
   ].join('; ');
 }

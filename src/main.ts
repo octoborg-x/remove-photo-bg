@@ -1343,6 +1343,17 @@ log('Detecting GPU…');
 // the model, so wire them immediately rather than waiting on boot().
 initCompareSliders();
 
+// Header brand: full lockup at the top of the page, figure-only mark once the
+// page is scrolled, so the sticky header stays compact. data-collapsed drives
+// the swap in CSS (index.html), so no per-scroll class churn on the elements.
+const brandLink = document.getElementById('brandLink');
+function updateBrandCollapse(): void {
+  if (!brandLink) return;
+  brandLink.dataset.collapsed = window.scrollY > 24 ? 'true' : 'false';
+}
+window.addEventListener('scroll', updateBrandCollapse, { passive: true });
+updateBrandCollapse();
+
 async function boot(): Promise<void> {
   // GPU gate first: it decides which provider is offered and the default.
   gpuState = await detectWebGpu();

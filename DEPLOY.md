@@ -17,6 +17,34 @@ The Hugging Face base URL is:
 https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve/main/
 ```
 
+## Branch deployments and domains
+
+Deployments are limited to the three release branches. `vercel.json` sets
+`git.deploymentEnabled` so that only `main`, `staging`, and `production` build;
+every other branch (including feature branches and `develop`) is skipped, so a
+pull request does **not** create a preview deployment.
+
+| Branch | Environment | URL |
+|---|---|---|
+| `production` | Production | https://remove-photo-bg.vercel.app |
+| `main` | Preview | https://main-remove-photo-bg.vercel.app |
+| `staging` | Preview | https://staging-remove-photo-bg.vercel.app |
+| `production` | Preview | https://production-remove-photo-bg.vercel.app |
+
+The production domain (`remove-photo-bg.vercel.app`) is the project's primary
+domain and always serves the latest successful `production` deployment. Each
+branch also gets a stable preview alias named `<branch>-remove-photo-bg.vercel.app`.
+Set these up once in the Vercel dashboard (Project → Settings → Domains): add
+`remove-photo-bg.vercel.app` as the production domain, and add each
+`<branch>-remove-photo-bg.vercel.app` alias with its matching Git branch.
+`vercel domains add <domain> <project>` and `vercel alias set <deployment> <domain>`
+do the same from the CLI.
+
+> **Note:** the `git.deploymentEnabled` keys are branch globs (`minimatch`). A
+> branch matches `*` only when it has no slash, so both `*` and `**` are set to
+> `false` to also disable slash-named branches; the three explicit `true` entries
+> re-enable the release branches.
+
 ## Vercel setup
 
 1. Import `octoborg-x/remove-photo-bg` into Vercel from GitHub.
@@ -28,7 +56,9 @@ https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve/main/
    VITE_ASSET_BASE=https://huggingface.co/spaces/Octoborg/remove-photo-bg/resolve/main/
    ```
 
-5. Deploy. The build prepares the WebGPU-capable runtime without downloading
+5. Add the domains from the table above (production domain plus one branch
+   alias per release branch).
+6. Deploy. The build prepares the WebGPU-capable runtime without downloading
    model weights, builds the application, copies legal documents, and removes
    any local `dist/models/` directory.
 

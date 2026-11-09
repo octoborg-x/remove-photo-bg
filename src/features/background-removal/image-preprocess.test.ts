@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { letterboxRect, MODEL_SIZE } from './image-preprocess';
+import { letterboxRect, replicateEdges, MODEL_SIZE } from './image-preprocess';
 
 describe('letterboxRect', () => {
   it('fills the square exactly for a square source', () => {
@@ -61,5 +61,41 @@ describe('letterboxRect', () => {
     const r = letterboxRect(10000, 1);
     expect(r.width).toBe(MODEL_SIZE);
     expect(r.height).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('replicateEdges', () => {
+  // 2x2 content: distinct colour per corner so we can tell which edge won.
+  const content = new Uint8ClampedArray([
+    10, 0, 0, 255, /* TL */ 20, 0, 0, 255, /* TR */
+    30, 0, 0, 255, /* BL */ 40, 0, 0, 255, /* BR */
+  ]);
+
+  it('copies the content into its rect unchanged', () => {
+    const rect = { x: 1, y: 1, width: 2, height: 2 };
+    const out = replicateEdges(content, rect, 4, 4);
+    for (let y = 0; y < 2; y++) {
+      for (let x = 0; x < 2; x++) {
+        const o = ((1 + y) * 4 + (1 + x)) * 4;
+        const s = (y * 2 + x) * 4;
+        expect(out[o]).toBe(content[s]);
+      }
+    }
+  });
+
+  it('replicates edge pixels outward instead of leaving a flat border', () => {
+    // A wide content rect (2x1 at y=1) pads the top/bottom rows by clamping.
+    const wide = new Uint8ClampedArray([100, 0, 0, 255, 200, 0, 0, 255]);
+    const rect = { x: 1, y: 1, width: 2, height: 1 };
+    const out = replicateEdges(wide, rect, 4, 4);
+    const at = (x: number, y: number) => out[(y * 4 + x) * 4];
+    // Row 0 (above the content) copies the content row verbatim.
+    expect([at(1, 0), at(2, 0)]).toEqual([100, 200]);
+    // Row 3 (below) is the same, and the left/right columns clamp to the edge.
+    expect([at(1, 3), at(2, 3)]).toEqual([100, 200]);
+    expect(at(0, 1)).toBe(100); // left column = leftmost content pixel
+    expect(at(3, 1)).toBe(200); // right column = rightmost content pixel
+    // No pixel is left at the old flat fill (0,0,0,0).
+    expect(out.every((_, i) => i % 4 !== 3 || out[i] === 255)).toBe(true);
   });
 });

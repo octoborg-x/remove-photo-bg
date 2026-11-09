@@ -81,7 +81,7 @@ Current record for the model served by this project. See also
 | Purpose | Binary segmentation / background removal |
 | Input | `input_image` — float32, fixed `[1, 3, 512, 512]` (NCHW, channel-first) |
 | Input fixed vs dynamic | **Fixed 512×512** — no dynamic smaller-input fallback |
-| Normalization | Fit to 512×512 bilinear, **aspect-ratio-preserving** (letterbox, black border) → /255 → ImageNet `mean=[0.485,0.456,0.406]`, `std=[0.229,0.224,0.225]` |
+| Normalization | Fit to 512×512 bilinear, **aspect-ratio-preserving** (letterbox; border filled by **edge replication**, not a flat colour) → /255 → ImageNet `mean=[0.485,0.456,0.406]`, `std=[0.229,0.224,0.225]` |
 | Output | `output_image` — `[1, 1, 512, 512]` probabilities in `[0,1]` |
 | Activation | Sigmoid is **baked into the graph**; the output is already a probability map. Do not apply sigmoid again. |
 | Postprocessing | Crop the letterbox border off the mask, then upscale the content to original dimensions (bilinear), use as alpha over the original pixels |

@@ -13,6 +13,12 @@ Web Worker); no image pixels leave the device.
 > [`PHASE4_REPORT.md`](./PHASE4_REPORT.md). Hardware (WebGPU) tests remain
 > postponed until a GPU machine is available.
 
+## Live site
+
+**https://remove-photo-bg.vercel.app**
+
+[![SmartCutAI landing page: hero with the SmartCutAI lockup, the drag-and-drop upload panel, and before/after examples](./docs/screenshots/live-site.png)](https://remove-photo-bg.vercel.app/)
+
 ## Quick start
 
 ```bash
@@ -366,6 +372,21 @@ Deploy (one-time manual steps in the dashboard):
 
 That produces a WebGPU-capable site. Verify with the Colab T4 notebook
 (`notebooks/colab-webgpu-smoke.ipynb`).
+
+**Branch deployments.** `vercel.json` limits builds to the three release
+branches (`git.deploymentEnabled`: `main`, `staging`, `production`), so pushing
+a feature branch or opening a pull request does **not** create a preview
+deployment. Each branch keeps a stable alias:
+
+| Branch | URL |
+|---|---|
+| `production` (production domain) | https://remove-photo-bg.vercel.app |
+| `main` | https://main-remove-photo-bg.vercel.app |
+| `staging` | https://staging-remove-photo-bg.vercel.app |
+| `production` | https://production-remove-photo-bg.vercel.app |
+
+Add the production domain and the three branch aliases once under **Project →
+Settings → Domains**.
 
 See [`DEPLOY.md`](./DEPLOY.md) for the asset architecture and deployment details.
 

@@ -20,6 +20,11 @@
       code, pre, .font-mono {
         font-family: var(--font-mono);
       }
+      /* Header brand: full lockup at rest, figure-only once the page scrolls */
+      .brand-mark { display: none; }
+      #brandLink[data-collapsed='true'] .brand-lockup { display: none; }
+      #brandLink[data-collapsed='true'] .brand-mark { display: block; }
+
       /* Animated progress ring */
       .ring { display: inline-flex; width: 22px; height: 22px; flex: none; }
       .ring[hidden] { display: none; }
@@ -192,17 +197,25 @@
     <!-- Top Navigation Bar: 3-Zone Contract -->
     <header class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/80 transition-all">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-8">
-        <!-- Zone 1: Brand Wordmark -->
-        <a href="/" class="flex items-center gap-3 shrink-0 group focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-xl p-1">
+        <!-- Zone 1: Brand — full lockup at rest, figure-only once scrolled -->
+        <a
+          id="brandLink"
+          href="/"
+          data-collapsed="false"
+          aria-label="SmartCutAI home"
+          class="flex items-center shrink-0 group focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-xl p-1"
+        >
           <img
-            src="./assets/aistudio/IMG_20261108_095130_3bc68666.jpg"
-            alt="SmartCutAI emblem"
-            class="w-10 h-10 rounded-xl object-contain shadow-md border border-slate-900/10 group-hover:scale-105 transition-transform"
+            id="brandLockup"
+            src="./assets/brand/smartcutai-lockup.png"
+            alt="SmartCutAI"
+            class="brand-lockup h-9 sm:h-10 w-auto object-contain"
           />
           <img
-            src="./assets/aistudio/IMG_20261108_094816_a4475d5a.jpg"
+            id="brandMark"
+            src="./assets/brand/smartcutai-mark.png"
             alt="SmartCutAI"
-            class="h-7 sm:h-8 object-contain"
+            class="brand-mark h-9 w-9 sm:h-10 sm:w-10 object-contain rounded-xl"
           />
         </a>
 
@@ -779,12 +792,12 @@
       <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
         <div class="flex items-center gap-3">
           <img
-            src="./assets/aistudio/IMG_20261108_095130_3bc68666.jpg"
+            src="./assets/brand/smartcutai-mark.png"
             alt="SmartCutAI emblem"
             class="w-7 h-7 rounded-lg object-contain border border-slate-200"
           />
           <img
-            src="./assets/aistudio/IMG_20261108_094816_a4475d5a.jpg"
+            src="./assets/brand/smartcutai-wordmark.png"
             alt="SmartCutAI"
             class="h-5 object-contain"
           />

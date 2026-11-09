@@ -3,6 +3,15 @@
   "buildCommand": "npm run vercel:build",
   "outputDirectory": "dist",
   "framework": null,
+  "git": {
+    "deploymentEnabled": {
+      "*": false,
+      "**": false,
+      "main": true,
+      "staging": true,
+      "production": true
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",

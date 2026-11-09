@@ -54,12 +54,12 @@ export function contentSecurityPolicy(assetBase) {
     // Inline styles are set on elements by main.ts (e.g. hiding the download
     // link) and in index.html; no inline scripts are used, so script-src stays
     // otherwise strict.
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' blob: data:",
     `connect-src ${connect}`,
     // onnxruntime-web spawns pthread workers and a blob: worker from the origin.
     "worker-src 'self' blob:",
-    "font-src 'self' https://fonts.gstatic.com data:",
+    "font-src 'self' data:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

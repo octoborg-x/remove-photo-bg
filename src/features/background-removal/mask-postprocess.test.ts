@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   probabilityToMask,
+  cropLetterboxMask,
   upscaleMask,
   applyMaskAdjust,
   applyMaskToImage,
@@ -21,6 +22,31 @@ describe('probabilityToMask', () => {
 
   it('preserves length', () => {
     expect(probabilityToMask(new Float32Array(16)).length).toBe(16);
+  });
+});
+
+describe('cropLetterboxMask', () => {
+  // 4x4 input; content rect is the middle 2x2 (padding on every side).
+  const input = new Uint8ClampedArray([
+    0, 0, 0, 0,
+    0, 1, 2, 0,
+    0, 3, 4, 0,
+    0, 0, 0, 0,
+  ]);
+
+  it('extracts the content rect, discarding the padded border', () => {
+    const out = cropLetterboxMask(input, 4, { x: 1, y: 1, width: 2, height: 2 });
+    expect(Array.from(out)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('is a full copy when the rect covers the whole square', () => {
+    const out = cropLetterboxMask(input, 4, { x: 0, y: 0, width: 4, height: 4 });
+    expect(Array.from(out)).toEqual(Array.from(input));
+  });
+
+  it('handles a full-width, partial-height rect (wide image)', () => {
+    const out = cropLetterboxMask(input, 4, { x: 0, y: 1, width: 4, height: 2 });
+    expect(Array.from(out)).toEqual([0, 1, 2, 0, 0, 3, 4, 0]);
   });
 });
 

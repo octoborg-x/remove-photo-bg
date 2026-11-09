@@ -426,6 +426,15 @@ copyrighted materials. See [LICENSE](./LICENSE) for the terms.
   The shipped model is therefore the same official `BiRefNet_lite` backbone
   exported at a fixed 512×512 input, which peaks at ~1.1 GB and runs on both
   WebGPU and WASM.
+- **Extreme aspect ratios used to return an empty mask; fixed.** Stretching a
+  non-square photo into the 512×512 input collapsed the subject on some images:
+  a 1005×260 logo (≈3.9:1) came back with a peak probability of 0.0002, and
+  several near-square eval photos (`accessory-08`, `ordinary-product-08`,
+  `thin-structure-04`) likewise segmented to nothing. Pre-processing now fits
+  the image into the square preserving its aspect ratio (letterbox) and crops
+  the border off the mask before upscaling. On ordinary photos the two
+  agree to ~0.99 IoU, so this only rescues the degenerate cases; the logo now
+  comes back at ~59% opaque. See `image-preprocess.ts` / `mask-postprocess.ts`.
 - **Known quality limitation (measured):** the 512 input reproduces the 1024
   mask at IoU 0.992 with sub-1/255 mean difference, but its edge is genuinely
   softer — the transition band at the subject boundary is ~1.5–1.8× wider

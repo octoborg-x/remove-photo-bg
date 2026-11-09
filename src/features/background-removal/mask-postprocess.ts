@@ -14,6 +14,23 @@ export function probabilityToMask(prob: Float32Array): Uint8ClampedArray {
   return mask;
 }
 
+/** Crops the model-input mask down to the letterbox content rect (see
+ *  `letterboxRect`), returning the square's worth of mask that corresponds to
+ *  the image. Any mask value in the padded border is discarded, so the neutral
+ *  fill can never leak into the result. */
+export function cropLetterboxMask(
+  mask: Uint8ClampedArray,
+  inputSize: number,
+  rect: { x: number; y: number; width: number; height: number },
+): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(rect.width * rect.height);
+  for (let y = 0; y < rect.height; y++) {
+    const srcRow = (rect.y + y) * inputSize + rect.x;
+    out.set(mask.subarray(srcRow, srcRow + rect.width), y * rect.width);
+  }
+  return out;
+}
+
 export function upscaleMask(
   mask: Uint8ClampedArray,
   srcW: number,

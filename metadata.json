@@ -1,0 +1,8 @@
+{
+  "name": "Remove Photo BG",
+  "description": "Private, in-browser background remover for product photos. Download transparent PNG or white-background JPG without uploading photos.",
+  "prompt": "Remove Photo BG — private, in-browser background remover",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

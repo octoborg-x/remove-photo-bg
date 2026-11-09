@@ -213,29 +213,28 @@ try {
       jpegState.download,
     );
 
-    // The technical-details block lives in the upload step (step 1) and lists the
-    // steps in the order they ran. Its summary is the live status label.
+    // The technical-details block lives in the studio workspace and lists the
+    // steps in the order they ran. It is an always-visible status card (a div,
+    // not a collapsed disclosure), so there is no open/closed state to assert.
     const panelState = await page.evaluate(() => {
       const details = document.getElementById('techDetails');
-      const inUploadStep = !!document
-        .querySelector('section[aria-labelledby=step1Title]')
-        ?.contains(details);
+      const inStudio = !!document.getElementById('studio')?.contains(details);
       const label = document.getElementById('processingLabel')?.textContent ?? '';
       const steps = Array.from(document.querySelectorAll('#stepList li')).map((li) => ({
         text: li.textContent ?? '',
         state: li.dataset.state,
       }));
       return {
-        inUploadStep,
+        inStudio,
+        visible: details ? getComputedStyle(details).display !== 'none' : false,
         label,
-        open: details ? details.open : false,
         steps,
       };
     });
     record(
-      'technical details sits in the upload step and lists download/prepare/inference/export steps',
-      panelState.inUploadStep === true &&
-        panelState.open === false &&
+      'technical details sits in the studio workspace and lists download/prepare/inference/export steps',
+      panelState.inStudio === true &&
+        panelState.visible === true &&
         panelState.steps.length >= 4 &&
         panelState.steps.every((s) => s.state === 'done') &&
         panelState.steps.some((s) => /download/i.test(s.text)) &&

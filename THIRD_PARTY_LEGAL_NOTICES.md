@@ -108,6 +108,20 @@ review for measured numbers.
 
 ## Runtime
 
+- **Webfonts (self-hosted, redistributed).** The UI typefaces are served from
+  this origin so the page makes no third-party requests:
+  - **Plus Jakarta Sans** (sans, variable weight 200–800) and **JetBrains Mono**
+    (mono, variable weight 400–800). Both are the Google Fonts **latin** variable
+    subsets, redistributed as woff2 under `src/assets/fonts/`:
+    - `plus-jakarta-sans-latin.woff2` — 27,348 B, SHA-256 `153fc85b70298beeb1d61a5f723331649e7f23bb77302a66e61cb3e2fbdb5e79`
+    - `jetbrains-mono-latin.woff2` — 31,432 B, SHA-256 `83c005d49d8a6a50474c73a5a36ac0468076e9c4a29da7bdb14995d80560a5be`
+  - Licences: **SIL Open Font License 1.1** (both). Plus Jakarta Sans © 2020 The
+    Plus Jakarta Sans Project Authors; JetBrains Mono © 2020 The JetBrains Mono
+    Project Authors. Source: https://fonts.google.com/specimen/Plus+Jakarta+Sans
+    and https://fonts.google.com/specimen/JetBrains+Mono (verified 2026-11-08).
+  - The OFL permits redistribution of the font files; the reserved font names
+    (if any) are unmodified here because the files are redistributed verbatim.
+    Full OFL 1.1 text: https://openfontlicense.org/.
 - Package: `onnxruntime-web`
 - Version: 1.29.0 (installed, `node_modules/onnxruntime-web/package.json`)
 - Licence: MIT (`LICENSE` @ tag `v1.29.0`: "Copyright (c) Microsoft Corporation";

@@ -4,10 +4,16 @@
 //   provider buckets/persistence)
 // - sends images to the worker for inference
 // - composites the mask and renders/downloads a transparent PNG (and JPG)
-// - reports timings and the execution provider
-import { imageDataToTensor, MODEL_SIZE } from './features/background-removal/image-preprocess';
+import './fonts.css';
+import './style.css';
+import {
+  imageDataToTensor,
+  letterboxRect,
+  MODEL_SIZE,
+} from './features/background-removal/image-preprocess';
 import {
   probabilityToMask,
+  cropLetterboxMask,
   upscaleMask,
   applyMaskToImage,
   applyMaskAdjust,
@@ -793,10 +799,13 @@ async function initWorker(): Promise<void> {
       setStep('export', 'active');
       setProcessingLabel('Creating your image…', true);
       // The worker reports the model's actual input size so a per-model input
-      // change (e.g. a 384 variant) never mis-scales the mask.
+      // change (e.g. a 384 variant) never mis-scales the mask. The mask covers
+      // the letterboxed content rect inside that square (the same geometry the
+      // pre-processing used), so crop the padding away before upscaling.
       const inputSize = msg.inputSize ?? MODEL_SIZE;
-      const maskU8 = probabilityToMask(mask);
-      const upscaled = upscaleMask(maskU8, inputSize, inputSize, currentImageData.width, currentImageData.height);
+      const rect = letterboxRect(currentImageData.width, currentImageData.height, inputSize);
+      const maskU8 = cropLetterboxMask(probabilityToMask(mask), inputSize, rect);
+      const upscaled = upscaleMask(maskU8, rect.width, rect.height, currentImageData.width, currentImageData.height);
       // Apply the user's mask threshold/feather at full destination resolution
       // (the values are percentages/pixels of the *output* mask).
       const adjusted = applyMaskAdjust(
@@ -1062,6 +1071,33 @@ function bindMaskControl(input: HTMLInputElement, valueEl: Element, kind: 'thres
 
 bindMaskControl(maskThresholdInput, maskThresholdValue, 'threshold');
 bindMaskControl(maskFeatherInput, maskFeatherValue, 'feather');
+
+// Compact advanced options popover menu toggled via gear on top-left of image
+const settingsGearBtn = document.getElementById('settingsGearBtn');
+const advancedMenu = document.getElementById('advancedMenu');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+
+if (settingsGearBtn && advancedMenu) {
+  settingsGearBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isHidden = advancedMenu.hasAttribute('hidden');
+    if (isHidden) {
+      advancedMenu.removeAttribute('hidden');
+    } else {
+      advancedMenu.setAttribute('hidden', '');
+    }
+  });
+
+  closeSettingsBtn?.addEventListener('click', () => {
+    advancedMenu.setAttribute('hidden', '');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!advancedMenu.hasAttribute('hidden') && !advancedMenu.contains(e.target as Node) && e.target !== settingsGearBtn) {
+      advancedMenu.setAttribute('hidden', '');
+    }
+  });
+}
 
 type PendingRun = { resolve: (ms: number) => void; reject: (err: Error) => void };
 const pendingRuns = new Map<number, PendingRun>();

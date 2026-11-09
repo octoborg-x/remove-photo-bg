@@ -4,6 +4,7 @@
 //   provider buckets/persistence)
 // - sends images to the worker for inference
 // - composites the mask and renders/downloads a transparent PNG (and JPG)
+import './fonts.css';
 import './style.css';
 import {
   imageDataToTensor,

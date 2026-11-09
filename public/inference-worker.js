@@ -35,9 +35,11 @@ importScripts(RUNTIME === 'webgpu' ? '/wasm/ort.all.min.js' : '/wasm/ort.wasm.mi
 // worker), so `ort` is available directly. Do NOT redeclare it.
 
 ort.env.wasm.wasmPaths = '/wasm/';
-// Use all available cores for the threaded WASM build.
-if (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) {
+// Use all available cores for the threaded WASM build when SharedArrayBuffer is available.
+if (typeof SharedArrayBuffer !== 'undefined' && typeof navigator !== 'undefined' && navigator.hardwareConcurrency) {
   ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency);
+} else {
+  ort.env.wasm.numThreads = 1;
 }
 // On battery-saver laptops the default adapter is often the integrated GPU, which
 // cannot fit this model's 411 MB intermediate tensors. Ask for the discrete GPU.
@@ -270,9 +272,9 @@ async function createSession(providers) {
       });
       lastProvider = ep;
       if (ep === 'webgpu') adapterLabel = describeAdapter();
-      // Once every candidate has been tried, drop the bytes so we don't hold a
-      // second 185 MB copy in JS while ORT keeps its own (matters on low-RAM).
-      if (ep === providers[providers.length - 1]) modelBytes = null;
+      // Keep the downloaded bytes in memory: a provider switch rebuilds the
+      // session from them instead of re-fetching the model. They are freed when
+      // the model URL actually changes or on dispose.
       reportProgress('session-ready', PCT.SESSION_DONE, { detail: ep });
       return ep;
     } catch (err) {
@@ -378,13 +380,17 @@ self.onmessage = async (e) => {
   const msg = e.data;
   try {
     if (msg.kind === 'set-model') {
-      // A new set-model means a different model artefact: drop the previous
-      // session and its bytes so memory from one model never leaks into the
-      // next, and reset the load timeline/progress so the UI reports a fresh
-      // load (not a continuation of the previous model's).
+      // A new set-model usually means a different model artefact: drop the
+      // previous session so memory from one model never leaks into the next,
+      // and reset the load timeline/progress so the UI reports a fresh load
+      // (not a continuation of the previous model's). The downloaded bytes are
+      // only dropped when the URL actually changes — a provider switch re-sends
+      // the SAME url, and rebuilding the session on another execution provider
+      // only needs those bytes in memory, so re-fetching them is pure waste
+      // (the service worker would serve them from cache anyway).
       await session?.release?.();
       session = null;
-      modelBytes = null;
+      if (msg.modelUrl !== modelUrl) modelBytes = null;
       lastProvider = 'none';
       lastError = null;
       currentModelId = msg.modelId || null;
@@ -470,6 +476,7 @@ self.onmessage = async (e) => {
     if (msg.kind === 'dispose') {
       await session?.release?.();
       session = null;
+      modelBytes = null;
     }
   } catch (err) {
     post({

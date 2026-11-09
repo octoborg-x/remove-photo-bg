@@ -201,20 +201,28 @@ for (const cat of manifest.categories) {
     await p.goto(pageUrl(), { waitUntil: 'load', timeout: 180000 });
     await p.waitForFunction('window.smokeModelReady === true', { timeout: 900000 });
 
-    // Drive the genuine customer path: choose a file, then run. Re-clicking run
-    // re-runs inference on the already-loaded image, so `--runs` measures warm
-    // repeats (the first run carries the cold cost).
+    // Drive the genuine customer path: choose a file, which auto-starts the run.
+    // `runSmoke` re-runs inference on the already-loaded image, so `--runs`
+    // measures warm repeats (the first run carries the cold cost).
     const chooserPromise = p.waitForFileChooser({ timeout: 20000 });
     await p.click('#dropZone');
     (await chooserPromise).accept([file]);
-    await p.waitForFunction(() => !document.getElementById('runAll').disabled, { timeout: 30000 });
+    await p.waitForFunction(
+      () => /^(Done|Error|No output)/.test(document.getElementById('stage')?.textContent ?? ''),
+      { timeout: 900000, polling: 300 },
+    );
 
     const perRunMs = [];
     let state = null;
     let done = false;
     for (let run = 0; run < runs; run++) {
       const t0 = Date.now();
-      await p.click('#runAll');
+      if (run > 0) {
+        // Warm repeat: run again on the already-loaded image and wait on the
+        // run's own promise (the stage is already "Done", so polling it would
+        // return immediately and record a bogus timing).
+        await p.evaluate(() => window.runSmoke());
+      }
       done = await p
         .waitForFunction(
           () => /^(Done|Error|No output)/.test(document.getElementById('stage')?.textContent ?? ''),

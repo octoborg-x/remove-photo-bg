@@ -155,12 +155,10 @@ try {
     const chooser = await chooserPromise;
     await chooser.accept([resolve(ROOT, 'test-images/glass-wine.jpg')]);
 
-    // Wait for the app to decode + enable the run button.
-    await page.waitForFunction(
-      () => !document.getElementById('runAll').disabled,
-      { timeout: 30000 },
-    );
-    await page.click('#runAll');
+    // Wait for the app to decode + auto-start the run. There is no "Remove
+    // background" button any more: choosing the photo starts the run.
+    const hasRunButton = await page.evaluate(() => !!document.getElementById('runAll'));
+    record('the "Remove background" button is gone (upload starts the run)', !hasRunButton);
     await page.waitForFunction(
       () => document.querySelector('#outputBox img') !== null,
       { timeout: 600000 },
@@ -215,34 +213,39 @@ try {
       jpegState.download,
     );
 
-    // The processing panel must be visible and its step list must show the three
-    // phases (download, prepare, remove background) as completed.
+    // The technical-details block lives in the studio workspace and lists the
+    // steps in the order they ran. It is an always-visible status card (a div,
+    // not a collapsed disclosure), so there is no open/closed state to assert.
     const panelState = await page.evaluate(() => {
-      const panel = document.getElementById('processing');
-      const toggle = document.getElementById('processingToggle');
+      const details = document.getElementById('techDetails');
+      const inStudio = !!document.getElementById('studio')?.contains(details);
       const label = document.getElementById('processingLabel')?.textContent ?? '';
-      toggle?.click();
       const steps = Array.from(document.querySelectorAll('#stepList li')).map((li) => ({
         text: li.textContent ?? '',
         state: li.dataset.state,
       }));
       return {
-        hidden: panel ? panel.hidden : true,
+        inStudio,
+        visible: details ? getComputedStyle(details).display !== 'none' : false,
         label,
-        expanded: toggle?.getAttribute('aria-expanded') ?? '',
         steps,
       };
     });
     record(
-      'processing panel lists download/prepare/inference steps',
-      panelState.hidden === false &&
-        panelState.expanded === 'true' &&
-        panelState.steps.length >= 3 &&
+      'technical details sits in the studio workspace and lists download/prepare/inference/export steps',
+      panelState.inStudio === true &&
+        panelState.visible === true &&
+        panelState.steps.length >= 4 &&
         panelState.steps.every((s) => s.state === 'done') &&
         panelState.steps.some((s) => /download/i.test(s.text)) &&
         panelState.steps.some((s) => /prepare/i.test(s.text)) &&
         panelState.steps.some((s) => /remove background/i.test(s.text)),
       panelState.steps.map((s) => `${s.state}:${s.text}`).join(' | '),
+    );
+    record(
+      'the technical-details label reports the finished process',
+      /done/i.test(panelState.label),
+      panelState.label,
     );
 
     // Privacy: every request during processing is same-origin (no third party).
@@ -266,8 +269,7 @@ try {
     const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
     await page.click('#dropZone');
     (await chooserPromise).accept([pngPath]);
-    await page.waitForFunction(() => !document.getElementById('runAll').disabled, { timeout: 30000 });
-    await page.click('#runAll');
+    // Choosing the photo auto-starts the run; no button to click.
     await page.waitForFunction(() => document.querySelector('#outputBox img') !== null, { timeout: 600000 });
     const src = await page.evaluate(() => document.querySelector('#outputBox img')?.getAttribute('src') ?? '');
     record('PNG upload → transparent PNG rendered', src.startsWith('data:image/png'));

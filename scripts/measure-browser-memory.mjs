@@ -77,8 +77,8 @@ const [chooser] = await Promise.all([
 await chooser.accept([`test-images/${IMAGE}`]);
 await page.waitForFunction(() => !!document.querySelector('#inputBox img'), { timeout: 20000, polling: 250 });
 
+// The upload auto-starts the run; wait for it to finish.
 const t0 = Date.now();
-await page.evaluate(() => document.getElementById('runAll').click());
 await page.waitForFunction(
   () => /Done|Error/.test(document.getElementById('stage').textContent ?? ''),
   { timeout: 280000, polling: 500 },

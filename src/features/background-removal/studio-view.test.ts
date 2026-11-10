@@ -54,6 +54,20 @@ describe('reduceStudio tab transitions', () => {
     expect(tabEnabled(s, 'result')).toBe(true);
   });
 
+  it('the compare tab is enabled only once a result exists', () => {
+    const before = run([{ type: 'select-image' }, { type: 'run-start' }]);
+    expect(tabEnabled(before, 'compare')).toBe(false);
+
+    const after = run([{ type: 'select-image' }, { type: 'run-start' }, { type: 'result' }]);
+    expect(tabEnabled(after, 'compare')).toBe(true);
+  });
+
+  it('show-background keeps the current tab (result or compare)', () => {
+    const onResult = run([{ type: 'run-start' }, { type: 'result' }, { type: 'show-background' }]);
+    expect(onResult.tab).toBe('result');
+    expect(onResult.hasResult).toBe(true);
+  });
+
   it('selecting a new image resets to the input tab and drops the result', () => {
     const s = run([{ type: 'run-start' }, { type: 'result' }, { type: 'select-image' }]);
     expect(s.tab).toBe('input');

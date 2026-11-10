@@ -63,6 +63,23 @@ import {
 } from './features/background-removal/model-manifest';
 import { initCompareSliders } from './features/compare-slider';
 import {
+  isThemePreference,
+  nextTheme,
+  resolveTheme,
+  THEME_ATTRIBUTE,
+  THEME_STORAGE_KEY,
+  type ThemePreference,
+} from './features/theme';
+import {
+  DEFAULT_BACKGROUND,
+  PALETTE,
+  isBackgroundChoice,
+  isTransparent,
+  describeChoice,
+  formatForChoice,
+  type BackgroundChoice,
+} from './features/background-removal/background-color';
+import {
   initialStudioView,
   reduceStudio,
   scrubConsoleLine,
@@ -117,12 +134,22 @@ const tabButtons: Record<StudioTab, HTMLButtonElement> = {
   input: document.getElementById('tabInput')! as HTMLButtonElement,
   processing: document.getElementById('tabProcessing')! as HTMLButtonElement,
   result: document.getElementById('tabResult')! as HTMLButtonElement,
+  compare: document.getElementById('tabCompare')! as HTMLButtonElement,
 };
 const tabPanels: Record<StudioTab, HTMLElement> = {
   input: document.getElementById('panelInput')!,
   processing: document.getElementById('panelProcessing')!,
   result: document.getElementById('panelResult')!,
+  compare: document.getElementById('panelCompare')!,
 };
+const compareBeforeEl = document.getElementById('compareBefore')! as HTMLImageElement;
+const compareAfterEl = document.getElementById('compareAfter')! as HTMLImageElement;
+const bgPaletteEl = document.getElementById('bgPalette')!;
+const bgCustomEl = document.getElementById('bgCustom')!;
+const bgColorPicker = document.getElementById('bgColorPicker')! as HTMLInputElement;
+const bgAlphaInput = document.getElementById('bgAlpha')! as HTMLInputElement;
+const bgAlphaValue = document.getElementById('bgAlphaValue')!;
+const bgCurrentEl = document.getElementById('bgCurrent')!;
 let studioView = initialStudioView();
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
@@ -224,6 +251,58 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && studioEl.classList.contains('is-open')) closeStudio();
 });
 renderStudioView();
+
+// ——— Theme (light/dark) ———
+// The page follows the operating system by default; the toggle stores an
+// explicit override. The resolved mode is applied as `data-theme` on <html>,
+// which every colour token reads (src/style.css). The same choice is mirrored on
+// the theme controls (header + studio), so both stay in sync.
+const themeToggles = [
+  document.getElementById('themeToggle'),
+  document.getElementById('studioThemeToggle'),
+].filter((el): el is HTMLButtonElement => el instanceof HTMLButtonElement);
+
+function systemPrefersDark(): boolean {
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+}
+
+function applyTheme(preference: ThemePreference): void {
+  const resolved = resolveTheme(preference, systemPrefersDark());
+  // With no override, removing the attribute lets `color-scheme: light dark`
+  // follow the OS; an explicit choice pins it.
+  if (preference === 'system') document.documentElement.removeAttribute(THEME_ATTRIBUTE);
+  else document.documentElement.setAttribute(THEME_ATTRIBUTE, preference);
+  for (const btn of themeToggles) {
+    btn.setAttribute('aria-pressed', String(preference !== 'system'));
+    btn.title =
+      preference === 'system'
+        ? `Theme: follow system (${resolved})`
+        : `Theme: ${resolved}`;
+  }
+}
+
+function currentPreference(): ThemePreference {
+  const stored = loadPref<ThemePreference>(THEME_STORAGE_KEY, isThemePreference);
+  return stored ?? 'system';
+}
+
+function toggleTheme(): void {
+  const resolved = resolveTheme(currentPreference(), systemPrefersDark());
+  const preference = nextTheme(resolved);
+  savePref(THEME_STORAGE_KEY, preference);
+  // Animate the swap, then drop the transition class so later changes (and
+  // initial paint) are instant.
+  document.documentElement.classList.add('theme-transition');
+  applyTheme(preference);
+  window.setTimeout(() => document.documentElement.classList.remove('theme-transition'), 300);
+}
+
+for (const btn of themeToggles) btn.addEventListener('click', toggleTheme);
+applyTheme(currentPreference());
+// Keep 'system' in step with an OS theme change while no override is set.
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+  if (currentPreference() === 'system') applyTheme('system');
+});
 
 // Enable transitions only after the first frame so the initial paint uses the
 // final hidden/uncollapsed state instead of animating from the CSS defaults.
@@ -372,16 +451,15 @@ function clearOutput(): void {
   downloadImageBtn.hidden = true;
   downloadImageBtn.removeAttribute('href');
   lastResultCanvas = null;
-  lastResultPngDataUrl = null;
+  compareBeforeEl.removeAttribute('src');
+  compareAfterEl.removeAttribute('src');
   outputSection.hidden = true;
 }
 
 // ——— Export format ———
-// The composited cut-out is kept so changing the format re-encodes without
-// re-running inference; the PNG data URL is cached because it doubles as the
-// on-page preview, so it is never encoded twice.
+// The composited cut-out is kept so changing the format (or the background)
+// re-encodes without re-running inference.
 let lastResultCanvas: HTMLCanvasElement | null = null;
-let lastResultPngDataUrl: string | null = null;
 let exportFormat: ExportFormat = initExportFormat();
 
 function initExportFormat(): ExportFormat {
@@ -441,10 +519,7 @@ function applyFormatUi(): void {
   downloadImageBtn.textContent = `Download ${info.label} (${info.description})`;
   if (lastResultCanvas) {
     const { width, height } = lastResultCanvas;
-    const href =
-      exportFormat === 'png'
-        ? (lastResultPngDataUrl ?? canvasToDataUrl(lastResultCanvas, 'png'))
-        : canvasToDataUrl(lastResultCanvas, exportFormat);
+    const href = canvasToDataUrl(lastResultCanvas, exportFormat, background);
     downloadImageBtn.href = href;
     downloadImageBtn.download = `background-removed-${width}x${height}.${info.extension}`;
     downloadImageBtn.hidden = false;
@@ -453,6 +528,128 @@ function applyFormatUi(): void {
 }
 
 renderFormatOptions();
+
+// ——— Background colour ———
+// A palette of solid colours + transparent + a custom picker with an alpha
+// channel. The choice paints the result preview, feeds the export encoder and
+// repaints the compare view's cut-out, so all three stay in agreement.
+const LS_BACKGROUND = 'remove-bg:background';
+let background: BackgroundChoice = initBackground();
+
+function initBackground(): BackgroundChoice {
+  const fromUrl = urlParams.get('bg');
+  if (fromUrl) {
+    if (fromUrl === 'transparent') return DEFAULT_BACKGROUND;
+    const m = /^([0-9a-f]{6})(?:-(\d{1,3}))?$/i.exec(fromUrl);
+    if (m) {
+      const alpha = m[2] ? Number(m[2]) : 100;
+      return { kind: 'color', hex: `#${m[1].toLowerCase()}`, alpha: Math.max(0, Math.min(100, alpha)) };
+    }
+    log(`Ignoring unknown ?bg="${fromUrl}"; using a transparent background.`);
+  }
+  return loadPref<BackgroundChoice>(LS_BACKGROUND, isBackgroundChoice) ?? DEFAULT_BACKGROUND;
+}
+
+function saveBackground(): void {
+  savePref(LS_BACKGROUND, background);
+}
+
+function setCustomVisible(on: boolean): void {
+  bgCustomEl.classList.toggle('hidden', !on);
+  bgCustomEl.classList.toggle('flex', on);
+}
+
+// Re-render the result preview from the stored cut-out, composited onto the
+// chosen background. The preview is always a PNG (the only format that can show
+// real transparency); a transparent choice lets the checkerboard show through.
+function renderResultPreview(): void {
+  if (!lastResultCanvas) return;
+  outputBox.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = canvasToDataUrl(lastResultCanvas, 'png', background);
+  img.alt = 'Background removed';
+  outputBox.appendChild(img);
+  // The compare view's right-hand side shows the same composite.
+  compareAfterEl.src = img.src;
+}
+
+function updatePaletteState(): void {
+  const color = background.kind === 'color';
+  for (const btn of Array.from(bgPaletteEl.querySelectorAll<HTMLButtonElement>('button[data-bg]'))) {
+    const key = btn.dataset.bg ?? '';
+    const pressed = key === 'transparent' ? isTransparent(background) : color && key === background.hex.toLowerCase();
+    btn.setAttribute('aria-pressed', String(pressed));
+  }
+  bgCurrentEl.textContent = describeChoice(background);
+  setCustomVisible(color);
+  if (color) {
+    bgColorPicker.value = background.hex;
+    bgAlphaInput.value = String(background.alpha);
+    bgAlphaValue.textContent = `${background.alpha}%`;
+  }
+}
+
+// Apply a background choice: repaint the preview + compare, re-encode the export,
+// and switch the format to match (transparent → PNG, solid colour → JPG).
+function setBackground(choice: BackgroundChoice): void {
+  background = choice;
+  saveBackground();
+  const target = formatForChoice(background);
+  if (target !== exportFormat) setExportFormat(target);
+  renderResultPreview();
+  updatePaletteState();
+  applyFormatUi();
+  // A background change is a result-stage edit: keep the current tab.
+  studioView = reduceStudio(studioView, { type: 'show-background' });
+  renderStudioView();
+  log(`Background: ${describeChoice(background)}`);
+}
+
+function makeSwatchButton(key: string, label: string, extraClass = ''): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `paletteSwatch ${extraClass}`.trim();
+  btn.dataset.bg = key;
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+  return btn;
+}
+
+function renderPalette(): void {
+  bgPaletteEl.innerHTML = '';
+  const transparent = makeSwatchButton('transparent', 'Transparent', 'paletteSwatch--transparent');
+  transparent.addEventListener('click', () =>
+    setBackground({ kind: 'transparent', hex: background.hex, alpha: 100 }),
+  );
+  bgPaletteEl.appendChild(transparent);
+
+  for (const swatch of PALETTE) {
+    const btn = makeSwatchButton(swatch.hex.toLowerCase(), swatch.label);
+    btn.style.backgroundColor = swatch.hex;
+    btn.addEventListener('click', () => setBackground({ kind: 'color', hex: swatch.hex, alpha: 100 }));
+    bgPaletteEl.appendChild(btn);
+  }
+
+  const custom = makeSwatchButton('custom', 'Custom colour', 'paletteSwatch--custom');
+  custom.textContent = '+';
+  custom.addEventListener('click', () => {
+    setBackground({ kind: 'color', hex: bgColorPicker.value, alpha: Number(bgAlphaInput.value) });
+  });
+  bgPaletteEl.appendChild(custom);
+}
+
+bgColorPicker.addEventListener('input', () =>
+  setBackground({ kind: 'color', hex: bgColorPicker.value, alpha: Number(bgAlphaInput.value) }),
+);
+bgAlphaInput.addEventListener('input', () => {
+  // The alpha slider only refines the current colour (it has no meaning for a
+  // fully transparent background).
+  const hex = background.kind === 'color' ? background.hex : bgColorPicker.value;
+  setBackground({ kind: 'color', hex, alpha: Number(bgAlphaInput.value) });
+});
+
+renderPalette();
+updatePaletteState();
 
 function log(msg: string): void {
   // The log is rendered in the user-facing Console, so scrub internal commands
@@ -956,22 +1153,17 @@ async function initWorker(): Promise<void> {
       const ctx = canvas.getContext('2d')!;
       ctx.putImageData(out, 0, 0);
       lastResultCanvas = canvas;
-      // The PNG is both the on-page preview and the default download, so encode
-      // it once and let applyFormatUi reuse it.
-      lastResultPngDataUrl = canvasToDataUrl(canvas, 'png');
 
       let opaquePx = 0;
       for (let i = 3; i < out.data.length; i += 4) if (out.data[i] > 127) opaquePx++;
 
-      outputBox.innerHTML = '';
-      const img = document.createElement('img');
-      // The preview is always the transparent PNG so the checkerboard shows the
-      // real cut-out; the download link follows the chosen format.
-      img.src = lastResultPngDataUrl;
-      img.alt = 'Background removed';
-      outputBox.appendChild(img);
+      // The compare view pairs the original photo with the current composite.
+      compareBeforeEl.src = currentObjectUrl ?? '';
+      // Preview + compare "after" are painted from the stored cut-out onto the
+      // chosen background; the download link follows the chosen format.
+      renderResultPreview();
 
-      // One download link, re-encoded whenever the format radio changes.
+      // One download link, re-encoded whenever the format or background changes.
       applyFormatUi();
 
       outputSection.hidden = false;
@@ -981,7 +1173,7 @@ async function initWorker(): Promise<void> {
       studioResult();
       setStage('Done — download your image below.');
 
-      log(`Rendered cut-out (${width}x${height}) as ${exportFormatInfo(exportFormat).label}, ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
+      log(`Rendered cut-out (${width}x${height}) as ${exportFormatInfo(exportFormat).label} on a ${describeChoice(background)} background, ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
       // A uniform mask means the model did not segment anything; say so rather
       // than leaving the user staring at a blank (fully transparent) image.
       if (opaquePx === 0) {

@@ -90,6 +90,17 @@ function record(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
 }
 
+// The editor (drop zone, output, console) now lives inside the full-page Studio
+// layer, which the header button opens. Every scenario that drives the editor
+// must open it first.
+async function openStudio(page) {
+  await page.click('#studioLaunch');
+  await page.waitForFunction(
+    () => document.getElementById('studio')?.classList.contains('is-open') === true,
+    { timeout: 10000 },
+  );
+}
+
 async function waitForServer(url, timeoutMs = 60000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -147,6 +158,7 @@ try {
       if (!u.startsWith('data:')) requests.push(u);
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
 
     // Upload through the real file chooser (the button creates the input).
@@ -264,6 +276,7 @@ try {
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     const pngPath = resolve(ROOT, 'smoke-results/phase4-browser/input.png');
     const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
@@ -280,6 +293,7 @@ try {
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
     await page.click('#dropZone');
@@ -297,6 +311,7 @@ try {
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
     await page.click('#dropZone');
@@ -323,6 +338,7 @@ try {
       else req.continue();
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     const sawError = await page
       .waitForFunction(
         () => /Error:/.test(document.getElementById('stage')?.textContent ?? ''),
@@ -345,6 +361,7 @@ try {
       else req.continue();
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     const sawError = await page
       .waitForFunction(
         () => /manifest/i.test(document.getElementById('stage')?.textContent ?? ''),
@@ -366,6 +383,7 @@ try {
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     await page.bringToFront();
 
@@ -421,6 +439,7 @@ try {
       Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     // Make the visit cold: drop the model the earlier scenarios cached, before
     // the app boots. CDP clears Cache Storage without loading the page, so the
     // model cannot be re-cached mid-flight the way a post-load clear would allow.
@@ -430,6 +449,7 @@ try {
       storageTypes: 'cache_storage',
     });
     await page.reload({ waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     const warnShown = await page
       .waitForFunction(
         () => (document.getElementById('netWarn')?.hidden ?? true) === false,
@@ -479,6 +499,7 @@ try {
       Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     const promptShown = await page
       .waitForFunction(
         () => (document.getElementById('netWarn')?.hidden ?? true) === false,

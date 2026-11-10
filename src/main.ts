@@ -59,6 +59,14 @@ import {
   resolveModelParam,
 } from './features/background-removal/model-manifest';
 import { initCompareSliders } from './features/compare-slider';
+import {
+  initialStudioView,
+  reduceStudio,
+  scrubConsoleLine,
+  STUDIO_TABS,
+  tabEnabled,
+  type StudioTab,
+} from './features/background-removal/studio-view';
 import type {
   LoadStage,
   ModelManifestEntry,
@@ -70,9 +78,6 @@ declare const __BUILD_ID__: string;
 
 const stageEl = document.getElementById('stage')!;
 const logEl = document.getElementById('log')! as HTMLPreElement;
-const inputBox = document.getElementById('inputBox')!;
-const procSurface = document.getElementById('procSurface')!;
-const procShimmer = document.getElementById('procShimmer')!;
 const outputBox = document.getElementById('outputBox')!;
 const outputSection = document.getElementById('outputSection')!;
 const modelNameEl = document.getElementById('modelName')!;
@@ -99,10 +104,127 @@ const netWarnConfirm = document.getElementById('netWarnConfirm')! as HTMLButtonE
 const netWarnDismiss = document.getElementById('netWarnDismiss')! as HTMLButtonElement;
 const toastHost = document.getElementById('toastHost')!;
 
+// ——— Studio layer, editor tabs, processing progress ———
+const studioEl = document.getElementById('studio')!;
+const studioLaunchBtn = document.getElementById('studioLaunch')! as HTMLButtonElement;
+const studioCloseBtn = document.getElementById('studioClose')! as HTMLButtonElement;
+const procPctEl = document.getElementById('procPct')!;
+const procStageLabelEl = document.getElementById('procStageLabel')!;
+const tabButtons: Record<StudioTab, HTMLButtonElement> = {
+  input: document.getElementById('tabInput')! as HTMLButtonElement,
+  processing: document.getElementById('tabProcessing')! as HTMLButtonElement,
+  result: document.getElementById('tabResult')! as HTMLButtonElement,
+};
+const tabPanels: Record<StudioTab, HTMLElement> = {
+  input: document.getElementById('panelInput')!,
+  processing: document.getElementById('panelProcessing')!,
+  result: document.getElementById('panelResult')!,
+};
+let studioView = initialStudioView();
+
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
 // markup, so a changed limit never leaves stale copy on the page.
 limitBytesEl.textContent = `${Math.round(DEFAULT_UPLOAD_LIMITS.maxBytes / 1048576)} MB`;
 limitSideEl.textContent = String(DEFAULT_UPLOAD_LIMITS.maxLongestSide);
+
+// ——— Studio layer + editor tabs ———
+// The studio opens as a full-page layer (its own top bar + workspace) launched
+// from the header. The editor shows exactly one tab: input by default, the
+// animated processing wallpaper while running, and the result when finished.
+function renderStudioView(): void {
+  for (const tab of STUDIO_TABS) {
+    const selected = studioView.tab === tab;
+    tabButtons[tab].setAttribute('aria-selected', String(selected));
+    tabButtons[tab].disabled = !tabEnabled(studioView, tab) && !selected;
+    tabPanels[tab].hidden = !selected;
+  }
+  if (studioView.percent === null) {
+    procPctEl.textContent = '—';
+  } else {
+    procPctEl.textContent = `${studioView.percent}%`;
+  }
+}
+
+function setStudioTab(tab: StudioTab): void {
+  if (!tabEnabled(studioView, tab)) return;
+  studioView = { ...studioView, tab };
+  renderStudioView();
+}
+
+function studioSelectImage(): void {
+  studioView = reduceStudio(studioView, { type: 'select-image' });
+  renderStudioView();
+}
+
+function studioRunStart(): void {
+  studioView = reduceStudio(studioView, { type: 'run-start' });
+  renderStudioView();
+}
+
+function studioProgress(percent: number | null): void {
+  studioView = reduceStudio(studioView, { type: 'progress', percent });
+  renderStudioView();
+}
+
+function studioResult(): void {
+  studioView = reduceStudio(studioView, { type: 'result' });
+  renderStudioView();
+}
+
+function studioError(): void {
+  studioView = reduceStudio(studioView, { type: 'error' });
+  renderStudioView();
+}
+
+// The studio covers the page, so everything behind it must leave the tab order
+// and the accessibility tree. Walking up from the studio and inerting each
+// ancestor's siblings covers the whole page (header, footer, other sections)
+// without a wrapper element.
+function setBackgroundInert(on: boolean): void {
+  let node: HTMLElement = studioEl;
+  while (node.parentElement) {
+    for (const sibling of Array.from(node.parentElement.children)) {
+      if (sibling !== node) (sibling as HTMLElement).inert = on;
+    }
+    node = node.parentElement;
+  }
+}
+
+function openStudio(): void {
+  studioEl.classList.add('is-open');
+  studioEl.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('studio-open');
+  setBackgroundInert(true);
+  studioEl.scrollTop = 0;
+  renderStudioView();
+  (document.activeElement as HTMLElement | null)?.blur();
+  studioCloseBtn.focus();
+}
+
+function closeStudio(): void {
+  studioEl.classList.remove('is-open');
+  studioEl.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('studio-open');
+  setBackgroundInert(false);
+  studioLaunchBtn.focus();
+}
+
+studioLaunchBtn.addEventListener('click', openStudio);
+studioCloseBtn.addEventListener('click', closeStudio);
+document.querySelectorAll<HTMLElement>('[data-studio-launch]').forEach((btn) => {
+  btn.addEventListener('click', openStudio);
+});
+for (const tab of STUDIO_TABS) {
+  tabButtons[tab].addEventListener('click', () => setStudioTab(tab));
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && studioEl.classList.contains('is-open')) closeStudio();
+});
+renderStudioView();
+
+// Enable transitions only after the first frame so the initial paint uses the
+// final hidden/uncollapsed state instead of animating from the CSS defaults.
+requestAnimationFrame(() => document.documentElement.classList.add('ui-ready'));
 
 // ——— Floating notifications ———
 // Top-left, fixed, stacked vertically. Each dismisses itself after 10 s and has a
@@ -330,7 +452,10 @@ function applyFormatUi(): void {
 renderFormatOptions();
 
 function log(msg: string): void {
-  logEl.textContent += msg + '\n';
+  // The log is rendered in the user-facing Console, so scrub internal commands
+  // and private URLs before they reach the DOM (see studio-view.ts).
+  logEl.textContent += scrubConsoleLine(msg) + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
 }
 
 function setStage(s: string): void {
@@ -401,7 +526,7 @@ function showRecovery(kind: ErrorKind, message: string): void {
     case 'worker':
       text =
         'The background-removal engine could not start. Reload the page; if it keeps ' +
-        'failing, check the Technical details above for the exact error.';
+        'failing, open Technical details in the Console for the exact error.';
       primaryLabel = 'Reload page';
       primaryRun = () => location.reload();
       break;
@@ -414,7 +539,7 @@ function showRecovery(kind: ErrorKind, message: string): void {
 
   const detail = document.createElement('p');
   detail.className = 'hint';
-  detail.textContent = message;
+  detail.textContent = scrubConsoleLine(message);
   recoveryEl.appendChild(detail);
 
   const primary = document.createElement('button');
@@ -549,11 +674,6 @@ function setProcessingLabel(label: string, working: boolean): void {
   processingLabel.classList.toggle('working', working);
 }
 
-// The shimmer overlay marks "the model is working on this image".
-function setShimmer(on: boolean): void {
-  procShimmer.hidden = !on;
-}
-
 const OOM_PATTERN = /bad_alloc|out of memory|outofmemory|allocation failed|allocation error/i;
 const DOWNLOAD_PATTERN =
   /fetch|network|failed to load|download|load failed|404|403|timeout|timed out|abort|sha|checksum|integrity|offline/i;
@@ -593,12 +713,11 @@ function describeError(msg: string): string {
   );
 }
 
-function showInputImage(img: HTMLImageElement): void {
-  inputBox.innerHTML = '';
-  // Append the already-decoded element itself. Cloning it would create a new
-  // element that has to re-fetch the (possibly revoked) blob: URL and renders broken.
-  inputBox.appendChild(img);
-  procSurface.hidden = false;
+function showInputImage(_img: HTMLImageElement): void {
+  // The editor does not display the selected image: the input tab keeps the drop
+  // zone, and the processing tab shows an animated wallpaper instead. Kept as a
+  // no-op hook so the load flow reads the same and the decoded image stays
+  // available for inference (see loadImageFromFile).
 }
 
 async function loadImageFromFile(file: File): Promise<void> {
@@ -643,6 +762,7 @@ async function loadImageFromFile(file: File): Promise<void> {
   // not wipe the step list while the model is still loading: keep the download
   // step active so the panel keeps showing the load in progress.
   clearOutput();
+  studioSelectImage();
   hideRecovery();
   if (!modelLoadInFlight) {
     resetSteps();
@@ -720,7 +840,7 @@ async function initWorker(): Promise<void> {
   onAssetCacheMessage((msg) => {
     if (msg.kind === 'asset-cached') log(`Cached for next visit: ${new URL(msg.url).pathname}`);
   });
-  if (ASSET_BASE) log(`Assets served from: ${ASSET_BASE}`);
+  if (ASSET_BASE) log('Heavy assets are served from the configured asset host.');
 
   // Classic worker (plain JS in /public) so onnxruntime-web's wasm loaders are
   // fetched as static files instead of being transformed by Vite. The runtime
@@ -843,7 +963,7 @@ async function initWorker(): Promise<void> {
 
       setStep('export', 'done');
       setProcessingLabel('Done — your image is ready', false);
-      setShimmer(false);
+      studioResult();
       setStage('Done — download your image below.');
 
       log(`Rendered cut-out (${width}x${height}) as ${exportFormatInfo(exportFormat).label}, ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
@@ -855,7 +975,7 @@ async function initWorker(): Promise<void> {
       // caller reports them once. Anything else is surfaced here.
       if (msg.runId !== undefined) failPendingRuns(new Error(msg.message));
       else error(msg.message, msg.fatal ? classifyError(msg.message) : 'generic');
-      setShimmer(false);
+      studioError();
       if (msg.fatal) {
         settleModel(msg.message);
         setSelectorsDisabled(false);
@@ -1220,11 +1340,11 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
   }
   hideRecovery();
   clearOutput();
-  setShimmer(true);
+  studioRunStart();
   try {
     await waitForModel();
   } catch (e) {
-    setShimmer(false);
+    studioError();
     error(e instanceof Error ? e.message : String(e), 'download');
     return null;
   }
@@ -1234,7 +1354,7 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
       await runOneInference();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      setShimmer(false);
+      studioError();
       error(message, classifyError(message));
       return null;
     }
@@ -1301,6 +1421,8 @@ function updateLoadProgress(msg: {
     if (msg.stage !== 'downloaded') {
       setProcessingLabel(`Downloading ${selectedModel?.label ?? 'model'} — ${pct}%`, true);
     }
+    studioProgress(msg.stage === 'cache-check' ? null : pct);
+    procStageLabelEl.textContent = 'Downloading model';
   } else {
     // Everything else (runtime, session creation) is not a measurable
     // percentage, so the ring spins indeterminately rather than lying.
@@ -1308,6 +1430,8 @@ function updateLoadProgress(msg: {
     setStep('download', 'done');
     setStep('prepare', 'active', msg.detail ?? '');
     setProcessingLabel(PHASE_LABELS[phase] + '…', true);
+    studioProgress(null);
+    procStageLabelEl.textContent = PHASE_LABELS[phase];
   }
 
   if (msg.stage !== lastLoadStage) {
@@ -1344,14 +1468,25 @@ log('Detecting GPU…');
 initCompareSliders();
 
 // Header brand: full lockup at the top of the page, figure-only mark once the
-// page is scrolled, so the sticky header stays compact. data-collapsed drives
-// the swap in CSS (index.html), so no per-scroll class churn on the elements.
+// page is scrolled OR the browser's system bar (mobile address bar) is showing,
+// so the sticky header stays compact. data-collapsed drives the crossfade in
+// CSS (src/style.css), so there is no per-scroll class churn on the elements.
 const brandLink = document.getElementById('brandLink');
+// The system bar hiding/showing changes the visual viewport height (not the
+// layout viewport). Remember the tallest height seen; a drop below it means the
+// bar is back on screen.
+let maxViewportHeight = window.visualViewport?.height ?? window.innerHeight;
 function updateBrandCollapse(): void {
   if (!brandLink) return;
-  brandLink.dataset.collapsed = window.scrollY > 24 ? 'true' : 'false';
+  const vv = window.visualViewport;
+  const height = vv?.height ?? window.innerHeight;
+  maxViewportHeight = Math.max(maxViewportHeight, height);
+  const barShowing = height < maxViewportHeight - 24;
+  brandLink.dataset.collapsed = window.scrollY > 24 || barShowing ? 'true' : 'false';
 }
 window.addEventListener('scroll', updateBrandCollapse, { passive: true });
+window.visualViewport?.addEventListener('resize', updateBrandCollapse, { passive: true });
+window.addEventListener('resize', updateBrandCollapse, { passive: true });
 updateBrandCollapse();
 
 async function boot(): Promise<void> {
@@ -1374,7 +1509,7 @@ async function boot(): Promise<void> {
     log(`Model manifest: ${models.length} model(s) — ${models.map((m) => m.id).join(', ')}`);
   } catch (e) {
     error(e instanceof Error ? e.message : String(e));
-    showError('Model manifest could not be loaded. Run "npm run fetch-models" and reload.');
+    showError('Model manifest could not be loaded. The model files are missing from this deployment; reload once they are available.');
     return;
   }
 
@@ -1397,7 +1532,7 @@ async function boot(): Promise<void> {
   log(`Model default: ${selectedModel.id}`);
 
   await initWorker();
-  log('If the model is not downloaded, run: npm run fetch-models');
+  log('Select a photo to download the model and remove its background.');
 
   // Decide whether to confirm before the (large) first download. Wi-Fi and
   // unknown/desktop connections load straight away; a cellular or data-saver

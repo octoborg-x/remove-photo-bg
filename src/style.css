@@ -10,138 +10,6 @@
   }
 }
 
-/* ChatGPT image editor animated waiting/processing background */
-@keyframes chatgptAuroraFlow {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-@keyframes chatgptOrbFloat1 {
-  0%, 100% {
-    transform: translate(0px, 0px) scale(1);
-    opacity: 0.7;
-  }
-  33% {
-    transform: translate(30px, -20px) scale(1.15);
-    opacity: 0.9;
-  }
-  66% {
-    transform: translate(-20px, 25px) scale(0.9);
-    opacity: 0.75;
-  }
-}
-
-@keyframes chatgptOrbFloat2 {
-  0%, 100% {
-    transform: translate(0px, 0px) scale(1);
-    opacity: 0.65;
-  }
-  33% {
-    transform: translate(-35px, 20px) scale(1.1);
-    opacity: 0.85;
-  }
-  66% {
-    transform: translate(25px, -30px) scale(0.95);
-    opacity: 0.7;
-  }
-}
-
-@keyframes pulseGlowRing {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(99, 102, 241, 0.35), inset 0 0 15px rgba(6, 182, 212, 0.2);
-    border-color: rgba(99, 102, 241, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 38px rgba(139, 92, 246, 0.55), inset 0 0 25px rgba(59, 130, 246, 0.35);
-    border-color: rgba(139, 92, 246, 0.7);
-  }
-}
-
-@keyframes shimmerSweep {
-  from {
-    background-position: 200% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
-}
-
-@keyframes ringSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Studio Processing Surface with ChatGPT Editor Style */
-.chatgpt-processing-surface {
-  position: relative;
-  overflow: hidden;
-  border-radius: 1.25rem;
-  background: #0f172a;
-  box-shadow: 0 20px 45px -10px rgba(15, 23, 42, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  min-height: 320px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: pulseGlowRing 3s ease-in-out infinite;
-}
-
-.chatgpt-aurora-bg {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  background: radial-gradient(circle at 50% 50%, #1e1b4b 0%, #0f172a 100%);
-}
-
-.chatgpt-orb-1 {
-  position: absolute;
-  top: -20%;
-  left: 10%;
-  width: 70%;
-  height: 70%;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.45) 0%, rgba(59, 130, 246, 0.2) 60%, transparent 80%);
-  filter: blur(50px);
-  animation: chatgptOrbFloat1 8s ease-in-out infinite;
-}
-
-.chatgpt-orb-2 {
-  position: absolute;
-  bottom: -20%;
-  right: 10%;
-  width: 75%;
-  height: 75%;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.45) 0%, rgba(236, 72, 153, 0.2) 60%, transparent 80%);
-  filter: blur(55px);
-  animation: chatgptOrbFloat2 9s ease-in-out infinite;
-}
-
-.chatgpt-shimmer-sweep {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    110deg,
-    transparent 15%,
-    rgba(255, 255, 255, 0.08) 35%,
-    rgba(255, 255, 255, 0.2) 50%,
-    rgba(255, 255, 255, 0.08) 65%,
-    transparent 85%
-  );
-  background-size: 200% 100%;
-  animation: shimmerSweep 2.2s linear infinite;
-  pointer-events: none;
-}
-
 /* Transparency Checkerboard */
 .checkerboard-pattern {
   background-color: #ffffff;
@@ -158,3 +26,215 @@
 .compare-clip {
   clip-path: inset(0 0 0 var(--pos, 50%));
 }
+
+/* ——— Header brand: crossfade between the full lockup and the figure-only mark ———
+   Both images are stacked in the same grid cell and sized to the SAME height, so
+   the collapsed mark is exactly as tall as the figure inside the wide lockup and
+   the swap is a pure opacity crossfade (no size jump). */
+.brandStack {
+  display: grid;
+  align-items: center;
+  /* The tall lockup sets the row height; the mark centres within it. */
+  grid-template-areas: 'brand';
+}
+.brandStack > * {
+  grid-area: brand;
+  justify-self: start;
+  height: var(--brand-h, 2.5rem);
+  width: auto;
+  object-fit: contain;
+  will-change: opacity;
+}
+/* Transitions are enabled only after the first frame (html.ui-ready): applying
+   them from the initial paint would animate the default opacity (1) down to the
+   target, flashing the mark over the lockup on load. */
+html.ui-ready .brandStack > * {
+  transition: opacity 0.4s ease-in-out;
+}
+.brand-mark {
+  opacity: 0;
+}
+/* When collapsed, the wordmark fades out and the mark fades in. */
+#brandLink[data-collapsed='true'] .brand-lockup {
+  opacity: 0;
+}
+#brandLink[data-collapsed='true'] .brand-mark {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.ui-ready .brandStack > * {
+    transition: none;
+  }
+}
+
+/* Header elements animate in one after another rather than in a single frame. */
+@keyframes headerRiseIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.header-stagger > * {
+  animation: headerRiseIn 0.45s ease-out both;
+}
+.header-stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.header-stagger > *:nth-child(2) { animation-delay: 0.12s; }
+.header-stagger > *:nth-child(3) { animation-delay: 0.22s; }
+@media (prefers-reduced-motion: reduce) {
+  .header-stagger > * {
+    animation: none;
+  }
+}
+
+/* ——— Studio overlay layer ———
+   Launched from the header, it covers the whole page with its own top bar and
+   the editor/console workspace. The page underneath is hidden from view (and
+   from the tab order) while the layer is open. */
+.studio-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-page);
+  overflow-y: auto;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+}
+/* Transition only after the first frame, so the hidden state does not animate in
+   from the default (visible) on load. */
+html.ui-ready .studio-layer {
+  transition: opacity 0.28s ease-in-out, transform 0.28s ease-in-out, visibility 0s linear 0.28s;
+}
+.studio-layer.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+html.ui-ready .studio-layer.is-open {
+  transition: opacity 0.28s ease-in-out, transform 0.28s ease-in-out;
+}
+body.studio-open {
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.ui-ready .studio-layer,
+  html.ui-ready .studio-layer.is-open {
+    transition: opacity 0.01s linear;
+    transform: none;
+  }
+}
+
+/* ——— Editor tabs ——— */
+.editorTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+.editorTab[aria-selected='true'] {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.editorTab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.editorPanel[hidden] {
+  display: none;
+}
+
+/* ——— Processing tab: animated wallpaper + progress ——— */
+.procWallpaper {
+  position: relative;
+  min-height: 320px;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, #1e1b4b 0%, #0f172a 100%);
+}
+/* Moving wave bands */
+.procWaves {
+  position: absolute;
+  inset: -40% -20%;
+  background:
+    repeating-linear-gradient(115deg, rgba(56, 189, 248, 0.16) 0 2px, transparent 2px 26px),
+    repeating-linear-gradient(65deg, rgba(168, 85, 247, 0.14) 0 2px, transparent 2px 34px);
+  background-size: 220% 220%;
+  animation: procWaveDrift 9s ease-in-out infinite;
+  filter: blur(0.5px);
+}
+/* Drifting pixel points */
+.procPixels {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(rgba(125, 211, 252, 0.9) 1.4px, transparent 1.6px),
+    radial-gradient(rgba(196, 181, 253, 0.75) 1.2px, transparent 1.5px);
+  background-size: 42px 42px, 66px 66px;
+  background-position: 0 0, 18px 24px;
+  animation: procPixelDrift 6s linear infinite;
+  opacity: 0.75;
+}
+@keyframes procWaveDrift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes procPixelDrift {
+  from { background-position: 0 0, 18px 24px; }
+  to { background-position: 42px 42px, 84px 90px; }
+}
+.procProgress {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+  color: #e2e8f0;
+  font-weight: 700;
+}
+.procProgressPct {
+  font-size: 1.35rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.procProgressLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+@media (prefers-reduced-motion: reduce) {
+  .procWaves,
+  .procPixels {
+    animation: none;
+  }
+}
+
+/* Console panel */
+.consolePanel {
+  background: #0f172a;
+  color: #cbd5e1;
+  border-radius: 1rem;
+}
+

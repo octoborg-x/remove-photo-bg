@@ -530,7 +530,9 @@
 
   /* ——— Header brand crossfade (full lockup ↔ figure-only mark) ———
      Both images sit in the same grid cell, sized to the SAME height, so the
-     swap is a pure opacity crossfade with no size jump. */
+     swap is a pure opacity crossfade with no size jump. The full lockup has a
+     light-ink variant for dark mode; the two lockups crossfade with the theme
+     and share the mark swap, so scrolling still collapses to the figure only. */
   .brandStack {
     display: grid;
     align-items: center;
@@ -549,7 +551,8 @@
   html.ui-ready .brandStack > * {
     transition: opacity 0.4s ease-in-out;
   }
-  .brand-mark {
+  .brand-mark,
+  .brand-lockup-light {
     opacity: 0;
   }
   #brandLink[data-collapsed='true'] .brand-lockup {
@@ -557,6 +560,29 @@
   }
   #brandLink[data-collapsed='true'] .brand-mark {
     opacity: 1;
+  }
+  /* Dark mode: show the light-ink lockup instead of the dark one. */
+  [data-theme='dark'] .brand-lockup {
+    opacity: 0;
+  }
+  [data-theme='dark'] .brand-lockup-light {
+    opacity: 1;
+  }
+  /* Collapsed always wins, in both themes. */
+  #brandLink[data-collapsed='true'] .brand-lockup-light {
+    opacity: 0;
+  }
+  /* No explicit override yet: follow the operating system. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .brand-lockup {
+      opacity: 0;
+    }
+    :root:not([data-theme='light']) .brand-lockup-light {
+      opacity: 1;
+    }
+    :root:not([data-theme='light']) #brandLink[data-collapsed='true'] .brand-lockup-light {
+      opacity: 0;
+    }
   }
 
   /* Header elements animate in one after another rather than in one frame. */

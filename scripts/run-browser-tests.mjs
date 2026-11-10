@@ -299,6 +299,41 @@ try {
       `${themeAfter.attr} (${themeBefore.bg} → ${themeAfter.bg})`,
     );
 
+    // The header brand swaps to the light-ink lockup in dark mode (and back),
+    // then collapses to the figure-only mark on scroll in either theme. The
+    // crossfade is transitioned, so read each state after it settles.
+    const brandState = () =>
+      page.evaluate(() => {
+        const op = (id) => Number(getComputedStyle(document.getElementById(id)).opacity);
+        return { lockup: op('brandLockup'), light: op('brandLockupLight'), mark: op('brandMark') };
+      });
+    const setTheme = (t) =>
+      page.evaluate((theme) => {
+        if (theme === null) document.documentElement.removeAttribute('data-theme');
+        else document.documentElement.setAttribute('data-theme', theme);
+      }, t);
+    await setTheme('light');
+    await sleep(500);
+    const brandLight = await brandState();
+    await setTheme('dark');
+    await sleep(500);
+    const brandDark = await brandState();
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await sleep(500);
+    const brandDarkScrolled = await brandState();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await setTheme(null);
+    record(
+      'the brand swaps to the light-ink lockup in dark mode and the mark on scroll',
+      brandLight.lockup === 1 &&
+        brandLight.light === 0 &&
+        brandDark.lockup === 0 &&
+        brandDark.light === 1 &&
+        brandDarkScrolled.mark === 1 &&
+        brandDarkScrolled.light === 0,
+      `light ${brandLight.lockup}/${brandLight.light} → dark ${brandDark.lockup}/${brandDark.light} → scrolled mark ${brandDarkScrolled.mark}`,
+    );
+
     // The technical-details block lives in the studio workspace and lists the
     // steps in the order they ran. It is an always-visible status card (a div,
     // not a collapsed disclosure), so there is no open/closed state to assert.

@@ -37,6 +37,15 @@ describe('self-hosted assets (no third-party resource loads)', () => {
     expect(bootstrap).not.toMatch(/https?:\/\//);
   });
 
+  it('the brand lockups (dark + light for dark mode) are self-hosted', () => {
+    // The header shows a light-ink lockup in dark mode; both variants must be
+    // local files so the no-third-party-request guarantee holds.
+    for (const asset of ['smartcutai-lockup.png', 'smartcutai-lockup-light.png', 'smartcutai-mark.png']) {
+      expect(existsSync(resolve(ROOT, 'public/assets/brand', asset))).toBe(true);
+      expect(html).toContain(`./assets/brand/${asset}`);
+    }
+  });
+
   it('the CSP keeps font/style/connect origins same-origin', () => {
     const headers = read('scripts/write-headers.mjs');
     expect(headers).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);

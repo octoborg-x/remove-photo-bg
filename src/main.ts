@@ -1571,7 +1571,7 @@ function autoLoadModel(): void {
 // is available — without waiting for the user to pick a photo. A tick is a no-op
 // unless the connection is unmetered and the model is still absent, so a metered
 // link, a cached model, or an in-flight download all leave it alone.
-const MODEL_FETCH_INTERVAL_MS = 30000;
+const MODEL_FETCH_INTERVAL_MS = 2000;
 let modelFetchTimer: number | null = null;
 
 function startModelFetchLoop(): void {

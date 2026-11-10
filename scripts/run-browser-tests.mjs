@@ -557,7 +557,7 @@ try {
     await sleep(2000);
     const startedWhileMetered = await page.evaluate(() => window.smokeModelReady === true);
 
-    // Switch to Wi-Fi; the timer (30 s) must start the download without any input.
+    // Switch to Wi-Fi; the timer (2 s) must start the download without any input.
     await page.evaluate(() => {
       window.__conn = { type: 'wifi' };
     });

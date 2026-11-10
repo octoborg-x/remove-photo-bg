@@ -21,6 +21,7 @@ import {
   isMaskAdjust,
   type MaskAdjust,
 } from './features/background-removal/mask-postprocess';
+import { recoverForegroundMask } from './features/background-removal/mask-recovery';
 import {
   canvasToDataUrl,
   canEncode,
@@ -806,15 +807,27 @@ async function initWorker(): Promise<void> {
       const rect = letterboxRect(currentImageData.width, currentImageData.height, inputSize);
       const maskU8 = cropLetterboxMask(probabilityToMask(mask), inputSize, rect);
       const upscaled = upscaleMask(maskU8, rect.width, rect.height, currentImageData.width, currentImageData.height);
+      // The model occasionally floods the whole frame (keeps the background
+      // attached). Detect that and recover a real cut-out from the border-
+      // connected background before compositing. See mask-recovery.ts. This runs
+      // on the raw model mask so the user's threshold/feather below still applies
+      // to the recovered result.
+      const { mask: recoveredMask, recovered } = recoverForegroundMask(
+        currentImageData,
+        upscaled,
+      );
+      if (recovered) {
+        log('Model kept the whole frame; recovered the subject from the background edges.');
+      }
       // Apply the user's mask threshold/feather at full destination resolution
       // (the values are percentages/pixels of the *output* mask).
-      const adjusted = applyMaskAdjust(
-        upscaled,
+      const finalMask = applyMaskAdjust(
+        recoveredMask,
         currentImageData.width,
         currentImageData.height,
         maskAdjust,
       );
-      const out = applyMaskToImage(currentImageData, adjusted);
+      const out = applyMaskToImage(currentImageData, finalMask);
       const canvas = document.createElement('canvas');
       canvas.width = out.width;
       canvas.height = out.height;
@@ -849,7 +862,15 @@ async function initWorker(): Promise<void> {
       log(`Rendered cut-out (${width}x${height}) as ${exportFormatInfo(exportFormat).label}, ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
       // A uniform mask means the model did not segment anything; say so rather
       // than leaving the user staring at a blank (fully transparent) image.
-      if (opaquePx === 0) log('WARNING: the mask is fully transparent, so there is no subject to show.');
+      if (opaquePx === 0) {
+        log('WARNING: the mask is fully transparent, so there is no subject to show.');
+      } else if (opaquePx >= out.width * out.height * 0.995) {
+        // Essentially nothing was removed even after the flood-fill recovery —
+        // the image has no background separable from its edges (a busy scene, or
+        // a full-frame subject). Tell the user rather than showing the original
+        // silently.
+        log('WARNING: no background was found, so nothing was removed.');
+      }
     } else if (msg.kind === 'error') {
       // Errors tied to a run are delivered through that run's promise, so the
       // caller reports them once. Anything else is surfaced here.

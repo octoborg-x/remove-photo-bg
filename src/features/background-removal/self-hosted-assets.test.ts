@@ -31,6 +31,12 @@ describe('self-hosted assets (no third-party resource loads)', () => {
     expect(css).not.toMatch(/https?:\/\//);
   });
 
+  it('the theme bootstrap is a same-origin classic script with no external loads', () => {
+    expect(html).toMatch(/<script src="\.\/theme-init\.js"><\/script>/);
+    const bootstrap = read('public/theme-init.js');
+    expect(bootstrap).not.toMatch(/https?:\/\//);
+  });
+
   it('the CSP keeps font/style/connect origins same-origin', () => {
     const headers = read('scripts/write-headers.mjs');
     expect(headers).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);

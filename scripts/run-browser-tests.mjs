@@ -225,6 +225,80 @@ try {
       jpegState.download,
     );
 
+    // Compare tab: a fourth editor tab, enabled once a result exists, pairing the
+    // original photo with the composited cut-out.
+    const compareState = await page.evaluate(() => {
+      const tab = document.getElementById('tabCompare');
+      tab.click();
+      return {
+        enabled: !tab.disabled,
+        selected: tab.getAttribute('aria-selected') === 'true',
+        panelVisible: !document.getElementById('panelCompare').hidden,
+        before: document.getElementById('compareBefore')?.getAttribute('src') ?? '',
+        after: document.getElementById('compareAfter')?.getAttribute('src') ?? '',
+      };
+    });
+    record(
+      'the Compare tab shows the original beside the cut-out',
+      compareState.enabled &&
+        compareState.selected &&
+        compareState.panelVisible &&
+        compareState.before.length > 0 &&
+        compareState.after.startsWith('data:image/'),
+    );
+
+    // Background palette: a solid colour exports as JPG (no alpha to carry) and
+    // repaints the compare view; transparent returns a real alpha PNG.
+    const bgState = await page.evaluate(() => {
+      const swatch = (key) =>
+        Array.from(document.querySelectorAll('#bgPalette button[data-bg]')).find(
+          (b) => b.dataset.bg === key,
+        );
+      swatch('#2563eb').click();
+      const afterColor = {
+        download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
+        pressed: swatch('#2563eb').getAttribute('aria-pressed'),
+        compareAfter: document.getElementById('compareAfter')?.getAttribute('src') ?? '',
+      };
+      swatch('transparent').click();
+      const afterTransparent = {
+        download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
+        current: document.getElementById('bgCurrent')?.textContent ?? '',
+      };
+      return { afterColor, afterTransparent };
+    });
+    record(
+      'picking a solid background exports JPG and repaints the compare view',
+      bgState.afterColor.download.endsWith('.jpg') &&
+        bgState.afterColor.pressed === 'true' &&
+        bgState.afterColor.compareAfter.startsWith('data:image/'),
+      bgState.afterColor.download,
+    );
+    record(
+      'transparent keeps a PNG export',
+      bgState.afterTransparent.download.endsWith('.png') &&
+        bgState.afterTransparent.current === 'transparent',
+      bgState.afterTransparent.current,
+    );
+
+    // Theme: the toggle pins an explicit mode and flips the page surface. The
+    // colour change is transitioned, so read it after the swap settles.
+    const themeBefore = await page.evaluate(() => ({
+      attr: document.documentElement.getAttribute('data-theme'),
+      bg: getComputedStyle(document.body).backgroundColor,
+    }));
+    await page.evaluate(() => document.getElementById('themeToggle').click());
+    await sleep(500);
+    const themeAfter = await page.evaluate(() => ({
+      attr: document.documentElement.getAttribute('data-theme'),
+      bg: getComputedStyle(document.body).backgroundColor,
+    }));
+    record(
+      'the theme toggle switches to an explicit mode and repaints the page',
+      (themeAfter.attr === 'light' || themeAfter.attr === 'dark') && themeBefore.bg !== themeAfter.bg,
+      `${themeAfter.attr} (${themeBefore.bg} → ${themeAfter.bg})`,
+    );
+
     // The technical-details block lives in the studio workspace and lists the
     // steps in the order they ran. It is an always-visible status card (a div,
     // not a collapsed disclosure), so there is no open/closed state to assert.

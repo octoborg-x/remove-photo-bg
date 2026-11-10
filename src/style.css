@@ -1,73 +1,714 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   SmartCutAI theming
+   ----------------------------------------------------------------------------
+   One dynamic method for both modes. Every colour is a CSS custom property, and
+   the neutral/brand palette is declared once with `light-dark()`, so a single
+   `color-scheme` on <html> resolves the whole page:
+
+     • no override  → `color-scheme: light dark` follows the operating system
+     • `data-theme="light" | "dark"` → forces one mode (the user's choice)
+
+   Because the tokens are the *Tailwind* colour variables, the existing utility
+   classes (`bg-white`, `text-slate-600`, `border-slate-200`, …) become theme
+   aware with no per-element work. Component CSS lives in `@layer components`
+   and only ever reads these tokens — never a raw hex — so UI and components stay
+   separated and re-theming is a single-file change.
+
+   `light-dark()` needs `color-scheme`; supported in all evergreen browsers
+   (Chrome 123+, Safari 17.5+, Firefox 120+).
+   ========================================================================== */
+
+/* Enable the `dark:` variant for the explicit override (best practice for the
+   few non-colour tweaks, e.g. shadows, that tokens cannot express). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ——— Palette: neutral ramp + brand accents, resolved per mode ——— */
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces (white is the card/panel surface, so it inverts with the theme) */
+  --color-white: light-dark(#ffffff, #0f172a);
+
+  /* Neutral ramp — inverted in dark mode so text/borders/surfaces stay legible */
+  --color-slate-50: light-dark(#f8fafc, #0b1220);
+  --color-slate-100: light-dark(#f1f5f9, #131c31);
+  --color-slate-200: light-dark(#e2e8f0, #243044);
+  --color-slate-300: light-dark(#cbd5e1, #334155);
+  --color-slate-400: light-dark(#94a3b8, #8b98ab);
+  --color-slate-500: light-dark(#64748b, #94a3b8);
+  --color-slate-600: light-dark(#475569, #cbd5e1);
+  --color-slate-700: light-dark(#334155, #e2e8f0);
+  --color-slate-800: light-dark(#1e293b, #f1f5f9);
+  --color-slate-900: light-dark(#0f172a, #f8fafc);
+
+  /* Brand blue — lightened in dark mode for contrast on dark surfaces */
+  --color-blue-50: light-dark(#eff6ff, #12233f);
+  --color-blue-100: light-dark(#dbeafe, #1b3a63);
+  --color-blue-500: light-dark(#3b82f6, #60a5fa);
+  --color-blue-600: light-dark(#2563eb, #3b82f6);
+  --color-blue-700: light-dark(#1d4ed8, #93c5fd);
+  --color-blue-900: light-dark(#1e3a8a, #bfdbfe);
+
+  /* Accent tints (icon chips + alerts) — dark, translucent equivalents */
+  --color-emerald-50: light-dark(#ecfdf5, #0c2a22);
+  --color-emerald-100: light-dark(#d1fae5, #0f3b2f);
+  --color-emerald-500: light-dark(#10b981, #34d399);
+  --color-emerald-600: light-dark(#059669, #34d399);
+  --color-amber-50: light-dark(#fffbeb, #2a2312);
+  --color-amber-100: light-dark(#fef3c7, #3a2f12);
+  --color-amber-800: light-dark(#92400e, #fcd34d);
+  --color-amber-900: light-dark(#78350f, #fde68a);
+  --color-red-50: light-dark(#fef2f2, #2c1618);
+  --color-red-900: light-dark(#7f1d1d, #fca5a5);
+  --color-indigo-50: light-dark(#eef2ff, #1a1f45);
+  --color-indigo-600: light-dark(#4f46e5, #818cf8);
+  --color-purple-50: light-dark(#faf5ff, #241a3f);
+  --color-purple-600: light-dark(#9333ea, #c084fc);
+  --color-green-50: light-dark(#f0fdf4, #0e2a1b);
+}
+
+/* Explicit override: force one mode regardless of the operating system. */
+[data-theme="light"] {
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Regions that are intentionally dark in BOTH modes (the benchmark panel, the
+   processing wallpaper/pill, the console). Pinning the ramp back to its light
+   values keeps their text legible and their surface dark. */
+.theme-inverse {
+  --color-white: #ffffff;
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-blue-400: #60a5fa;
+  --color-cyan-400: #22d3ee;
+  --color-emerald-400: #34d399;
+  --color-purple-400: #c084fc;
+}
+
+/* Text that must stay white (on brand gradients / dark chips) in both modes. */
+.text-on-accent {
+  color: #ffffff;
+}
+.border-on-dark {
+  border-color: rgb(255 255 255 / 0.2);
+}
+
 @layer base {
   :root {
-    --bg-page: #f8fafc;
-    --card-surface: #ffffff;
-    --border-subtle: #e2e8f0;
-    --brand-primary: #2563eb;
-    --brand-gradient: linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #8b5cf6 100%);
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Transparency checkerboard (light + dark) */
+    --checker-a: light-dark(#e2e8f0, #1e293b);
+    --checker-b: light-dark(#ffffff, #0f172a);
+  }
+
+  body {
+    font-family: var(--font-sans);
+  }
+  code,
+  pre,
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+  /* A theme switch should not animate every colour on the page. */
+  @media (prefers-reduced-motion: no-preference) {
+    html.theme-transition * {
+      transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+    }
   }
 }
 
-/* Transparency Checkerboard */
-.checkerboard-pattern {
-  background-color: #ffffff;
-  background-image:
-    linear-gradient(45deg, #e2e8f0 25%, transparent 25%),
-    linear-gradient(-45deg, #e2e8f0 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #e2e8f0 75%),
-    linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
-  background-size: 16px 16px;
-  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
-}
+@layer components {
+  /* ——— Surfaces & cards ——— */
+  .card {
+    background: var(--color-white);
+    border: 1px solid var(--color-slate-200);
+    border-radius: 1.5rem;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  }
 
-/* Compare sliders */
-.compare-clip {
-  clip-path: inset(0 0 0 var(--pos, 50%));
-}
+  /* Transparency Checkerboard */
+  .checkerboard-pattern {
+    background-color: var(--checker-b);
+    background-image:
+      linear-gradient(45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--checker-a) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--checker-a) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  }
 
-/* ——— Header brand: crossfade between the full lockup and the figure-only mark ———
-   Both images are stacked in the same grid cell and sized to the SAME height, so
-   the collapsed mark is exactly as tall as the figure inside the wide lockup and
-   the swap is a pure opacity crossfade (no size jump). */
-.brandStack {
-  display: grid;
-  align-items: center;
-  /* The tall lockup sets the row height; the mark centres within it. */
-  grid-template-areas: 'brand';
-}
-.brandStack > * {
-  grid-area: brand;
-  justify-self: start;
-  height: var(--brand-h, 2.5rem);
-  width: auto;
-  object-fit: contain;
-  will-change: opacity;
-}
-/* Transitions are enabled only after the first frame (html.ui-ready): applying
-   them from the initial paint would animate the default opacity (1) down to the
-   target, flashing the mark over the lockup on load. */
-html.ui-ready .brandStack > * {
-  transition: opacity 0.4s ease-in-out;
-}
-.brand-mark {
-  opacity: 0;
-}
-/* When collapsed, the wordmark fades out and the mark fades in. */
-#brandLink[data-collapsed='true'] .brand-lockup {
-  opacity: 0;
-}
-#brandLink[data-collapsed='true'] .brand-mark {
-  opacity: 1;
-}
-@media (prefers-reduced-motion: reduce) {
+  /* ——— Theme toggle ——— */
+  .themeToggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.75rem;
+    color: var(--color-slate-600);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+  }
+  .themeToggle:hover {
+    color: var(--color-slate-900);
+    background: var(--color-slate-100);
+  }
+  .themeToggle svg {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+  /* Show only the icon for the mode the button would switch TO. */
+  .themeToggle .icon-sun,
+  .themeToggle .icon-moon {
+    display: none;
+  }
+  [data-theme='dark'] .themeToggle .icon-sun {
+    display: block;
+  }
+  [data-theme='light'] .themeToggle .icon-moon {
+    display: block;
+  }
+  /* No explicit override yet: fall back to the system setting. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .themeToggle .icon-sun {
+      display: block;
+    }
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme='dark']) .themeToggle .icon-moon {
+      display: block;
+    }
+  }
+
+  /* ——— Animated progress ring ——— */
+  .ring {
+    display: inline-flex;
+    width: 22px;
+    height: 22px;
+    flex: none;
+  }
+  .ring[hidden] {
+    display: none;
+  }
+  .ring svg {
+    width: 22px;
+    height: 22px;
+  }
+  .ring .ringTrack {
+    fill: none;
+    stroke: var(--color-slate-200);
+    stroke-width: 3.5;
+  }
+  .ring .ringValue {
+    fill: none;
+    stroke: var(--color-blue-600);
+    stroke-width: 3.5;
+    stroke-linecap: round;
+    stroke-dasharray: 94.25;
+    stroke-dashoffset: 94.25;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    transition: stroke-dashoffset 0.2s ease;
+  }
+  .ring.indeterminate svg {
+    animation: ringSpin 1s linear infinite;
+  }
+  .ring.indeterminate .ringValue {
+    stroke-dasharray: 24 94.25;
+    stroke-dashoffset: 0;
+  }
+
+  /* ——— Comparison slider (landing showcase + studio compare tab) ——— */
+  .compareStage {
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--color-white);
+    border: 1px solid var(--color-slate-200);
+    touch-action: pan-y;
+    user-select: none;
+  }
+  .compareImg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .compareAfter {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    clip-path: inset(0 0 0 var(--pos, 50%));
+    background-color: var(--color-white);
+    background-image:
+      linear-gradient(45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--checker-a) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--checker-a) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  }
+  .compareDivider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--pos, 50%);
+    width: 2px;
+    background: var(--color-blue-500);
+    box-shadow: 0 0 10px color-mix(in oklab, var(--color-blue-500) 60%, transparent);
+    transform: translateX(-1px);
+    pointer-events: none;
+  }
+  .compareGrip {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 28px;
+    height: 28px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: var(--color-blue-600);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+  }
+  .compareRange {
+    width: 100%;
+    accent-color: var(--color-blue-600);
+  }
+
+  /* ——— Background palette ——— */
+  .palette {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .paletteSwatch {
+    position: relative;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--color-slate-300);
+    cursor: pointer;
+    padding: 0;
+    background-clip: padding-box;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  }
+  .paletteSwatch:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgb(15 23 42 / 0.18);
+  }
+  .paletteSwatch[aria-pressed='true'] {
+    border-color: var(--color-blue-600);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-blue-600) 45%, transparent);
+  }
+  /* Transparent swatch shows the checkerboard behind a slash. */
+  .paletteSwatch--transparent {
+    background-color: var(--checker-b);
+    background-image:
+      linear-gradient(45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--checker-a) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--checker-a) 75%);
+    background-size: 10px 10px;
+    background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+  }
+  .paletteSwatch--transparent::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to top right,
+      transparent 46%,
+      var(--color-red-900) 46%,
+      var(--color-red-900) 54%,
+      transparent 54%
+    );
+    border-radius: inherit;
+  }
+  .paletteSwatch--custom {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: conic-gradient(#ef4444, #f59e0b, #22c55e, #06b6d4, #3b82f6, #8b5cf6, #ef4444);
+    color: #ffffff;
+    font-size: 0.7rem;
+    font-weight: 700;
+  }
+  .paletteAlpha {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.72rem;
+    color: var(--color-slate-500);
+  }
+  .paletteAlpha input[type='range'] {
+    width: 8rem;
+    accent-color: var(--color-blue-600);
+  }
+
+  /* ——— Format options ——— */
+  .formatOptions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+  .formatOptions label {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.5rem 0.85rem;
+    border-radius: 10px;
+    background: var(--color-slate-50);
+    border: 1px solid var(--color-slate-200);
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--color-slate-700);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .formatOptions label:has(input:checked) {
+    background: var(--color-blue-50);
+    border-color: var(--color-blue-500);
+    color: var(--color-blue-700);
+    box-shadow: 0 1px 3px rgb(37 99 235 / 0.1);
+  }
+  .formatOptions .formatHint {
+    color: var(--color-slate-500);
+    font-size: 0.75rem;
+    margin-left: 0.2rem;
+  }
+  .formatOptions label:has(input:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* ——— Step list ——— */
+  .stepList li {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.35rem 0;
+    color: var(--color-slate-500);
+    font-size: 0.82rem;
+  }
+  .stepList li .dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: var(--color-slate-300);
+    flex: none;
+  }
+  .stepList li[data-state='active'] {
+    color: var(--color-slate-900);
+    font-weight: 600;
+  }
+  .stepList li[data-state='active'] .dot {
+    background: var(--color-blue-500);
+    box-shadow: 0 0 8px color-mix(in oklab, var(--color-blue-500) 60%, transparent);
+  }
+  .stepList li[data-state='done'] .dot {
+    background: var(--color-emerald-500);
+  }
+  .stepList li .stepDetail {
+    color: var(--color-slate-500);
+    font-weight: 400;
+    margin-left: 0.25rem;
+  }
+
+  /* ——— Toasts ——— */
+  .toastHost {
+    position: fixed;
+    top: 1.25rem;
+    left: 1.25rem;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    max-width: min(380px, calc(100vw - 2.5rem));
+    pointer-events: none;
+  }
+  .toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: var(--color-white);
+    border: 1px solid var(--color-slate-200);
+    border-left: 4px solid var(--color-blue-600);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.1);
+    animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .toast.warn {
+    border-left-color: var(--color-amber-500);
+    background: var(--color-amber-50);
+  }
+  .toast.error {
+    border-left-color: var(--color-red-500);
+    background: var(--color-red-50);
+  }
+  .toast .toastBody {
+    flex: 1;
+    font-size: 0.88rem;
+    color: var(--color-slate-800);
+  }
+  .toast .toastTitle {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.15rem;
+    color: var(--color-slate-900);
+  }
+  .toast .toastClose {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    color: var(--color-slate-400);
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 0.1rem;
+  }
+  .toast .toastClose:hover {
+    color: var(--color-slate-700);
+  }
+
+  /* ——— Recovery panel ——— */
+  .recovery .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 0.85rem;
+  }
+  .recovery .hint {
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+    opacity: 0.85;
+    white-space: pre-wrap;
+  }
+  .recovery button.primary,
+  .recovery button.secondary {
+    padding: 0.45rem 0.9rem;
+    border-radius: 0.6rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .recovery button.primary {
+    background: var(--color-blue-600);
+    color: #ffffff;
+    border: 1px solid var(--color-blue-600);
+  }
+  .recovery button.secondary {
+    background: var(--color-white);
+    color: var(--color-slate-700);
+    border: 1px solid var(--color-slate-200);
+  }
+
+  /* ——— Header brand crossfade (full lockup ↔ figure-only mark) ———
+     Both images sit in the same grid cell, sized to the SAME height, so the
+     swap is a pure opacity crossfade with no size jump. */
+  .brandStack {
+    display: grid;
+    align-items: center;
+    grid-template-areas: 'brand';
+  }
+  .brandStack > * {
+    grid-area: brand;
+    justify-self: start;
+    height: var(--brand-h, 2.5rem);
+    width: auto;
+    object-fit: contain;
+    will-change: opacity;
+  }
+  /* Transitions start only after the first frame (html.ui-ready), so the initial
+     paint uses the final hidden state instead of animating from the default. */
   html.ui-ready .brandStack > * {
-    transition: none;
+    transition: opacity 0.4s ease-in-out;
+  }
+  .brand-mark {
+    opacity: 0;
+  }
+  #brandLink[data-collapsed='true'] .brand-lockup {
+    opacity: 0;
+  }
+  #brandLink[data-collapsed='true'] .brand-mark {
+    opacity: 1;
+  }
+
+  /* Header elements animate in one after another rather than in one frame. */
+  .header-stagger > * {
+    animation: headerRiseIn 0.45s ease-out both;
+  }
+  .header-stagger > *:nth-child(1) { animation-delay: 0.02s; }
+  .header-stagger > *:nth-child(2) { animation-delay: 0.12s; }
+  .header-stagger > *:nth-child(3) { animation-delay: 0.22s; }
+
+  /* ——— Studio overlay layer ———
+     Full-screen: fixed to the viewport with no margin, so it masks the whole
+     page. It lives outside the page-flow `<main>`, so no section spacing leaks
+     onto it; `margin: 0` is belt-and-braces. */
+  .studio-layer {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    width: 100vw;
+    height: 100dvh;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-slate-50);
+    overflow-y: auto;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+  }
+  html.ui-ready .studio-layer {
+    transition: opacity 0.28s ease-in-out, transform 0.28s ease-in-out, visibility 0s linear 0.28s;
+  }
+  .studio-layer.is-open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+  html.ui-ready .studio-layer.is-open {
+    transition: opacity 0.28s ease-in-out, transform 0.28s ease-in-out;
+  }
+  body.studio-open {
+    overflow: hidden;
+  }
+
+  /* ——— Editor tabs ——— */
+  .editorTab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-slate-500);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+  }
+  .editorTab[aria-selected='true'] {
+    color: var(--color-blue-700);
+    background: var(--color-blue-50);
+    border-color: var(--color-blue-100);
+  }
+  .editorTab:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .editorPanel[hidden] {
+    display: none;
+  }
+
+  /* ——— Processing tab: animated wallpaper + progress ——— */
+  .procWallpaper {
+    position: relative;
+    min-height: 320px;
+    border-radius: 1.25rem;
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 40%, #1e1b4b 0%, #0f172a 100%);
+  }
+  .procWaves {
+    position: absolute;
+    inset: -40% -20%;
+    background:
+      repeating-linear-gradient(115deg, rgb(56 189 248 / 0.16) 0 2px, transparent 2px 26px),
+      repeating-linear-gradient(65deg, rgb(168 85 247 / 0.14) 0 2px, transparent 2px 34px);
+    background-size: 220% 220%;
+    animation: procWaveDrift 9s ease-in-out infinite;
+    filter: blur(0.5px);
+  }
+  .procPixels {
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(rgb(125 211 252 / 0.9) 1.4px, transparent 1.6px),
+      radial-gradient(rgb(196 181 253 / 0.75) 1.2px, transparent 1.5px);
+    background-size: 42px 42px, 66px 66px;
+    background-position: 0 0, 18px 24px;
+    animation: procPixelDrift 6s linear infinite;
+    opacity: 0.75;
+  }
+  .procProgress {
+    position: absolute;
+    left: 1rem;
+    bottom: 1rem;
+    z-index: 2;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 0.75rem;
+    background: rgb(15 23 42 / 0.72);
+    border: 1px solid rgb(255 255 255 / 0.18);
+    backdrop-filter: blur(6px);
+    color: #e2e8f0;
+    font-weight: 700;
+  }
+  .procProgressPct {
+    font-size: 1.35rem;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .procProgressLabel {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #94a3b8;
+  }
+
+  /* Console panel: a terminal, intentionally dark in both modes. */
+  .consolePanel {
+    background: #0f172a;
+    color: #cbd5e1;
+    border-radius: 1rem;
   }
 }
 
-/* Header elements animate in one after another rather than in a single frame. */
+/* ——— Keyframes ——— */
+@keyframes ringSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @keyframes headerRiseIn {
   from {
     opacity: 0;
@@ -78,117 +719,6 @@ html.ui-ready .brandStack > * {
     transform: translateY(0);
   }
 }
-.header-stagger > * {
-  animation: headerRiseIn 0.45s ease-out both;
-}
-.header-stagger > *:nth-child(1) { animation-delay: 0.02s; }
-.header-stagger > *:nth-child(2) { animation-delay: 0.12s; }
-.header-stagger > *:nth-child(3) { animation-delay: 0.22s; }
-@media (prefers-reduced-motion: reduce) {
-  .header-stagger > * {
-    animation: none;
-  }
-}
-
-/* ——— Studio overlay layer ———
-   Launched from the header, it covers the whole page with its own top bar and
-   the editor/console workspace. The page underneath is hidden from view (and
-   from the tab order) while the layer is open. */
-.studio-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-page);
-  overflow-y: auto;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(8px);
-}
-/* Transition only after the first frame, so the hidden state does not animate in
-   from the default (visible) on load. */
-html.ui-ready .studio-layer {
-  transition: opacity 0.28s ease-in-out, transform 0.28s ease-in-out, visibility 0s linear 0.28s;
-}
-.studio-layer.is-open {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-}
-html.ui-ready .studio-layer.is-open {
-  transition: opacity 0.28s ease-in-out, transform 0.28s ease-in-out;
-}
-body.studio-open {
-  overflow: hidden;
-}
-@media (prefers-reduced-motion: reduce) {
-  html.ui-ready .studio-layer,
-  html.ui-ready .studio-layer.is-open {
-    transition: opacity 0.01s linear;
-    transform: none;
-  }
-}
-
-/* ——— Editor tabs ——— */
-.editorTab {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.9rem;
-  border-radius: 0.7rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #64748b;
-  background: transparent;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
-}
-.editorTab[aria-selected='true'] {
-  color: #1d4ed8;
-  background: #eff6ff;
-  border-color: #bfdbfe;
-}
-.editorTab:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.editorPanel[hidden] {
-  display: none;
-}
-
-/* ——— Processing tab: animated wallpaper + progress ——— */
-.procWallpaper {
-  position: relative;
-  min-height: 320px;
-  border-radius: 1.25rem;
-  overflow: hidden;
-  background: radial-gradient(circle at 50% 40%, #1e1b4b 0%, #0f172a 100%);
-}
-/* Moving wave bands */
-.procWaves {
-  position: absolute;
-  inset: -40% -20%;
-  background:
-    repeating-linear-gradient(115deg, rgba(56, 189, 248, 0.16) 0 2px, transparent 2px 26px),
-    repeating-linear-gradient(65deg, rgba(168, 85, 247, 0.14) 0 2px, transparent 2px 34px);
-  background-size: 220% 220%;
-  animation: procWaveDrift 9s ease-in-out infinite;
-  filter: blur(0.5px);
-}
-/* Drifting pixel points */
-.procPixels {
-  position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(rgba(125, 211, 252, 0.9) 1.4px, transparent 1.6px),
-    radial-gradient(rgba(196, 181, 253, 0.75) 1.2px, transparent 1.5px);
-  background-size: 42px 42px, 66px 66px;
-  background-position: 0 0, 18px 24px;
-  animation: procPixelDrift 6s linear infinite;
-  opacity: 0.75;
-}
 @keyframes procWaveDrift {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -198,43 +728,24 @@ body.studio-open {
   from { background-position: 0 0, 18px 24px; }
   to { background-position: 42px 42px, 84px 90px; }
 }
-.procProgress {
-  position: absolute;
-  left: 1rem;
-  bottom: 1rem;
-  z-index: 2;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  padding: 0.4rem 0.75rem;
-  border-radius: 0.75rem;
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(6px);
-  color: #e2e8f0;
-  font-weight: 700;
-}
-.procProgressPct {
-  font-size: 1.35rem;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-.procProgressLabel {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: #94a3b8;
-}
+
 @media (prefers-reduced-motion: reduce) {
+  html.ui-ready .brandStack > * {
+    transition: none;
+  }
+  .header-stagger > * {
+    animation: none;
+  }
+  html.ui-ready .studio-layer,
+  html.ui-ready .studio-layer.is-open {
+    transition: opacity 0.01s linear;
+    transform: none;
+  }
   .procWaves,
   .procPixels {
     animation: none;
   }
+  html.theme-transition * {
+    transition: none;
+  }
 }
-
-/* Console panel */
-.consolePanel {
-  background: #0f172a;
-  color: #cbd5e1;
-  border-radius: 1rem;
-}
-

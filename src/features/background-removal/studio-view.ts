@@ -1,9 +1,9 @@
 // Pure presentation state for the Studio editor, kept out of main.ts so the tab
 // transitions and the console scrubber are unit-testable without a DOM.
 
-export type StudioTab = 'input' | 'processing' | 'result';
+export type StudioTab = 'input' | 'processing' | 'result' | 'compare';
 
-export const STUDIO_TABS: readonly StudioTab[] = ['input', 'processing', 'result'];
+export const STUDIO_TABS: readonly StudioTab[] = ['input', 'processing', 'result', 'compare'];
 
 export interface StudioViewState {
   tab: StudioTab;
@@ -19,6 +19,7 @@ export type StudioEvent =
   | { type: 'run-start' }
   | { type: 'progress'; percent: number | null }
   | { type: 'result' }
+  | { type: 'show-background' }
   | { type: 'error' };
 
 export function initialStudioView(): StudioViewState {
@@ -44,6 +45,11 @@ export function reduceStudio(state: StudioViewState, ev: StudioEvent): StudioVie
       return { ...state, percent: ev.percent === null ? null : clampPercent(ev.percent) };
     case 'result':
       return { ...state, tab: 'result', running: false, hasResult: true, percent: 100 };
+    case 'show-background':
+      // The user picked a new background colour. It changes the preview, the
+      // export and the compare view — all of which are result-stage views — so
+      // it must not move the tab. (Result and Compare both stay available.)
+      return state;
     case 'error':
       // A failed run returns to the last good view: the result if one exists,
       // otherwise the input tab so the user can pick another photo.
@@ -54,6 +60,7 @@ export function reduceStudio(state: StudioViewState, ev: StudioEvent): StudioVie
 export function tabEnabled(state: StudioViewState, tab: StudioTab): boolean {
   if (tab === 'input') return true;
   if (tab === 'processing') return state.running;
+  // Both 'result' and 'compare' need a finished cut-out.
   return state.hasResult;
 }
 

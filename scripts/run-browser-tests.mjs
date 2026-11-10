@@ -517,6 +517,60 @@ try {
     );
     await page.close();
   }
+
+  // ——— Scenario 9: the periodic fetch loop downloads once Wi-Fi appears ———
+  // Boots on a metered link (the prompt shows, nothing downloads), then flips the
+  // stubbed connection to Wi-Fi. The page's background timer must start the
+  // download on its own — no photo chosen, no button pressed.
+  {
+    const page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      // Mutable so the test can change the link mid-session.
+      window.__conn = { type: 'cellular' };
+      Object.defineProperty(navigator, 'connection', {
+        configurable: true,
+        get: () => window.__conn,
+      });
+      Object.defineProperty(navigator, 'userAgentData', {
+        configurable: true,
+        get: () => ({ mobile: false }),
+      });
+      Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
+    });
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+    const cdp = await page.createCDPSession();
+    await cdp.send('Storage.clearDataForOrigin', {
+      origin: pageUrl.origin,
+      storageTypes: 'cache_storage',
+    });
+    await page.reload({ waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+
+    const promptShown = await page
+      .waitForFunction(
+        () => (document.getElementById('netWarn')?.hidden ?? true) === false,
+        { timeout: 30000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    await sleep(2000);
+    const startedWhileMetered = await page.evaluate(() => window.smokeModelReady === true);
+
+    // Switch to Wi-Fi; the timer (30 s) must start the download without any input.
+    await page.evaluate(() => {
+      window.__conn = { type: 'wifi' };
+    });
+    const startedAfterWifi = await page
+      .waitForFunction('window.smokeModelReady === true', { timeout: 90000 })
+      .then(() => true)
+      .catch(() => false);
+    record(
+      'a metered visit waits for the prompt, then the loop downloads once Wi-Fi appears',
+      promptShown === true && startedWhileMetered === false && startedAfterWifi === true,
+    );
+    await page.close();
+  }
 } finally {
   await browser.close();
   if (server && !keepServer) {

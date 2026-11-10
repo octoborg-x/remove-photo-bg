@@ -46,6 +46,8 @@ import { describeProgress, phaseForStage, PHASE_LABELS } from './features/backgr
 import {
   shouldConfirmDownload,
   downloadConfirmationText,
+  shouldAutoFetchModel,
+  currentConnectionClass,
 } from './features/background-removal/network-preflight';
 import {
   detectWebGpu,
@@ -1546,6 +1548,11 @@ async function boot(): Promise<void> {
   } else {
     autoLoadModel();
   }
+
+  // Keep checking for an unmetered link: if this visit is waiting on a metered
+  // connection (or the download failed), the model still downloads in the
+  // background as soon as Wi-Fi is available.
+  startModelFetchLoop();
 }
 
 // The default model is downloaded once and then served from this device, so a
@@ -1555,6 +1562,53 @@ function autoLoadModel(): void {
   // model through it would only replace that error with a load that never
   // completes.
   if (workerFailed) return;
+  loadSelectedModel();
+}
+
+// Besides the one-shot load at boot, the page checks on a timer whether the
+// model still needs downloading, so a visit that started on a metered link (or
+// whose download failed) warms the on-device cache as soon as an unmetered link
+// is available — without waiting for the user to pick a photo. A tick is a no-op
+// unless the connection is unmetered and the model is still absent, so a metered
+// link, a cached model, or an in-flight download all leave it alone.
+const MODEL_FETCH_INTERVAL_MS = 30000;
+let modelFetchTimer: number | null = null;
+
+function startModelFetchLoop(): void {
+  if (modelFetchTimer !== null) return;
+  modelFetchTimer = window.setInterval(() => void modelFetchTick(), MODEL_FETCH_INTERVAL_MS);
+  void modelFetchTick();
+}
+
+function stopModelFetchLoop(): void {
+  if (modelFetchTimer === null) return;
+  clearInterval(modelFetchTimer);
+  modelFetchTimer = null;
+}
+
+async function modelFetchTick(): Promise<void> {
+  if (!selectedModel || workerFailed) return;
+  const cached = modelReady || (await isUrlCached(selectedModel.url).catch(() => false));
+  if (cached) {
+    // The model is loaded or already on this device; the loop has nothing left to do.
+    stopModelFetchLoop();
+    return;
+  }
+  const connection = currentConnectionClass();
+  if (
+    !shouldAutoFetchModel({
+      connection,
+      cached,
+      ready: modelReady,
+      inFlight: modelLoadInFlight,
+    })
+  ) {
+    return;
+  }
+  // An unmetered link is available and the model is still absent, so the earlier
+  // "may be metered" prompt no longer applies.
+  netWarnEl.hidden = true;
+  log(`Unmetered connection detected and the model is not on this device yet; downloading it now (${connection}).`);
   loadSelectedModel();
 }
 

@@ -20,11 +20,6 @@
       code, pre, .font-mono {
         font-family: var(--font-mono);
       }
-      /* Header brand: full lockup at rest, figure-only once the page scrolls */
-      .brand-mark { display: none; }
-      #brandLink[data-collapsed='true'] .brand-lockup { display: none; }
-      #brandLink[data-collapsed='true'] .brand-mark { display: block; }
-
       /* Animated progress ring */
       .ring { display: inline-flex; width: 22px; height: 22px; flex: none; }
       .ring[hidden] { display: none; }
@@ -196,8 +191,8 @@
 
     <!-- Top Navigation Bar: 3-Zone Contract -->
     <header class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/80 transition-all">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-8">
-        <!-- Zone 1: Brand — full lockup at rest, figure-only once scrolled -->
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-8 header-stagger">
+        <!-- Zone 1: Brand — full lockup at rest, figure-only once the page scrolls -->
         <a
           id="brandLink"
           href="/"
@@ -205,18 +200,21 @@
           aria-label="SmartCutAI home"
           class="flex items-center shrink-0 group focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-xl p-1"
         >
-          <img
-            id="brandLockup"
-            src="./assets/brand/smartcutai-lockup.png"
-            alt="SmartCutAI"
-            class="brand-lockup h-9 sm:h-10 w-auto object-contain"
-          />
-          <img
-            id="brandMark"
-            src="./assets/brand/smartcutai-mark.png"
-            alt="SmartCutAI"
-            class="brand-mark h-9 w-9 sm:h-10 sm:w-10 object-contain rounded-xl"
-          />
+          <span class="brandStack h-9 sm:h-10">
+            <img
+              id="brandLockup"
+              src="./assets/brand/smartcutai-lockup.png"
+              alt="SmartCutAI"
+              class="brand-lockup object-contain"
+            />
+            <img
+              id="brandMark"
+              src="./assets/brand/smartcutai-mark.png"
+              alt=""
+              aria-hidden="true"
+              class="brand-mark object-contain"
+            />
+          </span>
         </a>
 
         <!-- Zone 2: Navigation Links -->
@@ -230,12 +228,19 @@
 
         <!-- Zone 3: Primary Action -->
         <div class="flex items-center gap-3 shrink-0">
-          <a
-            href="#studio"
-            class="px-5 py-2.5 text-xs sm:text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-sm hover:shadow-md hover:from-blue-700 hover:to-indigo-700 transition-all whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <button
+            id="studioLaunch"
+            type="button"
+            class="inline-flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-sm hover:shadow-md hover:from-blue-700 hover:to-indigo-700 transition-all whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            Launch Studio
-          </a>
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+              <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+              <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+              <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+            </svg>
+            <span>Studio</span>
+          </button>
         </div>
       </div>
     </header>
@@ -264,12 +269,20 @@
         </p>
 
         <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <a
-            href="#studio"
-            class="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <button
+            id="studioLaunchHero"
+            type="button"
+            data-studio-launch
+            class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+              <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+              <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+              <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+            </svg>
             Start Removing Backgrounds
-          </a>
+          </button>
           <a
             href="#showcase"
             class="px-6 py-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm border border-slate-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-300"
@@ -300,7 +313,21 @@
       </section>
 
       <!-- Main Studio Section -->
-      <section id="studio" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
+      <section id="studio" class="studio-layer" aria-hidden="true" aria-label="Studio workspace">
+        <!-- Studio top bar: figure logo on the left, close on the right -->
+        <div class="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16 shrink-0 border-b border-slate-200 bg-white/90 backdrop-blur-md">
+          <div class="flex items-center gap-2.5">
+            <img src="./assets/brand/smartcutai-mark.png" alt="SmartCutAI" class="h-8 w-8 object-contain" />
+            <span class="text-sm font-bold text-slate-800">Studio</span>
+          </div>
+          <button id="studioClose" type="button" aria-label="Close studio" class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <!-- Metered Connection Preflight Warning -->
         <div id="netWarn" class="netWarn mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-sm shadow-sm" role="dialog" aria-modal="true" aria-labelledby="netWarnText" hidden>
           <p id="netWarnText" class="mb-3 font-medium"></p>
@@ -312,8 +339,18 @@
 
         <!-- 2-Column Responsive Studio Workspace -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          <!-- Left Column: Input Canvas, Waiting State & Generated Image (7 cols) -->
+          <!-- Left Column: the editor (input → processing → result) -->
           <div class="lg:col-span-7 space-y-6">
+            <div class="rounded-3xl bg-white border border-slate-200/90 shadow-sm overflow-hidden">
+              <!-- Editor tab bar -->
+              <div class="flex items-center gap-1 p-3 border-b border-slate-100" role="tablist" aria-label="Studio editor">
+                <button id="tabInput" class="editorTab" role="tab" data-tab="input" aria-selected="true" aria-controls="panelInput">Input</button>
+                <button id="tabProcessing" class="editorTab" role="tab" data-tab="processing" aria-selected="false" aria-controls="panelProcessing" disabled>Processing</button>
+                <button id="tabResult" class="editorTab" role="tab" data-tab="result" aria-selected="false" aria-controls="panelResult" disabled>Result</button>
+              </div>
+              <div class="p-4 sm:p-6">
+            <!-- Input tab: the drop zone (default editor view) -->
+            <div id="panelInput" class="editorPanel" role="tabpanel" aria-labelledby="tabInput">
             <!-- Drop Zone: Styled strictly like Image 3 (No "Choose a photo" title) -->
             <div
               id="dropZone"
@@ -339,33 +376,31 @@
                 Supports: PNG, JPG, JPEG, WEBP <span class="hidden sm:inline">· Max <span id="limitBytes">20 MB</span> · Up to <span id="limitSide">4096</span> px</span>
               </p>
             </div>
+            </div>
 
-            <!-- Uploading & Waiting State: ChatGPT Image Editor Animated Background -->
-            <div id="procSurface" class="procSurface chatgpt-processing-surface relative rounded-3xl overflow-hidden p-6 text-center" hidden>
-              <!-- Ambient Ethereal Aurora Mesh -->
-              <div class="chatgpt-aurora-bg">
-                <div class="chatgpt-orb-1"></div>
-                <div class="chatgpt-orb-2"></div>
-              </div>
-
-              <!-- Animated Shimmer Wave Overlay -->
-              <div id="procShimmer" class="chatgpt-shimmer-sweep" hidden aria-hidden="true"></div>
-
-              <!-- Uploaded Image & Centered AI Status Overlay -->
-              <div class="relative z-10 w-full flex flex-col items-center justify-center gap-4">
-                <div id="inputBox" class="inputBox max-h-[380px] max-w-full rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-black/40 backdrop-blur-md"></div>
-                
-                <div class="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-slate-900/80 backdrop-blur-md border border-white/20 text-white text-xs font-semibold shadow-xl">
-                  <span class="relative flex h-2.5 w-2.5">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
-                  </span>
-                  <span class="text-slate-100">Removing background with on-device AI…</span>
+            <!-- Processing tab: animated wallpaper + progress (no selected image shown) -->
+            <div id="panelProcessing" class="editorPanel" role="tabpanel" aria-labelledby="tabProcessing" hidden>
+              <div class="procWallpaper">
+                <div class="procWaves" aria-hidden="true"></div>
+                <div class="procPixels" aria-hidden="true"></div>
+                <div class="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-4">
+                  <div class="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-slate-900/70 backdrop-blur-md border border-white/20 text-white text-xs font-semibold shadow-xl">
+                    <span class="relative flex h-2.5 w-2.5">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
+                    </span>
+                    <span class="text-slate-100">Removing background with on-device AI…</span>
+                  </div>
+                </div>
+                <div class="procProgress">
+                  <span id="procPct" class="procProgressPct">0%</span>
+                  <span id="procStageLabel" class="procProgressLabel">Preparing</span>
                 </div>
               </div>
             </div>
 
-            <!-- Output Section: Generated Result Image with Top-Left Gear for Advanced Options -->
+            <!-- Result tab: the generated cut-out -->
+            <div id="panelResult" class="editorPanel" role="tabpanel" aria-labelledby="tabResult" hidden>
             <section id="outputSection" class="relative rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-7 shadow-sm transition-all" hidden aria-labelledby="outputHeading">
               <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
                 <div class="flex items-center gap-2.5">
@@ -483,80 +518,98 @@
                 </div>
               </div>
             </section>
+            </div>
+
+              </div>
+            </div>
 
             <!-- Recovery Fallback UI -->
             <div id="recovery" class="recovery rounded-2xl p-4 bg-red-50 border border-red-200 text-red-900 text-sm" hidden></div>
           </div>
 
-          <!-- Right Column: Technical Engine Block (Placed Next to Image Input) -->
+          <!-- Right Column: Console (logs + technical details) -->
           <div class="lg:col-span-5">
-            <div id="techDetails" class="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow">
-              <!-- Engine Status Header -->
-              <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
-                <div class="flex items-center gap-2.5">
-                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50"></span>
-                  <span id="processingLabel" class="text-sm font-bold text-slate-800">Engine Ready</span>
-                </div>
-                <!-- Model Loading Progress Ring -->
-                <span id="modelProgress" class="ring inline-flex items-center" hidden aria-hidden="true">
-                  <svg viewBox="0 0 36 36" class="w-5 h-5">
-                    <circle class="ringTrack" cx="18" cy="18" r="15"></circle>
-                    <circle class="ringValue" cx="18" cy="18" r="15"></circle>
+            <div class="rounded-3xl bg-white border border-slate-200/90 shadow-sm overflow-hidden">
+              <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <svg class="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
                   </svg>
-                </span>
+                  <h3 class="text-sm font-bold text-slate-800">Console</h3>
+                </div>
+                <span id="processingLabel" class="text-xs font-semibold text-slate-500">Engine ready</span>
               </div>
 
-              <!-- Model Architecture & Storage Card -->
-              <div class="rounded-2xl bg-slate-50 border border-slate-200/70 p-4 mb-5">
+              <div class="p-4 sm:p-5 space-y-5">
+                <!-- Engine status -->
                 <div class="flex items-center justify-between">
-                  <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Neural Model</span>
-                  <strong class="text-xs font-bold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-md" id="modelName">QMix Cut-512</strong>
+                  <div class="flex items-center gap-2.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50"></span>
+                    <span class="text-xs font-semibold text-slate-700">On-device engine</span>
+                  </div>
+                  <!-- Model Loading Progress Ring -->
+                  <span id="modelProgress" class="ring inline-flex items-center" hidden aria-hidden="true">
+                    <svg viewBox="0 0 36 36" class="w-5 h-5">
+                      <circle class="ringTrack" cx="18" cy="18" r="15"></circle>
+                      <circle class="ringValue" cx="18" cy="18" r="15"></circle>
+                    </svg>
+                  </span>
                 </div>
-                <p class="text-xs text-slate-600 mt-2 font-medium" id="modelSize">
-                  BiRefNet Lite · 512×512 · INT8/FP16 Hybrid
-                </p>
-                <div class="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500 font-mono">
-                  <span>Runtime: ONNX WebAssembly</span>
-                  <code id="modelIdText" class="px-2 py-0.5 rounded bg-slate-200 text-slate-700">qmix-cut-512</code>
-                </div>
-              </div>
 
-              <!-- Live Stage Status -->
-              <div class="mb-5">
-                <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Current Phase</span>
+                <!-- Live stage status -->
                 <p id="stage" class="text-xs font-medium text-slate-700 bg-slate-100/90 border border-slate-200 rounded-xl px-3.5 py-2.5 leading-relaxed" role="status">
                   Starting…
                 </p>
-              </div>
 
-              <!-- 4-Stage Pipeline Tracker -->
-              <div class="mb-5">
-                <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">Pipeline Execution</span>
-                <ol id="stepList" class="stepList flex flex-col gap-2 text-xs"></ol>
-              </div>
-
-              <!-- Diagnostic Logs Drawer -->
-              <details class="group border-t border-slate-100 pt-3.5">
-                <summary class="flex items-center justify-between text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer select-none">
-                  <span>Execution Diagnostics &amp; Timings</span>
-                  <span class="text-[10px] bg-slate-100 group-open:bg-slate-200 text-slate-600 px-2.5 py-0.5 rounded-full transition-colors">Toggle log</span>
-                </summary>
-                <pre id="log" class="mt-3 p-3.5 rounded-xl bg-slate-900 text-emerald-400 font-mono text-[11px] leading-relaxed max-h-52 overflow-y-auto whitespace-pre-wrap shadow-inner"></pre>
-              </details>
-
-              <!-- Zero-Upload Guarantee Badge -->
-              <div class="mt-5 p-3.5 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-500/20 flex items-start gap-3">
-                <svg class="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
+                <!-- Pipeline steps -->
                 <div>
-                  <h5 class="text-xs font-bold text-slate-900">Zero-Upload Privacy Assurance</h5>
-                  <p class="text-[11px] text-slate-600 mt-0.5 leading-normal">
-                    Inference executes completely in local browser RAM using client-side WebAssembly. No network exfiltration or telemetry.
-                  </p>
+                  <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">Pipeline</span>
+                  <ol id="stepList" class="stepList flex flex-col gap-2 text-xs"></ol>
+                </div>
+
+                <!-- Console log -->
+                <div>
+                  <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Log</span>
+                  <pre id="log" class="consolePanel p-3.5 font-mono text-[11px] leading-relaxed max-h-56 overflow-y-auto whitespace-pre-wrap shadow-inner"></pre>
+                </div>
+
+                <!-- Technical details -->
+                <details id="techDetails" class="group border-t border-slate-100 pt-3.5">
+                  <summary class="flex items-center justify-between text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer select-none">
+                    <span>Technical details</span>
+                    <span class="text-[10px] bg-slate-100 group-open:bg-slate-200 text-slate-600 px-2.5 py-0.5 rounded-full transition-colors">Show</span>
+                  </summary>
+                  <div class="mt-3 rounded-2xl bg-slate-50 border border-slate-200/70 p-4">
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Neural Model</span>
+                      <strong class="text-xs font-bold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-md" id="modelName">QMix Cut-512</strong>
+                    </div>
+                    <p class="text-xs text-slate-600 mt-2 font-medium" id="modelSize">
+                      BiRefNet Lite · 512×512 · INT8/FP16 Hybrid
+                    </p>
+                    <div class="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500 font-mono">
+                      <span>Runtime</span>
+                      <code id="modelIdText" class="px-2 py-0.5 rounded bg-slate-200 text-slate-700">qmix-cut-512</code>
+                    </div>
+                  </div>
+                </details>
+
+                <!-- Zero-Upload Guarantee Badge -->
+                <div class="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-500/20 flex items-start gap-3">
+                  <svg class="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <div>
+                    <h5 class="text-xs font-bold text-slate-900">Zero-Upload Privacy Assurance</h5>
+                    <p class="text-[11px] text-slate-600 mt-0.5 leading-normal">
+                      Inference runs entirely in local browser memory. Nothing leaves your device.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
           </div>
         </div>
       </section>

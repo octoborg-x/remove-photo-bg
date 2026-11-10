@@ -88,6 +88,48 @@ function readDeviceMobile(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
 }
 
+/** Classifies the live connection, e.g. for the periodic model auto-fetch. */
+export function currentConnectionClass(deviceMobile?: boolean): ConnectionClass {
+  const info = readConnection();
+  const mobile = deviceMobile === undefined ? readDeviceMobile() : deviceMobile;
+  return classifyConnection(info, mobile);
+}
+
+export interface AutoFetchOptions {
+  /** Live connection class. Only an unmetered link (Wi-Fi/ethernet, or an
+   *  unknown desktop link) may auto-download; cellular and data-saver never do. */
+  connection: ConnectionClass;
+  /** The model is already on this device (Cache API). */
+  cached: boolean;
+  /** The model has already loaded in this page. */
+  ready: boolean;
+  /** A model load is already running, so a second one would be wasted. */
+  inFlight: boolean;
+}
+
+/** True unless the link looks metered (cellular or data-saver). */
+export function isUnmeteredConnection(connection: ConnectionClass): boolean {
+  return connection !== 'cellular' && connection !== 'metered';
+}
+
+/**
+ * The periodic model auto-fetch decision. The page fetches the model in the
+ * background on a timer so a first visit warms the on-device cache without the
+ * user having to pick a photo. A tick starts a download only when the connection
+ * is unmetered (never cellular or data-saver) and the model is not already on
+ * this device, not loaded, and not already being fetched. Every other case is a
+ * no-op, so the timer is safe to leave running; a load that failed is retried on
+ * the next tick because the model is still absent.
+ */
+export function shouldAutoFetchModel(opts: AutoFetchOptions): boolean {
+  return (
+    isUnmeteredConnection(opts.connection) &&
+    !opts.cached &&
+    !opts.ready &&
+    !opts.inFlight
+  );
+}
+
 export interface PreflightOptions {
   /** Model size in bytes; 0/undefined when unknown. */
   sizeBytes?: number;

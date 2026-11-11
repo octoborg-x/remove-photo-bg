@@ -64,6 +64,9 @@
   --color-red-900: light-dark(#7f1d1d, #fca5a5);
   --color-indigo-50: light-dark(#eef2ff, #1a1f45);
   --color-indigo-600: light-dark(#4f46e5, #818cf8);
+  --color-violet-100: light-dark(#ede9fe, #241a44);
+  --color-violet-200: light-dark(#ddd6fe, #372a63);
+  --color-violet-600: light-dark(#7c3aed, #a78bfa);
   --color-purple-50: light-dark(#faf5ff, #241a3f);
   --color-purple-600: light-dark(#9333ea, #c084fc);
   --color-green-50: light-dark(#f0fdf4, #0e2a1b);
@@ -1389,7 +1392,13 @@
   }
 
   /* Zero-upload privacy: a borderless shield icon beside the Console heading
-     reveals the statement. */
+     reveals the statement. The icon is wrapped in a relative anchor so the
+     statement can pop out directly beneath it instead of sitting as a block at
+     the foot of the console. */
+  .privacyAnchor {
+    position: relative;
+    display: inline-flex;
+  }
   .privacyToggle {
     display: inline-flex;
     align-items: center;
@@ -1414,35 +1423,43 @@
     height: 1.05rem;
   }
   .privacyStatement {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 0;
+    z-index: 30;
+    width: min(17rem, 78vw);
     border-radius: 0.7rem;
     padding: 0.6rem 0.7rem;
-    background: color-mix(in oklab, var(--color-emerald-500) 8%, transparent);
+    background: color-mix(in oklab, var(--color-emerald-500) 8%, var(--color-white));
     border: 1px solid color-mix(in oklab, var(--color-emerald-500) 25%, transparent);
+    box-shadow: 0 10px 24px -8px rgb(15 23 42 / 0.28);
   }
   .privacyStatement[hidden] {
     display: none;
   }
 
   /* ——— Footer brand (theme-aware) ——— */
-  .footerWordmark {
-    height: 1rem;
+  /* The vertical lockup stacks the emblem above the wordmark. It is far taller
+     than wide, so cap it by height and keep the row compact. */
+  .footerVertical {
+    height: 4.25rem;
     width: auto;
     object-fit: contain;
   }
-  .footerWordmarkLight {
+  .footerVerticalLight {
     display: none;
   }
-  [data-theme='dark'] .footerWordmarkDark {
+  [data-theme='dark'] .footerVerticalDark {
     display: none;
   }
-  [data-theme='dark'] .footerWordmarkLight {
+  [data-theme='dark'] .footerVerticalLight {
     display: block;
   }
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme='light']) .footerWordmarkDark {
+    :root:not([data-theme='light']) .footerVerticalDark {
       display: none;
     }
-    :root:not([data-theme='light']) .footerWordmarkLight {
+    :root:not([data-theme='light']) .footerVerticalLight {
       display: block;
     }
   }

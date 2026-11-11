@@ -598,12 +598,18 @@
               tabindex="0"
               aria-label="Drop your image here, or browse"
             >
-              <!-- Center Image Icon matching Image 3 -->
-              <div class="dzIcon w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-100 to-green-50 border border-green-200/80 shadow-sm flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                <svg class="w-10 h-10 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <rect x="3" y="3" width="18" height="18" rx="4" fill="#22c55e" fill-opacity="0.12" stroke="#16a34a" />
-                  <circle cx="8.5" cy="8.5" r="1.75" fill="#16a34a" stroke="none" />
-                  <path d="M21 16l-5-5-5.5 6-2.5-2.5L3 18.5" stroke="#16a34a" stroke-linecap="round" stroke-linejoin="round" />
+              <!-- Center Image Icon matching Image 3 (violet→blue theme accent) -->
+              <div class="dzIcon w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-100 to-blue-50 border border-violet-200/80 shadow-sm flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
+                <svg class="w-10 h-10 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <defs>
+                    <linearGradient id="dzIconGrad" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stop-color="#8b5cf6" />
+                      <stop offset="1" stop-color="#2563eb" />
+                    </linearGradient>
+                  </defs>
+                  <rect x="3" y="3" width="18" height="18" rx="4" fill="url(#dzIconGrad)" fill-opacity="0.14" stroke="url(#dzIconGrad)" />
+                  <circle cx="8.5" cy="8.5" r="1.75" fill="#8b5cf6" stroke="none" />
+                  <path d="M21 16l-5-5-5.5 6-2.5-2.5L3 18.5" stroke="url(#dzIconGrad)" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </div>
 
@@ -860,11 +866,22 @@
                     <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
                   </svg>
                   <h3 class="text-sm font-bold text-slate-800">Console</h3>
-                  <button id="privacyToggle" type="button" class="privacyToggle" aria-expanded="false" aria-controls="privacyStatement" aria-label="Show privacy statement" title="Zero-upload privacy">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                  </button>
+                  <span class="privacyAnchor">
+                    <button id="privacyToggle" type="button" class="privacyToggle" aria-expanded="false" aria-controls="privacyStatement" aria-label="Show privacy statement" title="Zero-upload privacy">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                    </button>
+                    <!-- Zero-upload privacy statement: a popover anchored to the
+                         shield icon. .privacyAnchor is the relative parent and
+                         the block hangs just below the icon. -->
+                    <div id="privacyStatement" class="privacyStatement" hidden>
+                      <h5 class="text-xs font-bold text-slate-900">Zero-Upload Privacy Assurance</h5>
+                      <p class="text-[11px] text-slate-600 mt-0.5 leading-normal">
+                        Inference runs entirely in local browser memory. Nothing leaves your device.
+                      </p>
+                    </div>
+                  </span>
                 </div>
                 <div class="flex items-center gap-2">
                   <span id="processingLabel" class="consoleStatus">Engine ready</span>
@@ -918,15 +935,6 @@
 
                 <!-- Categorised log: one collapsible block per category -->
                 <div id="logGroups" class="logGroups"></div>
-
-                <!-- Zero-upload privacy statement (toggled by the shield icon
-                     beside the "Console" heading) -->
-                <div id="privacyStatement" class="privacyStatement" hidden>
-                  <h5 class="text-xs font-bold text-slate-900">Zero-Upload Privacy Assurance</h5>
-                  <p class="text-[11px] text-slate-600 mt-0.5 leading-normal">
-                    Inference runs entirely in local browser memory. Nothing leaves your device.
-                  </p>
-                </div>
               </div>
             </div>
           </div>
@@ -939,20 +947,15 @@
       <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
         <div class="flex items-center gap-3">
           <img
-            src="./assets/brand/smartcutai-mark.png"
-            alt="SmartCutAI emblem"
-            class="footerMark h-7 object-contain"
-          />
-          <img
-            src="./assets/brand/smartcutai-wordmark.png"
+            src="./assets/brand/smartcutai-vertical.png"
             alt="SmartCutAI"
-            class="footerWordmark footerWordmarkDark h-4 object-contain"
+            class="footerVertical footerVerticalDark object-contain"
           />
           <img
-            src="./assets/brand/smartcutai-wordmark-light.png"
+            src="./assets/brand/smartcutai-vertical-light.png"
             alt=""
             aria-hidden="true"
-            class="footerWordmark footerWordmarkLight h-4 object-contain"
+            class="footerVertical footerVerticalLight object-contain"
           />
           <span class="text-xs text-slate-400">· On-Device Image Studio</span>
         </div>

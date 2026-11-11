@@ -46,6 +46,13 @@ describe('self-hosted assets (no third-party resource loads)', () => {
     }
   });
 
+  it('the footer vertical lockup (dark + light for dark mode) is self-hosted', () => {
+    for (const asset of ['smartcutai-vertical.png', 'smartcutai-vertical-light.png']) {
+      expect(existsSync(resolve(ROOT, 'public/assets/brand', asset))).toBe(true);
+      expect(html).toContain(`./assets/brand/${asset}`);
+    }
+  });
+
   it('the CSP keeps font/style/connect origins same-origin', () => {
     const headers = read('scripts/write-headers.mjs');
     expect(headers).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);

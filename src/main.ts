@@ -45,6 +45,13 @@ import {
 } from './features/background-removal/asset-cache';
 import { describeProgress, phaseForStage, PHASE_LABELS } from './features/background-removal/load-progress';
 import {
+  estimateInferenceMs,
+  overallPercent,
+  phaseExpectedMs,
+  timeFraction,
+  type ProcPhase,
+} from './features/background-removal/processing-progress';
+import {
   shouldConfirmDownload,
   downloadConfirmationText,
   shouldAutoFetchModel,
@@ -1421,6 +1428,10 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   const image = currentImageData;
   setStep('inference', 'done');
   setStep('export', 'active');
+  // The inference is done; the only work left is compositing the cut-out, which
+  // has no measurable percentage of its own.
+  beginProcPhase('finalize', phaseExpectedMs('finalize', 0));
+  refreshProcPercent();
   setProcessingLabel('Creating your image…', true);
   // The worker reports the model's actual input size so a per-model input change
   // (e.g. a 384 variant) never mis-scales the mask. The mask covers the
@@ -1470,6 +1481,7 @@ function finishResult(canvas: HTMLCanvasElement, preview: HTMLCanvasElement, siz
   outputSection.hidden = false;
   setStep('export', 'done');
   setProcessingLabel('Done — your image is ready', false);
+  endProcPhase();
   studioResult();
   // Record the settings this cut-out was produced with; changing them later
   // reveals the re-process button.
@@ -1818,6 +1830,15 @@ dropZone.addEventListener('keydown', (e) => {
     chooseFile();
   }
 });
+// The selected-photo preview replaces the drop zone once a photo exists, so it
+// takes over the "choose another image" job: clicking it re-opens the picker.
+inputPreviewEl.addEventListener('click', chooseFile);
+inputPreviewEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    chooseFile();
+  }
+});
 dropZone.addEventListener('dragover', (e) => {
   e.preventDefault();
   dropZone.classList.add('dragover');
@@ -1876,20 +1897,34 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
   }
   hideRecovery();
   clearOutput();
+  // The panel's progress spans the whole run. A model that still has to be
+  // fetched starts in the download band; one already on the device starts at
+  // the session-build band, so the bar never sits at a bare 0%.
+  if (!modelReady && !modelError) beginProcPhase('download', 0);
+  else beginProcPhase('prepare', phaseExpectedMs('prepare', 0));
   studioRunStart();
+  // Seed the panel with the phase's starting value immediately, so it never
+  // flashes a bare 0% for a model that is already on the device.
+  refreshProcPercent();
   try {
     await waitForModel();
   } catch (e) {
+    endProcPhase();
     studioError();
     error(e instanceof Error ? e.message : String(e), 'download');
     return null;
   }
+  // The session is built; the only remaining work is the inference itself, whose
+  // duration we estimate from earlier runs on this device.
+  beginProcPhase('inference', estimateInferenceMs(timings));
+  refreshProcPercent();
   timings.length = 0;
   for (let i = 0; i < runs; i++) {
     try {
       await runOneInference();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
+      endProcPhase();
       studioError();
       error(message, classifyError(message));
       return null;
@@ -1914,6 +1949,41 @@ window.smokeModelId = '';
 // ——— Progress state ———
 // The stage line, the progress ring, and the processing panel all read from the
 // same last-checkpoint state, so they never disagree about what is happening.
+
+// The processing panel's percentage is a single monotonic estimate across the
+// whole run: the download band maps its real percentage, and the phases with no
+// measurable progress (session build, inference, composite) advance by elapsed
+// time within their own band. `activeProcPhase` is the phase the running photo
+// is in, or null when nothing is running. See processing-progress.ts.
+let activeProcPhase: ProcPhase | null = null;
+let activePhaseStartedAt = 0;
+let activePhaseExpectedMs = 0;
+
+function beginProcPhase(phase: ProcPhase, expectedMs: number): void {
+  activeProcPhase = phase;
+  activePhaseStartedAt = performance.now();
+  activePhaseExpectedMs = expectedMs;
+}
+
+function endProcPhase(): void {
+  activeProcPhase = null;
+}
+
+// The current phase's contribution to the bar, using the elapsed clock for the
+// time-estimated phases so the value keeps climbing between progress messages.
+function currentProcPercent(downloadPercent = 0): number | null {
+  if (!activeProcPhase) return null;
+  const fraction =
+    activeProcPhase === 'download'
+      ? 0
+      : timeFraction(performance.now() - activePhaseStartedAt, activePhaseExpectedMs);
+  return overallPercent(activeProcPhase, downloadPercent, fraction);
+}
+
+function refreshProcPercent(downloadPercent = 0): void {
+  studioProgress(currentProcPercent(downloadPercent));
+}
+
 let lastLoadStage: LoadStage | null = null;
 let lastProgress: {
   stage: LoadStage;
@@ -1957,16 +2027,20 @@ function updateLoadProgress(msg: {
     if (msg.stage !== 'downloaded') {
       setProcessingLabel(`Downloading ${selectedModel?.label ?? 'model'} — ${pct}%`, true);
     }
-    studioProgress(msg.stage === 'cache-check' ? null : pct);
+    // The panel maps the download's real percentage into its band of the run.
+    studioProgress(currentProcPercent(pct));
     procStageLabelEl.textContent = 'Downloading model';
   } else {
     // Everything else (runtime, session creation) is not a measurable
     // percentage, so the ring spins indeterminately rather than lying.
+    // A cached model reports its download stage during the run; once it is past
+    // that, move the panel from the download band into the prepare band.
+    if (activeProcPhase === 'download') beginProcPhase('prepare', phaseExpectedMs('prepare', 0));
     showRing(null);
     setStep('download', 'done');
     setStep('prepare', 'active', msg.detail ?? '');
     setProcessingLabel(PHASE_LABELS[phase] + '…', true);
-    studioProgress(null);
+    studioProgress(currentProcPercent());
     procStageLabelEl.textContent = PHASE_LABELS[phase];
   }
 
@@ -1988,6 +2062,16 @@ setInterval(() => {
     describeProgress({ ...lastProgress, elapsedMs: performance.now() - progressClockOffset }),
   );
 }, 500);
+
+// Keep the processing panel's percentage climbing while a run is in progress.
+// The unmeasurable phases have no event stream of their own, so without this
+// tick the bar would freeze; it stops the moment the phase ends or the model
+// reports an error.
+setInterval(() => {
+  if (activeProcPhase === null || modelError) return;
+  const downloadPercent = lastProgress?.stage === 'downloading' ? lastProgress.percent : 0;
+  refreshProcPercent(downloadPercent);
+}, 250);
 
 // ——— Boot ———
 // Order: build the provider gate (cheap), load the manifest (source of truth

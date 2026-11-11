@@ -128,8 +128,11 @@ and `src/index.ts`).
   own ONNX Runtime Web + WASM pipeline (see the BiRefNet_lite notice above); it
   does **not** use rembg-webgpu's `briaai/RMBG-1.4` model or
   `@huggingface/transformers`.
-- Attribution obligation: the licence's attribution string is surfaced in the
-  app footer's third-party credits (see `index.html`).
+- Attribution obligation: the licence's attribution string
+  ("Background Removal Library provided by www.rembg.com") is surfaced in the
+  source next to the adapted code —
+  `src/features/background-removal/composite.ts` and
+  `public/compositor-worker.js` — rather than as a public footer credit.
 
 ## Runtime
 

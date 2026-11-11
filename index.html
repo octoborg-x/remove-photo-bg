@@ -424,13 +424,6 @@
             </p>
           </div>
         </div>
-
-        <p class="mt-8 text-center text-xs text-slate-400">
-          Curious how the cut-out is assembled? The compositing and preview layer is adapted from
-          <a href="https://github.com/Remove-Background-ai/rembg-webgpu" class="hover:text-blue-600 underline">rembg-webgpu</a>
-          — Background Removal Library provided by
-          <a href="https://www.rembg.com" class="hover:text-blue-600 underline">www.rembg.com</a>.
-        </p>
       </section>
 
       <!-- Benchmarks & Scientific Rigor -->
@@ -585,10 +578,21 @@
               <div class="studioTabBody">
             <!-- Input tab: the chosen photo + the drop zone (default editor view) -->
             <div id="panelInput" class="editorPanel" role="tabpanel" aria-labelledby="tabInput">
-            <!-- Selected photo preview (hidden until a photo is chosen) -->
-            <div id="inputPreview" class="inputPreview" hidden>
+            <!-- Selected photo preview (hidden until a photo is chosen). Clicking
+                 it re-opens the system file picker, so the drop zone can be hidden
+                 once a photo exists. -->
+            <div
+              id="inputPreview"
+              class="inputPreview"
+              hidden
+              role="button"
+              tabindex="0"
+              aria-label="Selected photo — click to choose a different image"
+              title="Click to choose a different image"
+            >
               <img id="inputPreviewImg" class="inputPreviewImg" alt="Selected photo" />
               <span class="inputPreviewBadge">Selected photo</span>
+              <span class="inputPreviewHint">Click to change image</span>
             </div>
             <!-- Drop Zone: Styled strictly like Image 3 (No "Choose a photo" title) -->
             <div
@@ -623,17 +627,23 @@
             </div>
             </div>
 
-            <!-- Processing tab: animated wallpaper + progress (no selected image shown) -->
+            <!-- Processing tab: animated "AI is working" visual + progress -->
             <div id="panelProcessing" class="editorPanel" role="tabpanel" aria-labelledby="tabProcessing" hidden>
               <div class="procWallpaper">
-                <div class="procWaves" aria-hidden="true"></div>
-                <div class="procPixels" aria-hidden="true"></div>
-                <div class="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-4">
-                  <div class="theme-inverse inline-flex items-center gap-3 px-4 py-2 rounded-full bg-slate-900/70 backdrop-blur-md border border-on-dark text-on-accent text-xs font-semibold shadow-xl">
-                    <span class="relative flex h-2.5 w-2.5">
-                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
-                    </span>
+                <div class="procGrid" aria-hidden="true"></div>
+                <div class="procGlow" aria-hidden="true"></div>
+                <div class="procScan" aria-hidden="true"></div>
+                <div class="procStage">
+                  <div class="procSpinner" aria-hidden="true">
+                    <span class="procSpinnerTrack"></span>
+                    <span class="procSpinnerArc"></span>
+                    <svg class="procSpinnerIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                      <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" stroke-linecap="round" />
+                      <circle cx="12" cy="12" r="3.2" />
+                    </svg>
+                  </div>
+                  <div class="procStatus">
+                    <span class="procStatusDot" aria-hidden="true"></span>
                     <span class="text-slate-100">Removing background with on-device AI…</span>
                   </div>
                 </div>
@@ -656,7 +666,7 @@
               </div>
 
               <!-- Relative Image Container Holding Top-Left Gear -->
-              <div class="relative rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-100 shadow-inner group/output">
+              <div id="outputFrame" class="relative rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-100 shadow-inner group/output">
                 <!-- Gear button on Top-Left Corner of generated image -->
                 <button
                   id="settingsGearBtn"
@@ -972,13 +982,6 @@
           Build <code id="buildStamp">__BUILD_ID__</code>
         </p>
       </div>
-
-      <p class="mt-6 text-center text-[11px] text-slate-400">
-        Compositing and preview code adapted from
-        <a href="https://github.com/Remove-Background-ai/rembg-webgpu" class="hover:text-blue-600 underline">rembg-webgpu</a>
-        — Background Removal Library provided by
-        <a href="https://www.rembg.com" class="hover:text-blue-600 underline">www.rembg.com</a>.
-      </p>
     </footer>
 
     <!-- Main module & diagnostic guard scripts -->

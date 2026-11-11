@@ -7,6 +7,10 @@
 // image in bounded horizontal strips and always renders a ≤450 px preview for
 // fast UI feedback. The strip bound caps peak memory on very large images.
 //
+// Attribution (required by the RemBG Attribution License): "Background Removal
+// Library provided by www.rembg.com". The full notice, licence and scope of use
+// live in THIRD_PARTY_LEGAL_NOTICES.md.
+//
 // Unlike the reference — which owns the full pipeline, a dedicated compositor
 // worker and a main-thread fallback — this app composites on the main thread in
 // `main.ts` (which the result, compare and export views all share) and ships

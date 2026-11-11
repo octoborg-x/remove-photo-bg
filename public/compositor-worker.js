@@ -8,8 +8,11 @@
 // Adapted from the rembg-webgpu compositor worker
 // (https://github.com/Remove-Background-ai/rembg-webgpu,
 // src/rembg-compositor.worker.ts): the mask is written into the alpha channel in
-// bounded 512 px strips and a <=450 px preview is rendered alongside. See
-// THIRD_PARTY_LEGAL_NOTICES.md for the attribution.
+// bounded 512 px strips and a <=450 px preview is rendered alongside.
+//
+// Attribution (required by the RemBG Attribution License): "Background Removal
+// Library provided by www.rembg.com". See THIRD_PARTY_LEGAL_NOTICES.md and the
+// matching notice in src/features/background-removal/composite.ts.
 //
 // The page only starts this worker when the browser exposes OffscreenCanvas; it
 // falls back to the identical main-thread path (src/.../composite.ts) otherwise,

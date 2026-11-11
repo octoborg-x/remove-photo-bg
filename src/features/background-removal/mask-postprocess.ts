@@ -147,17 +147,3 @@ function boxBlur(
   }
   return out;
 }
-
-export function applyMaskToImage(
-  image: ImageData,
-  mask: Uint8ClampedArray,
-): ImageData {
-  const out = new ImageData(image.width, image.height);
-  for (let i = 0; i < image.data.length; i += 4) {
-    out.data[i] = image.data[i];
-    out.data[i + 1] = image.data[i + 1];
-    out.data[i + 2] = image.data[i + 2];
-    out.data[i + 3] = mask[i / 4];
-  }
-  return out;
-}

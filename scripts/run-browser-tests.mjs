@@ -90,6 +90,61 @@ function record(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
 }
 
+// The editor (drop zone, output, console) now lives inside the full-page Studio
+// layer, which the header button opens. Every scenario that drives the editor
+// must open it first.
+async function openStudio(page) {
+  // The module script is deferred and the browser may still be busy finishing a
+  // previous page's inference, so the button has no listener for a moment. Wait
+  // for it, click, and retry once if the first click landed too early.
+  await page.waitForSelector('#studioLaunch', { timeout: 60000 });
+  const isOpen = () =>
+    page.evaluate(() => document.getElementById('studio')?.classList.contains('is-open') === true);
+  await page.click('#studioLaunch');
+  try {
+    await page.waitForFunction(
+      () => document.getElementById('studio')?.classList.contains('is-open') === true,
+      { timeout: 20000 },
+    );
+  } catch {
+    if (!(await isOpen())) await page.click('#studioLaunch');
+    await page.waitForFunction(
+      () => document.getElementById('studio')?.classList.contains('is-open') === true,
+      { timeout: 20000 },
+    );
+  }
+}
+
+// Clicking the input opens the native file chooser, but the deferred module may
+// not have attached its click listener yet on a busy runner — so a click can
+// land on a dead element. Retry a few times instead of racing. Once a photo is
+// chosen the drop zone is hidden and the preview takes over as the picker
+// target, so click whichever one is currently visible.
+async function chooseFile(page, filePath) {
+  await page.waitForSelector('#dropZone', { timeout: 60000 });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const chooserPromise = page.waitForFileChooser({ timeout: 10000 }).then(
+      (chooser) => ({ chooser }),
+      (err) => ({ err }),
+    );
+    const target = await page.evaluate(() => {
+      const dz = document.getElementById('dropZone');
+      const pv = document.getElementById('inputPreview');
+      const visible = (el) => el && !el.hidden && el.getBoundingClientRect().height > 0;
+      if (visible(dz)) return 'dropZone';
+      if (visible(pv)) return 'inputPreview';
+      return 'dropZone';
+    });
+    await page.click(`#${target}`);
+    const outcome = await chooserPromise;
+    if (outcome.chooser) {
+      await outcome.chooser.accept([filePath]);
+      return;
+    }
+  }
+  throw new Error(`could not open the file chooser for ${filePath}`);
+}
+
 async function waitForServer(url, timeoutMs = 60000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -138,6 +193,44 @@ const browser = await puppeteer.launch({
 try {
   if (!providedUrl) await waitForServer(pageUrl.toString());
 
+  // ——— Scenario 0: the hero tagline stays on one unbroken, animating line ———
+  {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 360, height: 800 });
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    const shape = await page.evaluate(() => {
+      const el = document.querySelector('.heroTaglineText');
+      const wrap = el.closest('.heroTagline');
+      const track = el.closest('.heroTaglineTrack');
+      const cs = getComputedStyle(el);
+      const wcs = getComputedStyle(wrap);
+      const tcs = getComputedStyle(track);
+      return {
+        nowrap: cs.whiteSpace === 'nowrap',
+        padding: parseFloat(wcs.paddingLeft) > 0,
+        clipped: wcs.overflow === 'hidden' || wcs.overflowX === 'hidden',
+        lines: Math.round(el.offsetHeight / parseFloat(cs.lineHeight)),
+        copies: track.querySelectorAll('.heroTaglineText').length,
+        animation: tcs.animationName,
+      };
+    });
+    record('hero tagline is one unbroken line', shape.nowrap && shape.lines === 1);
+    record('hero tagline keeps its padding and clips overflow', shape.padding && shape.clipped);
+    record('hero tagline loops with a seamless second copy', shape.copies === 2);
+    // A linear marquee moves continuously, so sampling a couple of frames is
+    // enough to see the track's transform change.
+    let moved = false;
+    let prev = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineTrack')).transform);
+    for (let attempt = 0; attempt < 24 && !moved; attempt += 1) {
+      await sleep(200);
+      const now = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineTrack')).transform);
+      moved = now !== prev;
+      prev = now;
+    }
+    record('hero tagline scrolls horizontally (marquee animation)', shape.animation === 'taglineMarquee' && moved);
+    await page.close();
+  }
+
   // ——— Scenario 1: JPEG upload → inference → both exports ———
   {
     const page = await browser.newPage();
@@ -147,13 +240,11 @@ try {
       if (!u.startsWith('data:')) requests.push(u);
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
 
     // Upload through the real file chooser (the button creates the input).
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    const chooser = await chooserPromise;
-    await chooser.accept([resolve(ROOT, 'test-images/glass-wine.jpg')]);
+    await chooseFile(page, resolve(ROOT, 'test-images/glass-wine.jpg'));
 
     // Wait for the app to decode + auto-start the run. There is no "Remove
     // background" button any more: choosing the photo starts the run.
@@ -176,7 +267,7 @@ try {
         radios: radios.map((r) => ({ value: r.value, checked: r.checked, disabled: r.disabled })),
         imgSrc: img?.getAttribute('src') ?? '',
         outputSectionHidden: document.getElementById('outputSection')?.hidden ?? true,
-        log: document.getElementById('log')?.textContent ?? '',
+        log: document.getElementById('logGroups')?.textContent ?? '',
       };
     });
     record(
@@ -213,39 +304,310 @@ try {
       jpegState.download,
     );
 
-    // The technical-details block lives in the studio workspace and lists the
-    // steps in the order they ran. It is an always-visible status card (a div,
-    // not a collapsed disclosure), so there is no open/closed state to assert.
-    const panelState = await page.evaluate(() => {
-      const details = document.getElementById('techDetails');
-      const inStudio = !!document.getElementById('studio')?.contains(details);
-      const label = document.getElementById('processingLabel')?.textContent ?? '';
-      const steps = Array.from(document.querySelectorAll('#stepList li')).map((li) => ({
-        text: li.textContent ?? '',
-        state: li.dataset.state,
-      }));
+    // Compare tab: a fourth editor tab, enabled once a result exists, pairing the
+    // original photo with the composited cut-out.
+    const compareState = await page.evaluate(() => {
+      const tab = document.getElementById('tabCompare');
+      tab.click();
       return {
-        inStudio,
-        visible: details ? getComputedStyle(details).display !== 'none' : false,
-        label,
-        steps,
+        enabled: !tab.disabled,
+        selected: tab.getAttribute('aria-selected') === 'true',
+        panelVisible: !document.getElementById('panelCompare').hidden,
+        before: document.getElementById('compareBefore')?.getAttribute('src') ?? '',
+        after: document.getElementById('compareAfter')?.getAttribute('src') ?? '',
       };
     });
     record(
-      'technical details sits in the studio workspace and lists download/prepare/inference/export steps',
+      'the Compare tab shows the original beside the cut-out',
+      compareState.enabled &&
+        compareState.selected &&
+        compareState.panelVisible &&
+        compareState.before.length > 0 &&
+        compareState.after.startsWith('data:image/'),
+    );
+
+    // Background picker: one system colour input (a solid colour exports as JPG,
+    // no alpha to carry) repaints the compare view; the transparent toggle
+    // returns a real alpha PNG.
+    const bgState = await page.evaluate(() => {
+      const picker = document.getElementById('bgColorPicker');
+      picker.value = '#2563eb';
+      picker.dispatchEvent(new Event('input', { bubbles: true }));
+      const afterColor = {
+        download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
+        pressed: document.getElementById('bgTransparentBtn')?.getAttribute('aria-pressed'),
+        compareAfter: document.getElementById('compareAfter')?.getAttribute('src') ?? '',
+      };
+      document.getElementById('bgTransparentBtn').click();
+      const afterTransparent = {
+        download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
+        current: document.getElementById('bgCurrent')?.textContent ?? '',
+      };
+      return { afterColor, afterTransparent };
+    });
+    record(
+      'picking a solid background exports JPG and repaints the compare view',
+      bgState.afterColor.download.endsWith('.jpg') &&
+        bgState.afterColor.pressed === 'false' &&
+        bgState.afterColor.compareAfter.startsWith('data:image/'),
+      bgState.afterColor.download,
+    );
+    record(
+      'transparent keeps a PNG export',
+      bgState.afterTransparent.download.endsWith('.png') &&
+        bgState.afterTransparent.current === 'transparent',
+      bgState.afterTransparent.current,
+    );
+
+    // Theme: the toggle pins an explicit mode and flips the page surface. The
+    // colour change is transitioned, so read it after the swap settles.
+    const themeBefore = await page.evaluate(() => ({
+      attr: document.documentElement.getAttribute('data-theme'),
+      bg: getComputedStyle(document.body).backgroundColor,
+    }));
+    await page.evaluate(() => document.getElementById('themeToggle').click());
+    await sleep(500);
+    const themeAfter = await page.evaluate(() => ({
+      attr: document.documentElement.getAttribute('data-theme'),
+      bg: getComputedStyle(document.body).backgroundColor,
+    }));
+    record(
+      'the theme toggle switches to an explicit mode and repaints the page',
+      (themeAfter.attr === 'light' || themeAfter.attr === 'dark') && themeBefore.bg !== themeAfter.bg,
+      `${themeAfter.attr} (${themeBefore.bg} → ${themeAfter.bg})`,
+    );
+
+    // The header brand swaps to the light-ink lockup in dark mode (and back),
+    // then collapses to the figure-only mark on scroll in either theme. The
+    // crossfade is transitioned, so read each state after it settles.
+    const brandState = () =>
+      page.evaluate(() => {
+        const op = (id) => Number(getComputedStyle(document.getElementById(id)).opacity);
+        return { lockup: op('brandLockup'), light: op('brandLockupLight'), mark: op('brandMark') };
+      });
+    const setTheme = (t) =>
+      page.evaluate((theme) => {
+        if (theme === null) document.documentElement.removeAttribute('data-theme');
+        else document.documentElement.setAttribute('data-theme', theme);
+      }, t);
+    await setTheme('light');
+    await sleep(500);
+    const brandLight = await brandState();
+    await setTheme('dark');
+    await sleep(500);
+    const brandDark = await brandState();
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await sleep(500);
+    const brandDarkScrolled = await brandState();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await setTheme(null);
+    record(
+      'the brand swaps to the light-ink lockup in dark mode and the mark on scroll',
+      brandLight.lockup === 1 &&
+        brandLight.light === 0 &&
+        brandDark.lockup === 0 &&
+        brandDark.light === 1 &&
+        brandDarkScrolled.mark === 1 &&
+        brandDarkScrolled.light === 0,
+      `light ${brandLight.lockup}/${brandLight.light} → dark ${brandDark.lockup}/${brandDark.light} → scrolled mark ${brandDarkScrolled.mark}`,
+    );
+
+    // The header is direction-aware: scrolling DOWN collapses it (shorter bar,
+    // brand crossfades to the mark, Studio label drops), scrolling UP expands it,
+    // and the top of the page is always full height. Scroll with a Node-side
+    // settle between steps (headless rAF alone is racy).
+    const headerAt = async (y) => {
+      await page.evaluate((scrollY) => window.scrollTo(0, scrollY), y);
+      await sleep(350);
+      return page.evaluate(() => ({
+        collapsed: document.getElementById('siteHeader').dataset.collapsed,
+        y: Math.round(window.scrollY),
+        innerH: Math.round(document.querySelector('.siteHeaderInner').getBoundingClientRect().height),
+        labelW: Math.round(document.querySelector('.studioLaunchText').getBoundingClientRect().width),
+      }));
+    };
+    const hTop = await headerAt(0); // rest
+    const hDown = await headerAt(400); // scroll down → collapse
+    const hUp = await headerAt(200); // scroll up → expand
+    const hTopAgain = await headerAt(0); // back at the top → expand
+    // A viewport resize (e.g. the mobile system bar or devtools) must not leave
+    // the header stuck collapsed at the top of the page.
+    await page.setViewport({ width: 1280, height: 720 });
+    await sleep(350);
+    const hAfterResize = await page.evaluate(() => ({
+      collapsed: document.getElementById('siteHeader').dataset.collapsed,
+      innerH: Math.round(document.querySelector('.siteHeaderInner').getBoundingClientRect().height),
+    }));
+    await page.setViewport({ width: 1280, height: 900 });
+    await sleep(200);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const markWidth = await page.evaluate(() => {
+      const mark = document.getElementById('brandMark');
+      const lockup = document.getElementById('brandLockup');
+      return {
+        markW: mark.getBoundingClientRect().width,
+        h: lockup.getBoundingClientRect().height,
+      };
+    });
+    record(
+      'the header collapses on scroll down and expands on scroll up',
+      hTop.collapsed === 'false' &&
+        hDown.collapsed === 'true' &&
+        hUp.collapsed === 'false' &&
+        hTopAgain.collapsed === 'false',
+      `top:${hTop.collapsed} down400:${hDown.collapsed} up200:${hUp.collapsed} top:${hTopAgain.collapsed}`,
+    );
+    record(
+      'the collapsed header is shorter and drops the Studio label',
+      hDown.innerH < hTop.innerH && hDown.labelW === 0 && hTop.labelW > 0,
+      `height ${hTop.innerH}→${hDown.innerH}px, label ${hTop.labelW}→${hDown.labelW}px`,
+    );
+    record(
+      'the header is never stuck collapsed at the top after a resize',
+      hAfterResize.collapsed === 'false' && hAfterResize.innerH === hTop.innerH,
+      `collapsed:${hAfterResize.collapsed} height:${hAfterResize.innerH}px`,
+    );
+    record(
+      'the collapsed mark is ~25% narrower than the lockup figure',
+      markWidth.markW > 0 && markWidth.markW < markWidth.h * 0.6,
+      `mark ${markWidth.markW.toFixed(1)}px vs brand height ${markWidth.h.toFixed(1)}px`,
+    );
+
+    // The console lives in the studio workspace: the pipeline is a row of status
+    // dots (all done after a successful run) and the log is filed under
+    // categories. The Zero-Upload statement is hidden behind a clickable icon.
+    const panelState = await page.evaluate(() => {
+      const consoleEl = document.querySelector('.consoleCard');
+      const inStudio = !!document.getElementById('studio')?.contains(consoleEl);
+      const label = document.getElementById('processingLabel')?.textContent ?? '';
+      const steps = Array.from(document.querySelectorAll('#stepList li')).map((li) => ({
+        text: li.textContent ?? '',
+        title: li.getAttribute('title') ?? '',
+        state: li.dataset.state,
+      }));
+      const groups = Array.from(document.querySelectorAll('#logGroups .logGroup'))
+        .filter((g) => !g.hidden)
+        .map((g) => g.dataset.category);
+      const privacyHiddenBefore = document.getElementById('privacyStatement')?.hidden ?? false;
+      const privacyBtn = document.getElementById('privacyToggle');
+      // The icon must sit beside the "Console" heading, be borderless, and carry
+      // no text label of its own.
+      const head = privacyBtn?.closest('.consoleHead');
+      const privacyInHead = !!head && /console/i.test(head.textContent ?? '');
+      const privacyBorderless = getComputedStyle(privacyBtn).borderTopWidth === '0px';
+      const privacyNoLabel = !privacyBtn?.parentElement?.querySelector('.privacyToggleLabel');
+      privacyBtn?.click();
+      const privacyHiddenAfter = document.getElementById('privacyStatement')?.hidden ?? true;
+      // Console log chrome: chevrons (not dots), no block borders, indented body.
+      const logDots = Array.from(document.querySelectorAll('#logDots .logDot'));
+      const chevronsInDots = logDots.filter((d) => d.querySelector('.logChevron svg')).length;
+      const group = document.querySelector('#logGroups .logGroup');
+      const groupBorderless = group ? getComputedStyle(group).borderTopWidth === '0px' : false;
+      const bodyIndented = group
+        ? parseFloat(getComputedStyle(group.querySelector('.consoleGroupBody')).marginLeft) > 8
+        : false;
+      return {
+        inStudio,
+        label,
+        steps,
+        groups,
+        privacyHiddenBefore,
+        privacyHiddenAfter,
+        privacyInHead,
+        privacyBorderless,
+        privacyNoLabel,
+        chevronsInDots,
+        dotsTotal: logDots.length,
+        groupBorderless,
+        bodyIndented,
+      };
+    });
+    record(
+      'the console sits in the studio and lists model/prepare/remove/export pipeline dots',
       panelState.inStudio === true &&
-        panelState.visible === true &&
         panelState.steps.length >= 4 &&
         panelState.steps.every((s) => s.state === 'done') &&
-        panelState.steps.some((s) => /download/i.test(s.text)) &&
-        panelState.steps.some((s) => /prepare/i.test(s.text)) &&
-        panelState.steps.some((s) => /remove background/i.test(s.text)),
+        panelState.steps.some((s) => /model/i.test(s.title)) &&
+        panelState.steps.some((s) => /prepare/i.test(s.title)) &&
+        panelState.steps.some((s) => /remove background/i.test(s.title)),
       panelState.steps.map((s) => `${s.state}:${s.text}`).join(' | '),
     );
     record(
-      'the technical-details label reports the finished process',
+      'the console status label reports the finished process',
       /done/i.test(panelState.label),
       panelState.label,
+    );
+    record(
+      'log lines are filed under categories',
+      panelState.groups.length > 0,
+      panelState.groups.join(','),
+    );
+    record(
+      'the privacy statement is hidden until its icon is clicked',
+      panelState.privacyHiddenBefore === true && panelState.privacyHiddenAfter === false,
+      `${panelState.privacyHiddenBefore} → ${panelState.privacyHiddenAfter}`,
+    );
+    record(
+      'the privacy icon sits borderless beside the Console heading with no label',
+      panelState.privacyInHead === true &&
+        panelState.privacyBorderless === true &&
+        panelState.privacyNoLabel === true,
+      `inHead ${panelState.privacyInHead} borderless ${panelState.privacyBorderless} noLabel ${panelState.privacyNoLabel}`,
+    );
+    record(
+      'the console log uses chevrons instead of dots, with borderless indented blocks',
+      panelState.dotsTotal > 0 &&
+        panelState.chevronsInDots === panelState.dotsTotal &&
+        panelState.groupBorderless === true &&
+        panelState.bodyIndented === true,
+      `chevrons ${panelState.chevronsInDots}/${panelState.dotsTotal} borderless ${panelState.groupBorderless} indented ${panelState.bodyIndented}`,
+    );
+
+    // Console show/hide + drag-resize: the toggle button and the in-card close
+    // both hide it; the resize handle can only shrink it (never past 35%).
+    const consoleControls = await page.evaluate(async () => {
+      const grid = document.querySelector('.studioGrid');
+      const col = document.getElementById('studioConsoleCol');
+      const toggle = document.getElementById('consoleToggle');
+      const closeBtn = document.getElementById('consoleClose');
+      const handle = document.getElementById('consoleResize');
+      const gridH = grid.getBoundingClientRect().height;
+      const openH = col.getBoundingClientRect().height;
+      const cap = gridH * 0.5;
+      const floor = gridH * 0.2;
+      // Drag the handle up hard: the console must stop at the 50% cap.
+      const r = handle.getBoundingClientRect();
+      const y0 = r.top + r.height / 2;
+      handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientY: y0, pointerId: 1 }));
+      handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 - 900, pointerId: 1 }));
+      const grownH = col.getBoundingClientRect().height;
+      // Drag down hard: it shrinks (below 35%) but keeps a usable minimum.
+      handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 + 900, pointerId: 1 }));
+      const shrunkH = col.getBoundingClientRect().height;
+      handle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientY: y0 + 900, pointerId: 1 }));
+      closeBtn.click();
+      const hiddenByClose = grid.dataset.console === 'hidden';
+      const togglePressedWhenHidden = toggle.getAttribute('aria-pressed');
+      toggle.click();
+      const shownAgain = grid.dataset.console !== 'hidden';
+      const togglePressedWhenShown = toggle.getAttribute('aria-pressed');
+      return { gridH, openH, cap, floor, grownH, shrunkH, hiddenByClose, shownAgain, togglePressedWhenHidden, togglePressedWhenShown };
+    });
+    record(
+      'the console has a show/hide toggle and an in-card close button',
+      consoleControls.hiddenByClose === true &&
+        consoleControls.shownAgain === true &&
+        consoleControls.togglePressedWhenHidden === 'false' &&
+        consoleControls.togglePressedWhenShown === 'true',
+      `hidden ${consoleControls.hiddenByClose} → shown ${consoleControls.shownAgain}`,
+    );
+    record(
+      'the console top edge resizes between 20% and 50%',
+      consoleControls.grownH <= consoleControls.cap + 1 &&
+        consoleControls.grownH >= consoleControls.openH - 1 &&
+        consoleControls.shrunkH < consoleControls.openH &&
+        consoleControls.shrunkH >= consoleControls.floor - 1,
+      `open ${Math.round(consoleControls.openH)} cap ${Math.round(consoleControls.cap)} floor ${Math.round(consoleControls.floor)} grown ${Math.round(consoleControls.grownH)} shrunk ${Math.round(consoleControls.shrunkH)}`,
     );
 
     // Privacy: every request during processing is same-origin (no third party).
@@ -264,11 +626,10 @@ try {
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     const pngPath = resolve(ROOT, 'smoke-results/phase4-browser/input.png');
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    (await chooserPromise).accept([pngPath]);
+    await chooseFile(page, pngPath);
     // Choosing the photo auto-starts the run; no button to click.
     await page.waitForFunction(() => document.querySelector('#outputBox img') !== null, { timeout: 600000 });
     const src = await page.evaluate(() => document.querySelector('#outputBox img')?.getAttribute('src') ?? '');
@@ -276,14 +637,62 @@ try {
     await page.close();
   }
 
+  // ——— Scenario 2b: input tab shows exactly one of drop zone / preview ———
+  // The drop zone is the default; once a photo is chosen it is replaced by the
+  // preview (never both at once), and the preview reopens the picker.
+  {
+    const page = await browser.newPage();
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+    await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
+
+    const initial = await page.evaluate(() => {
+      const visible = (el) => !!el && !el.hidden && el.getBoundingClientRect().height > 0;
+      return {
+        dropZone: visible(document.getElementById('dropZone')),
+        preview: visible(document.getElementById('inputPreview')),
+      };
+    });
+    record('input tab shows only the drop-zone placeholder before a photo is chosen', initial.dropZone && !initial.preview);
+
+    await chooseFile(page, resolve(ROOT, 'test-images/glass-wine.jpg'));
+    await page.waitForFunction(
+      () => document.getElementById('panelInput')?.classList.contains('has-preview') === true,
+      { timeout: 30000 },
+    );
+    // Choosing a photo auto-starts the run, which moves to the Processing tab;
+    // return to the Input tab to inspect the editor view the user sees.
+    await page.click('#tabInput');
+    await page.waitForFunction(
+      () => document.getElementById('tabInput')?.getAttribute('aria-selected') === 'true',
+      { timeout: 10000 },
+    );
+    const afterSelect = await page.evaluate(() => {
+      const visible = (el) => !!el && !el.hidden && el.getBoundingClientRect().height > 0;
+      return {
+        dropZone: visible(document.getElementById('dropZone')),
+        preview: visible(document.getElementById('inputPreview')),
+      };
+    });
+    record('input tab shows only the preview once a photo is chosen (drop zone hidden)', afterSelect.preview && !afterSelect.dropZone);
+
+    // The preview itself is now the picker target.
+    const [chooser] = await Promise.all([
+      page.waitForFileChooser({ timeout: 10000 }).catch(() => null),
+      page.click('#inputPreview'),
+    ]);
+    if (chooser) await chooser.cancel();
+    record('clicking the selected preview reopens the file chooser', !!chooser);
+    await page.close();
+  }
+
   // ——— Scenario 3: invalid MIME is rejected before decode ———
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    (await chooserPromise).accept([resolve(ROOT, 'smoke-results/phase4-browser/not-an-image.txt')]);
+    await chooseFile(page, resolve(ROOT, 'smoke-results/phase4-browser/not-an-image.txt'));
     await page.waitForFunction(
       () => /Unsupported file type/.test(document.getElementById('stage')?.textContent ?? ''),
       { timeout: 10000 },
@@ -297,16 +706,37 @@ try {
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    (await chooserPromise).accept([resolve(ROOT, 'smoke-results/phase4-browser/corrupt.png')]);
+    await chooseFile(page, resolve(ROOT, 'smoke-results/phase4-browser/corrupt.png'));
     await page.waitForFunction(
       () => /Failed to decode|ERROR/.test(document.getElementById('stage')?.textContent ?? ''),
       { timeout: 10000 },
     );
     const hasOutput = await page.evaluate(() => document.querySelector('#outputBox img') !== null);
     record('corrupt image shows a decode error and no output', hasOutput === false);
+    // The failure also surfaces as a floating error notification (top-right, red).
+    const toast = await page.evaluate(() => {
+      const t = document.querySelector('#toastHost .toast.error');
+      if (!t) return null;
+      const host = document.getElementById('toastHost').getBoundingClientRect();
+      const r = t.getBoundingClientRect();
+      const body = getComputedStyle(t.querySelector('.toastBody')).color;
+      const stage = document.getElementById('stage');
+      return {
+        onRight: Math.abs(window.innerWidth - host.right) < 40,
+        nearTop: host.top < 60,
+        floatAbove: r.width > 0,
+        redText: /rgb\(\s*127|\s*252, 165, 165/.test(body),
+        stageError: stage?.classList.contains('is-error') === true,
+      };
+    });
+    record(
+      'errors show a red floating notification at the top-right',
+      !!toast && toast.onRight && toast.nearTop && toast.floatAbove && toast.redText,
+      toast ? `right:${toast.onRight} top:${toast.nearTop} red:${toast.redText}` : 'no error toast',
+    );
+    record('the stage line turns to the error colour theme', !!toast && toast.stageError);
     await page.close();
   }
 
@@ -323,6 +753,7 @@ try {
       else req.continue();
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     const sawError = await page
       .waitForFunction(
         () => /Error:/.test(document.getElementById('stage')?.textContent ?? ''),
@@ -345,6 +776,7 @@ try {
       else req.continue();
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     const sawError = await page
       .waitForFunction(
         () => /manifest/i.test(document.getElementById('stage')?.textContent ?? ''),
@@ -366,12 +798,18 @@ try {
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     await page.bringToFront();
 
+    // On a busy runner the tab can still be backgrounded and a programmatic
+    // focus silently ignored. Re-assert activation, then give the focus a
+    // moment to land before retrying.
     let focused = false;
-    for (let attempt = 0; attempt < 3 && !focused; attempt += 1) {
+    for (let attempt = 0; attempt < 5 && !focused; attempt += 1) {
+      await page.bringToFront();
       await page.focus('#dropZone');
+      await sleep(200);
       focused = await page.evaluate(() => document.activeElement?.id === 'dropZone');
     }
     if (!focused) {
@@ -421,6 +859,7 @@ try {
       Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     // Make the visit cold: drop the model the earlier scenarios cached, before
     // the app boots. CDP clears Cache Storage without loading the page, so the
     // model cannot be re-cached mid-flight the way a post-load clear would allow.
@@ -430,6 +869,7 @@ try {
       storageTypes: 'cache_storage',
     });
     await page.reload({ waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
     const warnShown = await page
       .waitForFunction(
         () => (document.getElementById('netWarn')?.hidden ?? true) === false,
@@ -479,20 +919,74 @@ try {
       Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
-    const promptShown = await page
-      .waitForFunction(
-        () => (document.getElementById('netWarn')?.hidden ?? true) === false,
-        { timeout: 5000 },
-      )
-      .then(() => true)
-      .catch(() => false);
+    await openStudio(page);
+    // The prompt is a modal: if the cache check missed, it stays up and the
+    // model never becomes ready. So wait for readiness, then assert the prompt
+    // is not showing — a brief flicker on a loaded runner must not fail this.
     const ready = await page
       .waitForFunction('window.smokeModelReady === true', { timeout: 600000 })
       .then(() => true)
       .catch(() => false);
+    const promptShown = await page.evaluate(
+      () => (document.getElementById('netWarn')?.hidden ?? true) === false,
+    );
     record(
       'a cached model loads over a metered link without prompting',
       promptShown === false && ready === true,
+    );
+    await page.close();
+  }
+
+  // ——— Scenario 9: the periodic fetch loop downloads once Wi-Fi appears ———
+  // Boots on a metered link (the prompt shows, nothing downloads), then flips the
+  // stubbed connection to Wi-Fi. The page's background timer must start the
+  // download on its own — no photo chosen, no button pressed.
+  {
+    const page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      // Mutable so the test can change the link mid-session.
+      window.__conn = { type: 'cellular' };
+      Object.defineProperty(navigator, 'connection', {
+        configurable: true,
+        get: () => window.__conn,
+      });
+      Object.defineProperty(navigator, 'userAgentData', {
+        configurable: true,
+        get: () => ({ mobile: false }),
+      });
+      Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
+    });
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+    const cdp = await page.createCDPSession();
+    await cdp.send('Storage.clearDataForOrigin', {
+      origin: pageUrl.origin,
+      storageTypes: 'cache_storage',
+    });
+    await page.reload({ waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+
+    const promptShown = await page
+      .waitForFunction(
+        () => (document.getElementById('netWarn')?.hidden ?? true) === false,
+        { timeout: 30000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    await sleep(2000);
+    const startedWhileMetered = await page.evaluate(() => window.smokeModelReady === true);
+
+    // Switch to Wi-Fi; the timer (2 s) must start the download without any input.
+    await page.evaluate(() => {
+      window.__conn = { type: 'wifi' };
+    });
+    const startedAfterWifi = await page
+      .waitForFunction('window.smokeModelReady === true', { timeout: 90000 })
+      .then(() => true)
+      .catch(() => false);
+    record(
+      'a metered visit waits for the prompt, then the loop downloads once Wi-Fi appears',
+      promptShown === true && startedWhileMetered === false && startedAfterWifi === true,
     );
     await page.close();
   }

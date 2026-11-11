@@ -576,9 +576,14 @@ try {
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     await page.bringToFront();
 
+    // On a busy runner the tab can still be backgrounded and a programmatic
+    // focus silently ignored. Re-assert activation, then give the focus a
+    // moment to land before retrying.
     let focused = false;
-    for (let attempt = 0; attempt < 3 && !focused; attempt += 1) {
+    for (let attempt = 0; attempt < 5 && !focused; attempt += 1) {
+      await page.bringToFront();
       await page.focus('#dropZone');
+      await sleep(200);
       focused = await page.evaluate(() => document.activeElement?.id === 'dropZone');
     }
     if (!focused) {

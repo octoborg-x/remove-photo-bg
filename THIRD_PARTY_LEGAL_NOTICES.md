@@ -106,6 +106,34 @@ size advantage over the shipped 185 MB artifact while also emitting logits
 (requiring an extra client sigmoid). See `PHASE1_REPORT.md` §Model-artifact
 review for measured numbers.
 
+## Compositing and preview code (adapted)
+
+Reviewed 2026-11-11. The strip-wise mask compositing, the ≤450 px preview rule
+and the dedicated OffscreenCanvas compositor worker in
+`src/features/background-removal/composite.ts` and `public/compositor-worker.js`
+are adapted from the **rembg-webgpu** library (`src/rembg-compositor.worker.ts`
+and `src/index.ts`).
+
+- Repository: Remove-Background-ai / rembg-webgpu —
+  https://github.com/Remove-Background-ai/rembg-webgpu
+- Copyright: © 2025 Marwen (per the repository `LICENSE`)
+- Licence: **RemBG Attribution License (MIT-Compatible)** — MIT terms plus a
+  required visible attribution for any public use:
+  "Background Removal Library provided by www.rembg.com"
+- Scope of use here: **code pattern only**. The bounded-strip compositing loop
+  (writing the mask into the alpha channel in ≤512 px strips) and the ≤450 px
+  preview sizing were reimplemented in TypeScript against this app's existing
+  `ImageData` pipeline; no source file is copied verbatim and no rembg-webgpu
+  runtime, worker, model or dependency is redistributed. The app still runs its
+  own ONNX Runtime Web + WASM pipeline (see the BiRefNet_lite notice above); it
+  does **not** use rembg-webgpu's `briaai/RMBG-1.4` model or
+  `@huggingface/transformers`.
+- Attribution obligation: the licence's attribution string
+  ("Background Removal Library provided by www.rembg.com") is surfaced in the
+  source next to the adapted code —
+  `src/features/background-removal/composite.ts` and
+  `public/compositor-worker.js` — rather than as a public footer credit.
+
 ## Runtime
 
 - **Webfonts (self-hosted, redistributed).** The UI typefaces are served from

@@ -59,6 +59,13 @@ const baseline = treeRssKb(pid).total;
 
 await page.goto('http://localhost:5173/?provider=wasm', { waitUntil: 'load', timeout: 60000 });
 
+// The editor lives in the full-page Studio layer; open it before driving it.
+await page.click('#studioLaunch');
+await page.waitForFunction(
+  () => document.getElementById('studio')?.classList.contains('is-open') === true,
+  { timeout: 10000 },
+);
+
 let peak = 0;
 const samples = [];
 const timer = setInterval(() => {
@@ -75,7 +82,6 @@ const [chooser] = await Promise.all([
   page.click('#dropZone'),
 ]);
 await chooser.accept([`test-images/${IMAGE}`]);
-await page.waitForFunction(() => !!document.querySelector('#inputBox img'), { timeout: 20000, polling: 250 });
 
 // The upload auto-starts the run; wait for it to finish.
 const t0 = Date.now();

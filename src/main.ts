@@ -15,12 +15,13 @@ import {
   probabilityToMask,
   cropLetterboxMask,
   upscaleMask,
-  applyMaskToImage,
   applyMaskAdjust,
   DEFAULT_MASK_ADJUST,
   isMaskAdjust,
   type MaskAdjust,
 } from './features/background-removal/mask-postprocess';
+import { composeResult } from './features/background-removal/composite';
+import { recoverForegroundMask } from './features/background-removal/mask-recovery';
 import {
   canvasToDataUrl,
   canEncode,
@@ -44,8 +45,17 @@ import {
 } from './features/background-removal/asset-cache';
 import { describeProgress, phaseForStage, PHASE_LABELS } from './features/background-removal/load-progress';
 import {
+  estimateInferenceMs,
+  overallPercent,
+  phaseExpectedMs,
+  timeFraction,
+  type ProcPhase,
+} from './features/background-removal/processing-progress';
+import {
   shouldConfirmDownload,
   downloadConfirmationText,
+  shouldAutoFetchModel,
+  currentConnectionClass,
 } from './features/background-removal/network-preflight';
 import {
   detectWebGpu,
@@ -59,6 +69,41 @@ import {
   resolveModelParam,
 } from './features/background-removal/model-manifest';
 import { initCompareSliders } from './features/compare-slider';
+import {
+  isThemePreference,
+  nextTheme,
+  resolveTheme,
+  THEME_ATTRIBUTE,
+  THEME_STORAGE_KEY,
+  type ThemePreference,
+} from './features/theme';
+import {
+  DEFAULT_BACKGROUND,
+  isBackgroundChoice,
+  isTransparent,
+  describeChoice,
+  formatForChoice,
+  type BackgroundChoice,
+} from './features/background-removal/background-color';
+import {
+  initialStudioView,
+  reduceStudio,
+  scrubConsoleLine,
+  STUDIO_TABS,
+  tabEnabled,
+  type StudioTab,
+} from './features/background-removal/studio-view';
+import {
+  CONSOLE_CATEGORIES,
+  CONSOLE_CATEGORY_META,
+  appendLogLine,
+  emptyConsoleLogState,
+  type ConsoleCategory,
+} from './features/background-removal/console-log';
+import {
+  pickColorFromScreen,
+  supportsScreenPicker,
+} from './features/background-removal/screen-picker';
 import type {
   LoadStage,
   ModelManifestEntry,
@@ -69,10 +114,8 @@ import type {
 declare const __BUILD_ID__: string;
 
 const stageEl = document.getElementById('stage')!;
-const logEl = document.getElementById('log')! as HTMLPreElement;
-const inputBox = document.getElementById('inputBox')!;
-const procSurface = document.getElementById('procSurface')!;
-const procShimmer = document.getElementById('procShimmer')!;
+const logGroupsEl = document.getElementById('logGroups')!;
+const logDotsEl = document.getElementById('logDots')!;
 const outputBox = document.getElementById('outputBox')!;
 const outputSection = document.getElementById('outputSection')!;
 const modelNameEl = document.getElementById('modelName')!;
@@ -99,10 +142,350 @@ const netWarnConfirm = document.getElementById('netWarnConfirm')! as HTMLButtonE
 const netWarnDismiss = document.getElementById('netWarnDismiss')! as HTMLButtonElement;
 const toastHost = document.getElementById('toastHost')!;
 
+// ——— Studio layer, editor tabs, processing progress ———
+const studioEl = document.getElementById('studio')!;
+const studioLaunchBtn = document.getElementById('studioLaunch')! as HTMLButtonElement;
+const studioCloseBtn = document.getElementById('studioClose')! as HTMLButtonElement;
+const procPctEl = document.getElementById('procPct')!;
+const procStageLabelEl = document.getElementById('procStageLabel')!;
+const tabButtons: Record<StudioTab, HTMLButtonElement> = {
+  input: document.getElementById('tabInput')! as HTMLButtonElement,
+  processing: document.getElementById('tabProcessing')! as HTMLButtonElement,
+  result: document.getElementById('tabResult')! as HTMLButtonElement,
+  compare: document.getElementById('tabCompare')! as HTMLButtonElement,
+};
+const tabPanels: Record<StudioTab, HTMLElement> = {
+  input: document.getElementById('panelInput')!,
+  processing: document.getElementById('panelProcessing')!,
+  result: document.getElementById('panelResult')!,
+  compare: document.getElementById('panelCompare')!,
+};
+const compareBeforeEl = document.getElementById('compareBefore')! as HTMLImageElement;
+const compareAfterEl = document.getElementById('compareAfter')! as HTMLImageElement;
+const inputPreviewEl = document.getElementById('inputPreview')!;
+const inputPreviewImg = document.getElementById('inputPreviewImg')! as HTMLImageElement;
+const panelInputEl = document.getElementById('panelInput')!;
+const bgTransparentBtn = document.getElementById('bgTransparentBtn')! as HTMLButtonElement;
+const bgColorPicker = document.getElementById('bgColorPicker')! as HTMLInputElement;
+const bgColorSwatch = document.getElementById('bgColorSwatch')!;
+const bgEyeDropperBtn = document.getElementById('bgEyeDropper')! as HTMLButtonElement;
+const bgAlphaInput = document.getElementById('bgAlpha')! as HTMLInputElement;
+const bgAlphaValue = document.getElementById('bgAlphaValue')!;
+const bgCurrentEl = document.getElementById('bgCurrent')!;
+const privacyToggle = document.getElementById('privacyToggle')! as HTMLButtonElement;
+const privacyStatement = document.getElementById('privacyStatement')!;
+const siteHeaderEl = document.getElementById('siteHeader')!;
+const studioGridEl = document.querySelector<HTMLElement>('.studioGrid')!;
+const consoleToggleBtn = document.getElementById('consoleToggle')! as HTMLButtonElement;
+const consoleCloseBtn = document.getElementById('consoleClose')! as HTMLButtonElement;
+const consoleResizeEl = document.getElementById('consoleResize')!;
+let studioView = initialStudioView();
+
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
 // markup, so a changed limit never leaves stale copy on the page.
 limitBytesEl.textContent = `${Math.round(DEFAULT_UPLOAD_LIMITS.maxBytes / 1048576)} MB`;
 limitSideEl.textContent = String(DEFAULT_UPLOAD_LIMITS.maxLongestSide);
+
+// ——— Studio layer + editor tabs ———
+// The studio opens as a full-page layer (its own top bar + workspace) launched
+// from the header. The editor shows exactly one tab: input by default, the
+// animated processing wallpaper while running, and the result when finished.
+function renderStudioView(): void {
+  for (const tab of STUDIO_TABS) {
+    const selected = studioView.tab === tab;
+    tabButtons[tab].setAttribute('aria-selected', String(selected));
+    tabButtons[tab].disabled = !tabEnabled(studioView, tab) && !selected;
+    tabPanels[tab].hidden = !selected;
+  }
+  if (studioView.percent === null) {
+    procPctEl.textContent = '—';
+  } else {
+    procPctEl.textContent = `${studioView.percent}%`;
+  }
+}
+
+function setStudioTab(tab: StudioTab, force = false): void {
+  if (!force && !tabEnabled(studioView, tab)) return;
+  studioView = { ...studioView, tab };
+  renderStudioView();
+}
+
+// The re-process button's visibility depends on the studio's running/result
+// state, so it is refreshed alongside every view transition (the helper itself
+// is declared below, with the mask controls it also depends on).
+function applyStudioView(): void {
+  renderStudioView();
+  updateReprocessButton();
+}
+
+function studioSelectImage(): void {
+  studioView = reduceStudio(studioView, { type: 'select-image' });
+  applyStudioView();
+}
+
+function studioRunStart(): void {
+  studioView = reduceStudio(studioView, { type: 'run-start' });
+  applyStudioView();
+}
+
+function studioProgress(percent: number | null): void {
+  studioView = reduceStudio(studioView, { type: 'progress', percent });
+  applyStudioView();
+}
+
+function studioResult(): void {
+  studioView = reduceStudio(studioView, { type: 'result' });
+  applyStudioView();
+}
+
+function studioError(): void {
+  studioView = reduceStudio(studioView, { type: 'error' });
+  applyStudioView();
+}
+
+// The studio covers the page, so everything behind it must leave the tab order
+// and the accessibility tree. Walking up from the studio and inerting each
+// ancestor's siblings covers the whole page (header, footer, other sections)
+// without a wrapper element.
+function setBackgroundInert(on: boolean): void {
+  let node: HTMLElement = studioEl;
+  while (node.parentElement) {
+    for (const sibling of Array.from(node.parentElement.children)) {
+      if (sibling !== node) (sibling as HTMLElement).inert = on;
+    }
+    node = node.parentElement;
+  }
+}
+
+function openStudio(): void {
+  closeMenu();
+  studioEl.classList.add('is-open');
+  studioEl.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('studio-open');
+  setBackgroundInert(true);
+  studioEl.scrollTop = 0;
+  renderStudioView();
+  // The workspace has a size again, so a dragged console height can be re-clamped.
+  if (consoleHeightPx != null) applyConsoleHeight(consoleHeightPx);
+  (document.activeElement as HTMLElement | null)?.blur();
+  studioCloseBtn.focus();
+}
+
+function closeStudio(): void {
+  studioEl.classList.remove('is-open');
+  studioEl.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('studio-open');
+  setBackgroundInert(false);
+  studioLaunchBtn.focus();
+}
+
+studioLaunchBtn.addEventListener('click', openStudio);
+studioCloseBtn.addEventListener('click', closeStudio);
+document.querySelectorAll<HTMLElement>('[data-studio-launch]').forEach((btn) => {
+  btn.addEventListener('click', openStudio);
+});
+for (const tab of STUDIO_TABS) {
+  tabButtons[tab].addEventListener('click', () => setStudioTab(tab));
+}
+
+// ——— Console column: show/hide, close, and drag-resize ———
+// The console drags between 20% and 50% of the workspace height; its resting
+// default is the 35% track in CSS. `null` means "use that default"; a number is
+// an explicit, clamped pixel height.
+const CONSOLE_MAX_FRACTION = 0.5;
+const CONSOLE_MIN_FRACTION = 0.2;
+const CONSOLE_MIN_PX = 96;
+let consoleHeightPx: number | null = null;
+
+function setConsoleVisible(visible: boolean): void {
+  studioGridEl.dataset.console = visible ? 'shown' : 'hidden';
+  consoleToggleBtn.setAttribute('aria-pressed', String(visible));
+  consoleToggleBtn.setAttribute('aria-label', visible ? 'Hide console' : 'Show console');
+  if (visible) applyConsoleHeight(consoleHeightPx);
+}
+
+// Pins the console to an explicit pixel height (or back to the default) so a
+// drag can shrink it. The value is always clamped to the 35% cap.
+function applyConsoleHeight(px: number | null): void {
+  const gridH = studioGridEl.getBoundingClientRect().height;
+  if (!gridH) return;
+  if (px == null) {
+    consoleHeightPx = null;
+    studioGridEl.style.removeProperty('--console-h');
+    return;
+  }
+  const max = gridH * CONSOLE_MAX_FRACTION;
+  const min = Math.max(CONSOLE_MIN_PX, gridH * CONSOLE_MIN_FRACTION);
+  const height = Math.max(min, Math.min(px, max));
+  consoleHeightPx = height;
+  studioGridEl.style.setProperty('--console-h', `${Math.round(height)}px`);
+}
+
+let resizeStartY = 0;
+let resizeStartH = 0;
+let resizing = false;
+
+consoleResizeEl.addEventListener('pointerdown', (e) => {
+  const pointer = e as PointerEvent;
+  const col = document.getElementById('studioConsoleCol');
+  if (!col) return;
+  resizing = true;
+  resizeStartY = pointer.clientY;
+  resizeStartH = col.getBoundingClientRect().height;
+  consoleResizeEl.setPointerCapture(pointer.pointerId);
+  document.body.classList.add('console-resizing');
+});
+consoleResizeEl.addEventListener('pointermove', (e) => {
+  if (!resizing) return;
+  const pointer = e as PointerEvent;
+  // Dragging the handle down moves the console's top edge down, so the height
+  // shrinks by the same delta.
+  applyConsoleHeight(resizeStartH - (pointer.clientY - resizeStartY));
+});
+function endResize(): void {
+  if (!resizing) return;
+  resizing = false;
+  document.body.classList.remove('console-resizing');
+}
+consoleResizeEl.addEventListener('pointerup', endResize);
+consoleResizeEl.addEventListener('pointercancel', endResize);
+consoleResizeEl.addEventListener('keydown', (e) => {
+  const key = (e as KeyboardEvent).key;
+  if (key !== 'ArrowUp' && key !== 'ArrowDown') return;
+  e.preventDefault();
+  const col = document.getElementById('studioConsoleCol');
+  const current = col ? col.getBoundingClientRect().height : 0;
+  applyConsoleHeight(current + (key === 'ArrowUp' ? 24 : -24));
+});
+window.addEventListener('resize', () => {
+  if (consoleHeightPx != null) applyConsoleHeight(consoleHeightPx);
+});
+
+consoleToggleBtn.addEventListener('click', () => {
+  setConsoleVisible(studioGridEl.dataset.console === 'hidden');
+});
+consoleCloseBtn.addEventListener('click', () => {
+  setConsoleVisible(false);
+  consoleToggleBtn.focus();
+});
+
+// ——— Slide-in menu (burger) ———
+// Right-hand panel holding the navigation, the user profile and the theme mode.
+const menuToggleBtn = document.getElementById('menuToggle')! as HTMLButtonElement;
+const menuPanelEl = document.getElementById('menuPanel')!;
+const menuScrimEl = document.getElementById('menuScrim')!;
+const menuCloseBtn = document.getElementById('menuClose')! as HTMLButtonElement;
+
+function openMenu(): void {
+  menuScrimEl.hidden = false;
+  menuPanelEl.classList.add('is-open');
+  menuPanelEl.setAttribute('aria-hidden', 'false');
+  menuToggleBtn.setAttribute('aria-expanded', 'true');
+  menuCloseBtn.focus();
+}
+
+function closeMenu(): void {
+  if (!menuPanelEl.classList.contains('is-open')) return;
+  menuPanelEl.classList.remove('is-open');
+  menuPanelEl.setAttribute('aria-hidden', 'true');
+  menuToggleBtn.setAttribute('aria-expanded', 'false');
+  menuScrimEl.hidden = true;
+}
+
+menuToggleBtn.addEventListener('click', () => {
+  if (menuPanelEl.classList.contains('is-open')) closeMenu();
+  else openMenu();
+});
+menuCloseBtn.addEventListener('click', closeMenu);
+menuScrimEl.addEventListener('click', closeMenu);
+// Following a menu link closes the panel so the target section is visible.
+menuPanelEl.querySelectorAll('a[href^="#"]').forEach((link) => {
+  link.addEventListener('click', closeMenu);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (menuPanelEl.classList.contains('is-open')) closeMenu();
+  else if (studioEl.classList.contains('is-open')) closeStudio();
+});
+renderStudioView();
+
+// ——— Theme (light/dark) ———
+// The page follows the operating system by default; the toggle stores an
+// explicit override. The resolved mode is applied as `data-theme` on <html>,
+// which every colour token reads (src/style.css). The same choice is mirrored on
+// the theme controls (header + studio), so both stay in sync.
+const themeToggles = [
+  document.getElementById('themeToggle'),
+  document.getElementById('studioThemeToggle'),
+].filter((el): el is HTMLButtonElement => el instanceof HTMLButtonElement);
+const menuThemeModes = Array.from(
+  document.querySelectorAll<HTMLButtonElement>('[data-theme-mode]'),
+);
+
+function systemPrefersDark(): boolean {
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+}
+
+function applyTheme(preference: ThemePreference): void {
+  const resolved = resolveTheme(preference, systemPrefersDark());
+  // With no override, removing the attribute lets `color-scheme: light dark`
+  // follow the OS; an explicit choice pins it.
+  if (preference === 'system') document.documentElement.removeAttribute(THEME_ATTRIBUTE);
+  else document.documentElement.setAttribute(THEME_ATTRIBUTE, preference);
+  for (const btn of themeToggles) {
+    btn.setAttribute('aria-pressed', String(preference !== 'system'));
+    btn.title =
+      preference === 'system'
+        ? `Theme: follow system (${resolved})`
+        : `Theme: ${resolved}`;
+  }
+  // Keep the menu's Light/Dark/System control in step with the header toggle.
+  for (const btn of menuThemeModes) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.themeMode === preference));
+  }
+}
+
+/** Pin an explicit mode (or 'system') from the menu's theme control. */
+function setThemePreference(preference: ThemePreference): void {
+  savePref(THEME_STORAGE_KEY, preference);
+  document.documentElement.classList.add('theme-transition');
+  applyTheme(preference);
+  window.setTimeout(() => document.documentElement.classList.remove('theme-transition'), 300);
+}
+
+function currentPreference(): ThemePreference {
+  const stored = loadPref<ThemePreference>(THEME_STORAGE_KEY, isThemePreference);
+  return stored ?? 'system';
+}
+
+function toggleTheme(): void {
+  const resolved = resolveTheme(currentPreference(), systemPrefersDark());
+  const preference = nextTheme(resolved);
+  savePref(THEME_STORAGE_KEY, preference);
+  // Animate the swap, then drop the transition class so later changes (and
+  // initial paint) are instant.
+  document.documentElement.classList.add('theme-transition');
+  applyTheme(preference);
+  window.setTimeout(() => document.documentElement.classList.remove('theme-transition'), 300);
+}
+
+for (const btn of themeToggles) btn.addEventListener('click', toggleTheme);
+for (const btn of menuThemeModes) {
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.themeMode;
+    if (isThemePreference(mode)) setThemePreference(mode);
+  });
+}
+applyTheme(currentPreference());
+// Keep 'system' in step with an OS theme change while no override is set.
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+  if (currentPreference() === 'system') applyTheme('system');
+});
+
+// Enable transitions only after the first frame so the initial paint uses the
+// final hidden/uncollapsed state instead of animating from the CSS defaults.
+requestAnimationFrame(() => document.documentElement.classList.add('ui-ready'));
 
 // ——— Floating notifications ———
 // Top-left, fixed, stacked vertically. Each dismisses itself after 10 s and has a
@@ -247,16 +630,20 @@ function clearOutput(): void {
   downloadImageBtn.hidden = true;
   downloadImageBtn.removeAttribute('href');
   lastResultCanvas = null;
-  lastResultPngDataUrl = null;
+  lastPreviewCanvas = null;
+  compareBeforeEl.removeAttribute('src');
+  compareAfterEl.removeAttribute('src');
   outputSection.hidden = true;
 }
 
 // ——— Export format ———
-// The composited cut-out is kept so changing the format re-encodes without
-// re-running inference; the PNG data URL is cached because it doubles as the
-// on-page preview, so it is never encoded twice.
+// The composited cut-out is kept so changing the format (or the background)
+// re-encodes without re-running inference.
 let lastResultCanvas: HTMLCanvasElement | null = null;
-let lastResultPngDataUrl: string | null = null;
+// The on-screen preview, at most ≤450 px on its longest side, so switching the
+// background or format never re-encodes a full-resolution PNG just to repaint
+// the display. Rebuilt whenever a new result is composited.
+let lastPreviewCanvas: HTMLCanvasElement | null = null;
 let exportFormat: ExportFormat = initExportFormat();
 
 function initExportFormat(): ExportFormat {
@@ -316,10 +703,7 @@ function applyFormatUi(): void {
   downloadImageBtn.textContent = `Download ${info.label} (${info.description})`;
   if (lastResultCanvas) {
     const { width, height } = lastResultCanvas;
-    const href =
-      exportFormat === 'png'
-        ? (lastResultPngDataUrl ?? canvasToDataUrl(lastResultCanvas, 'png'))
-        : canvasToDataUrl(lastResultCanvas, exportFormat);
+    const href = canvasToDataUrl(lastResultCanvas, exportFormat, background);
     downloadImageBtn.href = href;
     downloadImageBtn.download = `background-removed-${width}x${height}.${info.extension}`;
     downloadImageBtn.hidden = false;
@@ -329,17 +713,234 @@ function applyFormatUi(): void {
 
 renderFormatOptions();
 
-function log(msg: string): void {
-  logEl.textContent += msg + '\n';
+// ——— Background colour ———
+// One system picker replaces the old swatch palette: a transparent toggle, the
+// browser's native colour input, and a screen eyedropper (EyeDropper API). The
+// alpha slider refines a chosen colour. The choice paints the result preview,
+// feeds the export encoder and repaints the compare view, so all three agree.
+const LS_BACKGROUND = 'remove-bg:background';
+let background: BackgroundChoice = initBackground();
+
+function initBackground(): BackgroundChoice {
+  const fromUrl = urlParams.get('bg');
+  if (fromUrl) {
+    if (fromUrl === 'transparent') return DEFAULT_BACKGROUND;
+    const m = /^([0-9a-f]{6})(?:-(\d{1,3}))?$/i.exec(fromUrl);
+    if (m) {
+      const alpha = m[2] ? Number(m[2]) : 100;
+      return { kind: 'color', hex: `#${m[1].toLowerCase()}`, alpha: Math.max(0, Math.min(100, alpha)) };
+    }
+    log(`Ignoring unknown ?bg="${fromUrl}"; using a transparent background.`);
+  }
+  return loadPref<BackgroundChoice>(LS_BACKGROUND, isBackgroundChoice) ?? DEFAULT_BACKGROUND;
 }
+
+function saveBackground(): void {
+  savePref(LS_BACKGROUND, background);
+}
+
+// Re-render the result preview from the stored cut-out, composited onto the
+// chosen background. The preview is always a PNG (the only format that can show
+// real transparency); a transparent choice lets the checkerboard show through.
+// The ≤450 px display canvas is used so a background/format change never
+// re-encodes a full-resolution PNG; the full-resolution cut-out still feeds the
+// export (see `applyFormatUi`).
+function renderResultPreview(): void {
+  const display = lastPreviewCanvas ?? lastResultCanvas;
+  if (!display) return;
+  outputBox.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = canvasToDataUrl(display, 'png', background);
+  img.alt = 'Background removed';
+  outputBox.appendChild(img);
+  // The compare view's right-hand side shows the same composite.
+  compareAfterEl.src = img.src;
+}
+
+function updateBackgroundUi(): void {
+  const color = background.kind === 'color';
+  bgTransparentBtn.setAttribute('aria-pressed', String(isTransparent(background)));
+  bgCurrentEl.textContent = describeChoice(background);
+  if (color) {
+    bgColorPicker.value = background.hex;
+    bgColorSwatch.style.background = background.hex;
+    bgAlphaInput.value = String(background.alpha);
+    bgAlphaValue.textContent = `${background.alpha}%`;
+  }
+}
+
+// Apply a background choice: repaint the preview + compare, re-encode the export,
+// and switch the format to match (transparent → PNG, solid colour → JPG).
+function setBackground(choice: BackgroundChoice): void {
+  background = choice;
+  saveBackground();
+  const target = formatForChoice(background);
+  if (target !== exportFormat) setExportFormat(target);
+  renderResultPreview();
+  updateBackgroundUi();
+  applyFormatUi();
+  // A background change is a result-stage edit: keep the current tab.
+  studioView = reduceStudio(studioView, { type: 'show-background' });
+  renderStudioView();
+  log(`Background: ${describeChoice(background)}`);
+}
+
+bgTransparentBtn.addEventListener('click', () =>
+  setBackground({ kind: 'transparent', hex: background.hex, alpha: 100 }),
+);
+bgColorPicker.addEventListener('input', () =>
+  setBackground({ kind: 'color', hex: bgColorPicker.value, alpha: Number(bgAlphaInput.value) }),
+);
+bgAlphaInput.addEventListener('input', () => {
+  // The alpha slider only refines the current colour (it has no meaning for a
+  // fully transparent background).
+  const hex = background.kind === 'color' ? background.hex : bgColorPicker.value;
+  setBackground({ kind: 'color', hex, alpha: Number(bgAlphaInput.value) });
+});
+// Screen eyedropper: sample any pixel on the display. The button is disabled
+// when the browser has no EyeDropper API, so it never looks broken.
+if (!supportsScreenPicker()) {
+  bgEyeDropperBtn.disabled = true;
+  bgEyeDropperBtn.title = 'Screen colour picking is not supported by this browser';
+}
+bgEyeDropperBtn.addEventListener('click', async () => {
+  const picked = await pickColorFromScreen();
+  if (!picked) return;
+  setBackground({ kind: 'color', hex: picked, alpha: Number(bgAlphaInput.value) });
+});
+
+updateBackgroundUi();
+
+function log(msg: string): void {
+  // The log is rendered in the user-facing Console, so scrub internal commands
+  // and private URLs before they reach the DOM (see studio-view.ts).
+  appendConsoleLine(msg);
+}
+
+// ——— Console: categorised log ———
+// The pipeline is a row of dots (renderSteps); every log line is filed under a
+// category with its own dot. Categories are built once and revealed on demand,
+// so the compact console stays quiet until something happens.
+const consoleLogState = emptyConsoleLogState();
+const logGroupEls = new Map<
+  ConsoleCategory,
+  { group: HTMLDetailsElement; body: HTMLDivElement; count: HTMLSpanElement }
+>();
+const logDotEls = new Map<ConsoleCategory, HTMLButtonElement>();
+
+// A chevron glyph, pointing down by default. The collapsible blocks rotate it
+// to point up while open (see the CSS), so a single icon reads as up/down.
+const CHEVRON_DOWN_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<polyline points="6 9 12 15 18 9" /></svg>';
+
+function makeChevron(className: string): HTMLSpanElement {
+  const el = document.createElement('span');
+  el.className = className;
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = CHEVRON_DOWN_SVG;
+  return el;
+}
+
+function buildConsoleLog(): void {
+  for (const category of CONSOLE_CATEGORIES) {
+    const meta = CONSOLE_CATEGORY_META[category];
+
+    // One chevron per category, mirroring the group it reveals.
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.className = 'logDot';
+    dot.dataset.category = category;
+    dot.dataset.active = 'false';
+    dot.title = `${meta.label} — ${meta.hint}`;
+    dot.setAttribute('aria-label', `${meta.label} log`);
+    dot.setAttribute('aria-expanded', 'false');
+    dot.appendChild(makeChevron('logChevron'));
+    dot.addEventListener('click', () => {
+      const entry = logGroupEls.get(category);
+      if (!entry) return;
+      entry.group.open = !entry.group.open;
+      if (entry.group.open) entry.group.scrollIntoView({ block: 'nearest' });
+    });
+    logDotsEl.appendChild(dot);
+    logDotEls.set(category, dot);
+
+    const group = document.createElement('details');
+    group.className = 'consoleGroup logGroup';
+    group.dataset.category = category;
+    group.hidden = true;
+    const summary = document.createElement('summary');
+    summary.className = 'consoleGroupSummary';
+    const name = document.createElement('span');
+    name.className = 'consoleGroupName';
+    name.textContent = meta.label;
+    const count = document.createElement('span');
+    count.className = 'consoleGroupCount';
+    count.textContent = '0';
+    summary.append(makeChevron('consoleChevron'), name, count);
+    const body = document.createElement('div');
+    body.className = 'consoleGroupBody logBody';
+    group.append(summary, body);
+    // Keep the category chevron in step with the block it reveals.
+    group.addEventListener('toggle', () => {
+      const chevron = logDotEls.get(category);
+      if (chevron) chevron.setAttribute('aria-expanded', String(group.open));
+    });
+    logGroupsEl.appendChild(group);
+    logGroupEls.set(category, { group, body, count });
+  }
+}
+
+function appendConsoleLine(line: string): void {
+  const category = appendLogLine(consoleLogState, scrubConsoleLine(line));
+  const entry = logGroupEls.get(category);
+  if (entry) {
+    const lines = consoleLogState.byCategory[category];
+    const classified = lines[lines.length - 1];
+    const el = document.createElement('span');
+    el.className = classified.level === 'info' ? 'logLine' : `logLine ${classified.level}`;
+    el.textContent = classified.text;
+    entry.body.appendChild(el);
+    entry.group.hidden = false;
+    entry.group.dataset.active = 'true';
+    entry.count.textContent = String(lines.length);
+    // An error is worth surfacing without a click.
+    if (classified.level === 'error') entry.group.open = true;
+    entry.body.scrollTop = entry.body.scrollHeight;
+  }
+  const dot = logDotEls.get(category);
+  if (dot) {
+    dot.dataset.active = 'true';
+    dot.classList.remove('flash');
+    // Force a reflow so the flash restarts even on a burst of rapid lines.
+    void dot.offsetWidth;
+    dot.classList.add('flash');
+  }
+}
+
+buildConsoleLog();
+
+// The Zero-Upload statement is hidden behind a clickable shield icon.
+privacyToggle.addEventListener('click', () => {
+  const show = privacyStatement.hidden;
+  privacyStatement.hidden = !show;
+  privacyToggle.setAttribute('aria-expanded', String(show));
+  privacyToggle.setAttribute('aria-label', show ? 'Hide privacy statement' : 'Show privacy statement');
+});
 
 function setStage(s: string): void {
   stageEl.textContent = s;
+  stageEl.classList.remove('is-error');
 }
 
 function showError(msg: string): void {
   log(`ERROR: ${msg}`);
   setStage(`Error: ${msg}`);
+  stageEl.classList.add('is-error');
+  // Also surface the failure as a floating error notification (top-right), so it
+  // is seen even when the studio console is scrolled out of view.
+  showToast(msg.split('\n')[0], { kind: 'error', title: 'Something went wrong' });
 }
 
 function error(msg: string, kind: ErrorKind = 'generic'): void {
@@ -401,7 +1002,7 @@ function showRecovery(kind: ErrorKind, message: string): void {
     case 'worker':
       text =
         'The background-removal engine could not start. Reload the page; if it keeps ' +
-        'failing, check the Technical details above for the exact error.';
+        'failing, open Technical details in the Console for the exact error.';
       primaryLabel = 'Reload page';
       primaryRun = () => location.reload();
       break;
@@ -414,7 +1015,7 @@ function showRecovery(kind: ErrorKind, message: string): void {
 
   const detail = document.createElement('p');
   detail.className = 'hint';
-  detail.textContent = message;
+  detail.textContent = scrubConsoleLine(message);
   recoveryEl.appendChild(detail);
 
   const primary = document.createElement('button');
@@ -498,6 +1099,20 @@ function stepLabel(id: StepId): string {
   }
 }
 
+// Short caption shown under each pipeline dot (the full label is the tooltip).
+function stepShortLabel(id: StepId): string {
+  switch (id) {
+    case 'download':
+      return 'Model';
+    case 'prepare':
+      return 'Prepare';
+    case 'inference':
+      return 'Remove';
+    case 'export':
+      return 'Export';
+  }
+}
+
 function ensureStep(id: StepId): Step {
   let step = steps.find((s) => s.id === id);
   if (!step) {
@@ -519,16 +1134,17 @@ function renderSteps(): void {
   for (const step of steps) {
     const li = document.createElement('li');
     li.dataset.state = step.state;
+    li.title = step.detail ? `${step.label} — ${step.detail}` : step.label;
     const dot = document.createElement('span');
     dot.className = 'dot';
     li.appendChild(dot);
     const name = document.createElement('span');
-    name.textContent = step.label;
+    name.textContent = stepShortLabel(step.id);
     li.appendChild(name);
     if (step.detail) {
       const detail = document.createElement('span');
       detail.className = 'stepDetail';
-      detail.textContent = `— ${step.detail}`;
+      detail.textContent = step.detail;
       li.appendChild(detail);
     }
     stepListEl.appendChild(li);
@@ -547,11 +1163,6 @@ function resetSteps(): void {
 function setProcessingLabel(label: string, working: boolean): void {
   processingLabel.textContent = label;
   processingLabel.classList.toggle('working', working);
-}
-
-// The shimmer overlay marks "the model is working on this image".
-function setShimmer(on: boolean): void {
-  procShimmer.hidden = !on;
 }
 
 const OOM_PATTERN = /bad_alloc|out of memory|outofmemory|allocation failed|allocation error/i;
@@ -594,11 +1205,12 @@ function describeError(msg: string): string {
 }
 
 function showInputImage(img: HTMLImageElement): void {
-  inputBox.innerHTML = '';
-  // Append the already-decoded element itself. Cloning it would create a new
-  // element that has to re-fetch the (possibly revoked) blob: URL and renders broken.
-  inputBox.appendChild(img);
-  procSurface.hidden = false;
+  // The chosen photo is shown on the input tab so the user can see what they
+  // picked; the drop zone stays below it as the "choose another photo" target.
+  // The object URL keeps the decoded image available for inference too.
+  inputPreviewImg.src = img.src;
+  inputPreviewEl.hidden = false;
+  panelInputEl.classList.add('has-preview');
 }
 
 async function loadImageFromFile(file: File): Promise<void> {
@@ -643,6 +1255,7 @@ async function loadImageFromFile(file: File): Promise<void> {
   // not wipe the step list while the model is still loading: keep the download
   // step active so the panel keeps showing the load in progress.
   clearOutput();
+  studioSelectImage();
   hideRecovery();
   if (!modelLoadInFlight) {
     resetSteps();
@@ -720,7 +1333,7 @@ async function initWorker(): Promise<void> {
   onAssetCacheMessage((msg) => {
     if (msg.kind === 'asset-cached') log(`Cached for next visit: ${new URL(msg.url).pathname}`);
   });
-  if (ASSET_BASE) log(`Assets served from: ${ASSET_BASE}`);
+  if (ASSET_BASE) log('Heavy assets are served from the configured asset host.');
 
   // Classic worker (plain JS in /public) so onnxruntime-web's wasm loaders are
   // fetched as static files instead of being transformed by Vite. The runtime
@@ -790,72 +1403,13 @@ async function initWorker(): Promise<void> {
       log(`Inference ${timings.length}: ${msg.ms.toFixed(1)} ms`);
       pending.resolve(msg.ms);
     } else if (msg.kind === 'result-ready') {
-      if (!currentImageData) {
-        log('WARNING: got a result with no loaded image; ignoring');
-        return;
-      }
-      const { mask, width, height } = msg;
-      setStep('inference', 'done');
-      setStep('export', 'active');
-      setProcessingLabel('Creating your image…', true);
-      // The worker reports the model's actual input size so a per-model input
-      // change (e.g. a 384 variant) never mis-scales the mask. The mask covers
-      // the letterboxed content rect inside that square (the same geometry the
-      // pre-processing used), so crop the padding away before upscaling.
-      const inputSize = msg.inputSize ?? MODEL_SIZE;
-      const rect = letterboxRect(currentImageData.width, currentImageData.height, inputSize);
-      const maskU8 = cropLetterboxMask(probabilityToMask(mask), inputSize, rect);
-      const upscaled = upscaleMask(maskU8, rect.width, rect.height, currentImageData.width, currentImageData.height);
-      // Apply the user's mask threshold/feather at full destination resolution
-      // (the values are percentages/pixels of the *output* mask).
-      const adjusted = applyMaskAdjust(
-        upscaled,
-        currentImageData.width,
-        currentImageData.height,
-        maskAdjust,
-      );
-      const out = applyMaskToImage(currentImageData, adjusted);
-      const canvas = document.createElement('canvas');
-      canvas.width = out.width;
-      canvas.height = out.height;
-      const ctx = canvas.getContext('2d')!;
-      ctx.putImageData(out, 0, 0);
-      lastResultCanvas = canvas;
-      // The PNG is both the on-page preview and the default download, so encode
-      // it once and let applyFormatUi reuse it.
-      lastResultPngDataUrl = canvasToDataUrl(canvas, 'png');
-
-      let opaquePx = 0;
-      for (let i = 3; i < out.data.length; i += 4) if (out.data[i] > 127) opaquePx++;
-
-      outputBox.innerHTML = '';
-      const img = document.createElement('img');
-      // The preview is always the transparent PNG so the checkerboard shows the
-      // real cut-out; the download link follows the chosen format.
-      img.src = lastResultPngDataUrl;
-      img.alt = 'Background removed';
-      outputBox.appendChild(img);
-
-      // One download link, re-encoded whenever the format radio changes.
-      applyFormatUi();
-
-      outputSection.hidden = false;
-
-      setStep('export', 'done');
-      setProcessingLabel('Done — your image is ready', false);
-      setShimmer(false);
-      setStage('Done — download your image below.');
-
-      log(`Rendered cut-out (${width}x${height}) as ${exportFormatInfo(exportFormat).label}, ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
-      // A uniform mask means the model did not segment anything; say so rather
-      // than leaving the user staring at a blank (fully transparent) image.
-      if (opaquePx === 0) log('WARNING: the mask is fully transparent, so there is no subject to show.');
+      handleResultReady(msg);
     } else if (msg.kind === 'error') {
       // Errors tied to a run are delivered through that run's promise, so the
       // caller reports them once. Anything else is surfaced here.
       if (msg.runId !== undefined) failPendingRuns(new Error(msg.message));
       else error(msg.message, msg.fatal ? classifyError(msg.message) : 'generic');
-      setShimmer(false);
+      studioError();
       if (msg.fatal) {
         settleModel(msg.message);
         setSelectorsDisabled(false);
@@ -865,6 +1419,94 @@ async function initWorker(): Promise<void> {
       // session; the worker retries on CPU, so the app stays usable.
     }
   };
+}
+
+// A worker `result-ready` message: scale the mask to the photo, run the flood-fill
+// recovery, apply the user's threshold/feather, then composite off the main thread
+// (composite.ts). The compositing is async, so the worker handler returns and the
+// UI settles in `finishResult`.
+function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-ready' }>): void {
+  if (!currentImageData) {
+    log('WARNING: got a result with no loaded image; ignoring');
+    return;
+  }
+  const image = currentImageData;
+  setStep('inference', 'done');
+  setStep('export', 'active');
+  // The inference is done; the only work left is compositing the cut-out, which
+  // has no measurable percentage of its own.
+  beginProcPhase('finalize', phaseExpectedMs('finalize', 0));
+  refreshProcPercent();
+  setProcessingLabel('Creating your image…', true);
+  // The worker reports the model's actual input size so a per-model input change
+  // (e.g. a 384 variant) never mis-scales the mask. The mask covers the
+  // letterboxed content rect inside that square (the same geometry the
+  // pre-processing used), so crop the padding away before upscaling.
+  const inputSize = msg.inputSize ?? MODEL_SIZE;
+  const rect = letterboxRect(image.width, image.height, inputSize);
+  const maskU8 = cropLetterboxMask(probabilityToMask(msg.mask), inputSize, rect);
+  const upscaled = upscaleMask(maskU8, rect.width, rect.height, image.width, image.height);
+  // The model occasionally floods the whole frame (keeps the background
+  // attached). Detect that and recover a real cut-out from the border-connected
+  // background before compositing. See mask-recovery.ts. This runs on the raw
+  // model mask so the user's threshold/feather below still applies to the
+  // recovered result.
+  const { mask: recoveredMask, recovered } = recoverForegroundMask(image, upscaled);
+  if (recovered) {
+    log('Model kept the whole frame; recovered the subject from the background edges.');
+  }
+  // Apply the user's mask threshold/feather at full destination resolution (the
+  // values are percentages/pixels of the *output* mask).
+  const finalMask = applyMaskAdjust(recoveredMask, image.width, image.height, maskAdjust);
+  const size = `${image.width}x${image.height}`;
+  composeResult(image, finalMask)
+    .then(({ canvas, preview }) => finishResult(canvas, preview, size))
+    .catch((err) => error(`Could not compose the cut-out: ${err instanceof Error ? err.message : String(err)}`));
+}
+
+// Paints a freshly composited result: the compare view, the preview, the download
+// link and the step list, then reports how much of the frame stayed opaque so a
+// blank or a fully-kept result is called out rather than shown silently.
+function finishResult(canvas: HTMLCanvasElement, preview: HTMLCanvasElement, size: string): void {
+  lastResultCanvas = canvas;
+  lastPreviewCanvas = preview;
+
+  let opaquePx = 0;
+  const ctx = canvas.getContext('2d')!;
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  for (let i = 3; i < data.length; i += 4) if (data[i] > 127) opaquePx++;
+
+  // The compare view pairs the original photo with the current composite.
+  compareBeforeEl.src = currentObjectUrl ?? '';
+  // Preview + compare "after" are painted from the stored cut-out onto the chosen
+  // background; the download link follows the chosen format.
+  renderResultPreview();
+  applyFormatUi();
+
+  outputSection.hidden = false;
+  setStep('export', 'done');
+  setProcessingLabel('Done — your image is ready', false);
+  endProcPhase();
+  studioResult();
+  // Record the settings this cut-out was produced with; changing them later
+  // reveals the re-process button.
+  resultSettingsKey = engineSettingsKey();
+  updateReprocessButton();
+  setStage('Done — download your image below.');
+
+  const pct = ((opaquePx / (canvas.width * canvas.height)) * 100).toFixed(1);
+  log(`Rendered cut-out (${size}) as ${exportFormatInfo(exportFormat).label} on a ${describeChoice(background)} background, ${pct}% opaque.`);
+  // A uniform mask means the model did not segment anything; say so rather than
+  // leaving the user staring at a blank (fully transparent) image.
+  if (opaquePx === 0) {
+    log('WARNING: the mask is fully transparent, so there is no subject to show.');
+  } else if (opaquePx >= canvas.width * canvas.height * 0.995) {
+    // Essentially nothing was removed even after the flood-fill recovery — the
+    // image has no background separable from its edges (a busy scene, or a
+    // full-frame subject). Tell the user rather than showing the original
+    // silently.
+    log('WARNING: no background was found, so nothing was removed.');
+  }
 }
 
 function setSelectorsDisabled(disabled: boolean): void {
@@ -1047,14 +1689,36 @@ providerToggle.addEventListener('change', () => {
   log(`Provider selected: ${PROVIDER_LABELS[selectedProvider]}`);
   if (selectedProvider === 'webgpu') warnOnGpuChoice();
   applyProviderUi();
+  updateReprocessButton();
   loadSelectedModel();
 });
 
 // ——— Mask adjust controls ———
+// The engine settings a result was produced with. The re-process button appears
+// whenever the current settings differ, so it is clear the on-screen cut-out is
+// stale. `null` means "no result rendered yet".
+let resultSettingsKey: string | null = null;
+const reprocessBtn = document.getElementById('reprocessBtn') as HTMLButtonElement | null;
+
+function engineSettingsKey(): string {
+  return `${selectedProvider}|${maskAdjust.threshold}|${maskAdjust.feather}`;
+}
+
+function updateReprocessButton(): void {
+  if (!reprocessBtn) return;
+  const stale =
+    resultSettingsKey !== null &&
+    studioView.hasResult &&
+    !studioView.running &&
+    engineSettingsKey() !== resultSettingsKey;
+  reprocessBtn.hidden = !stale;
+}
+
 function setMaskAdjust(adjust: MaskAdjust): void {
   maskAdjust = adjust;
   saveMaskAdjust();
   applyMaskUi();
+  updateReprocessButton();
   log(`Mask adjust: threshold ${adjust.threshold || 'off'}, feather ${adjust.feather || 'off'}`);
 }
 
@@ -1098,6 +1762,15 @@ if (settingsGearBtn && advancedMenu) {
     }
   });
 }
+
+// Re-run inference with the current engine settings, then jump to the Processing
+// tab so the user sees the run they asked for.
+reprocessBtn?.addEventListener('click', () => {
+  advancedMenu?.setAttribute('hidden', '');
+  if (!currentImageData) return;
+  setStudioTab('processing', true);
+  void runSmoke();
+});
 
 type PendingRun = { resolve: (ms: number) => void; reject: (err: Error) => void };
 const pendingRuns = new Map<number, PendingRun>();
@@ -1162,6 +1835,15 @@ dropZone.addEventListener('keydown', (e) => {
     chooseFile();
   }
 });
+// The selected-photo preview replaces the drop zone once a photo exists, so it
+// takes over the "choose another image" job: clicking it re-opens the picker.
+inputPreviewEl.addEventListener('click', chooseFile);
+inputPreviewEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    chooseFile();
+  }
+});
 dropZone.addEventListener('dragover', (e) => {
   e.preventDefault();
   dropZone.classList.add('dragover');
@@ -1220,21 +1902,35 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
   }
   hideRecovery();
   clearOutput();
-  setShimmer(true);
+  // The panel's progress spans the whole run. A model that still has to be
+  // fetched starts in the download band; one already on the device starts at
+  // the session-build band, so the bar never sits at a bare 0%.
+  if (!modelReady && !modelError) beginProcPhase('download', 0);
+  else beginProcPhase('prepare', phaseExpectedMs('prepare', 0));
+  studioRunStart();
+  // Seed the panel with the phase's starting value immediately, so it never
+  // flashes a bare 0% for a model that is already on the device.
+  refreshProcPercent();
   try {
     await waitForModel();
   } catch (e) {
-    setShimmer(false);
+    endProcPhase();
+    studioError();
     error(e instanceof Error ? e.message : String(e), 'download');
     return null;
   }
+  // The session is built; the only remaining work is the inference itself, whose
+  // duration we estimate from earlier runs on this device.
+  beginProcPhase('inference', estimateInferenceMs(timings));
+  refreshProcPercent();
   timings.length = 0;
   for (let i = 0; i < runs; i++) {
     try {
       await runOneInference();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      setShimmer(false);
+      endProcPhase();
+      studioError();
       error(message, classifyError(message));
       return null;
     }
@@ -1258,6 +1954,41 @@ window.smokeModelId = '';
 // ——— Progress state ———
 // The stage line, the progress ring, and the processing panel all read from the
 // same last-checkpoint state, so they never disagree about what is happening.
+
+// The processing panel's percentage is a single monotonic estimate across the
+// whole run: the download band maps its real percentage, and the phases with no
+// measurable progress (session build, inference, composite) advance by elapsed
+// time within their own band. `activeProcPhase` is the phase the running photo
+// is in, or null when nothing is running. See processing-progress.ts.
+let activeProcPhase: ProcPhase | null = null;
+let activePhaseStartedAt = 0;
+let activePhaseExpectedMs = 0;
+
+function beginProcPhase(phase: ProcPhase, expectedMs: number): void {
+  activeProcPhase = phase;
+  activePhaseStartedAt = performance.now();
+  activePhaseExpectedMs = expectedMs;
+}
+
+function endProcPhase(): void {
+  activeProcPhase = null;
+}
+
+// The current phase's contribution to the bar, using the elapsed clock for the
+// time-estimated phases so the value keeps climbing between progress messages.
+function currentProcPercent(downloadPercent = 0): number | null {
+  if (!activeProcPhase) return null;
+  const fraction =
+    activeProcPhase === 'download'
+      ? 0
+      : timeFraction(performance.now() - activePhaseStartedAt, activePhaseExpectedMs);
+  return overallPercent(activeProcPhase, downloadPercent, fraction);
+}
+
+function refreshProcPercent(downloadPercent = 0): void {
+  studioProgress(currentProcPercent(downloadPercent));
+}
+
 let lastLoadStage: LoadStage | null = null;
 let lastProgress: {
   stage: LoadStage;
@@ -1301,13 +2032,21 @@ function updateLoadProgress(msg: {
     if (msg.stage !== 'downloaded') {
       setProcessingLabel(`Downloading ${selectedModel?.label ?? 'model'} — ${pct}%`, true);
     }
+    // The panel maps the download's real percentage into its band of the run.
+    studioProgress(currentProcPercent(pct));
+    procStageLabelEl.textContent = 'Downloading model';
   } else {
     // Everything else (runtime, session creation) is not a measurable
     // percentage, so the ring spins indeterminately rather than lying.
+    // A cached model reports its download stage during the run; once it is past
+    // that, move the panel from the download band into the prepare band.
+    if (activeProcPhase === 'download') beginProcPhase('prepare', phaseExpectedMs('prepare', 0));
     showRing(null);
     setStep('download', 'done');
     setStep('prepare', 'active', msg.detail ?? '');
     setProcessingLabel(PHASE_LABELS[phase] + '…', true);
+    studioProgress(currentProcPercent());
+    procStageLabelEl.textContent = PHASE_LABELS[phase];
   }
 
   if (msg.stage !== lastLoadStage) {
@@ -1329,6 +2068,16 @@ setInterval(() => {
   );
 }, 500);
 
+// Keep the processing panel's percentage climbing while a run is in progress.
+// The unmeasurable phases have no event stream of their own, so without this
+// tick the bar would freeze; it stops the moment the phase ends or the model
+// reports an error.
+setInterval(() => {
+  if (activeProcPhase === null || modelError) return;
+  const downloadPercent = lastProgress?.stage === 'downloading' ? lastProgress.percent : 0;
+  refreshProcPercent(downloadPercent);
+}, 250);
+
 // ——— Boot ———
 // Order: build the provider gate (cheap), load the manifest (source of truth
 // for models), then start the worker + asset cache, resolve defaults, and
@@ -1342,6 +2091,37 @@ log('Detecting GPU…');
 // The landing page's before/after comparisons are pure DOM and independent of
 // the model, so wire them immediately rather than waiting on boot().
 initCompareSliders();
+
+// Header: full lockup, full-height bar and the labelled Studio button at the top
+// of the page. Scrolling down collapses it (shorter bar, the brand crossfades to
+// the figure-only mark, the Studio button drops its label); scrolling back up
+// expands it, and at the very top it is always full height. data-collapsed drives
+// all three in CSS (src/style.css), so there is no per-scroll class churn.
+const brandLink = document.getElementById('brandLink');
+// A direction-aware header (the common "hide on scroll down, reveal on scroll
+// up" pattern). Collapsing needs a small downward move so a jittery or
+// sub-pixel scroll does not collapse on the first pixel; expanding is immediate
+// so the full bar returns the moment the user scrolls back up. Near the top the
+// header is always expanded, so the top of the page is never left collapsed —
+// including after a viewport resize, which the old height-based check got stuck on.
+const COLLAPSE_AFTER_PX = 8; // must scroll this far DOWN past the last top before collapsing
+const TOP_REVEAL_PX = 4; // at or above this scrollY the header is always expanded
+let lastScrollY = window.scrollY;
+let headerCollapsed = false;
+function updateHeaderCollapse(): void {
+  if (!brandLink) return;
+  const y = window.scrollY;
+  const goingDown = y > lastScrollY + COLLAPSE_AFTER_PX;
+  const goingUp = y < lastScrollY - 1;
+  if (y <= TOP_REVEAL_PX) headerCollapsed = false;
+  else if (goingDown) headerCollapsed = true;
+  else if (goingUp) headerCollapsed = false;
+  lastScrollY = y;
+  brandLink.dataset.collapsed = headerCollapsed ? 'true' : 'false';
+  siteHeaderEl.dataset.collapsed = headerCollapsed ? 'true' : 'false';
+}
+window.addEventListener('scroll', updateHeaderCollapse, { passive: true });
+updateHeaderCollapse();
 
 async function boot(): Promise<void> {
   // GPU gate first: it decides which provider is offered and the default.
@@ -1363,7 +2143,7 @@ async function boot(): Promise<void> {
     log(`Model manifest: ${models.length} model(s) — ${models.map((m) => m.id).join(', ')}`);
   } catch (e) {
     error(e instanceof Error ? e.message : String(e));
-    showError('Model manifest could not be loaded. Run "npm run fetch-models" and reload.');
+    showError('Model manifest could not be loaded. The model files are missing from this deployment; reload once they are available.');
     return;
   }
 
@@ -1386,7 +2166,7 @@ async function boot(): Promise<void> {
   log(`Model default: ${selectedModel.id}`);
 
   await initWorker();
-  log('If the model is not downloaded, run: npm run fetch-models');
+  log('Select a photo to download the model and remove its background.');
 
   // Decide whether to confirm before the (large) first download. Wi-Fi and
   // unknown/desktop connections load straight away; a cellular or data-saver
@@ -1400,6 +2180,11 @@ async function boot(): Promise<void> {
   } else {
     autoLoadModel();
   }
+
+  // Keep checking for an unmetered link: if this visit is waiting on a metered
+  // connection (or the download failed), the model still downloads in the
+  // background as soon as Wi-Fi is available.
+  startModelFetchLoop();
 }
 
 // The default model is downloaded once and then served from this device, so a
@@ -1409,6 +2194,53 @@ function autoLoadModel(): void {
   // model through it would only replace that error with a load that never
   // completes.
   if (workerFailed) return;
+  loadSelectedModel();
+}
+
+// Besides the one-shot load at boot, the page checks on a timer whether the
+// model still needs downloading, so a visit that started on a metered link (or
+// whose download failed) warms the on-device cache as soon as an unmetered link
+// is available — without waiting for the user to pick a photo. A tick is a no-op
+// unless the connection is unmetered and the model is still absent, so a metered
+// link, a cached model, or an in-flight download all leave it alone.
+const MODEL_FETCH_INTERVAL_MS = 2000;
+let modelFetchTimer: number | null = null;
+
+function startModelFetchLoop(): void {
+  if (modelFetchTimer !== null) return;
+  modelFetchTimer = window.setInterval(() => void modelFetchTick(), MODEL_FETCH_INTERVAL_MS);
+  void modelFetchTick();
+}
+
+function stopModelFetchLoop(): void {
+  if (modelFetchTimer === null) return;
+  clearInterval(modelFetchTimer);
+  modelFetchTimer = null;
+}
+
+async function modelFetchTick(): Promise<void> {
+  if (!selectedModel || workerFailed) return;
+  const cached = modelReady || (await isUrlCached(selectedModel.url).catch(() => false));
+  if (cached) {
+    // The model is loaded or already on this device; the loop has nothing left to do.
+    stopModelFetchLoop();
+    return;
+  }
+  const connection = currentConnectionClass();
+  if (
+    !shouldAutoFetchModel({
+      connection,
+      cached,
+      ready: modelReady,
+      inFlight: modelLoadInFlight,
+    })
+  ) {
+    return;
+  }
+  // An unmetered link is available and the model is still absent, so the earlier
+  // "may be metered" prompt no longer applies.
+  netWarnEl.hidden = true;
+  log(`Unmetered connection detected and the model is not on this device yet; downloading it now (${connection}).`);
   loadSelectedModel();
 }
 

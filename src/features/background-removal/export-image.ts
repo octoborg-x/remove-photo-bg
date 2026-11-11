@@ -1,5 +1,13 @@
 // Export helpers: encode the composited cut-out in the format the user picks.
 
+import {
+  DEFAULT_BACKGROUND,
+  isTransparent,
+  opaqueFallback,
+  toRgba,
+  type BackgroundChoice,
+} from './background-color';
+
 export type ExportFormat = 'png' | 'jpeg' | 'webp';
 
 export interface ExportFormatInfo {
@@ -28,7 +36,7 @@ export const EXPORT_FORMATS: readonly ExportFormatInfo[] = [
   {
     id: 'jpeg',
     label: 'JPG',
-    description: 'white background',
+    description: 'no transparency',
     mime: 'image/jpeg',
     extension: 'jpg',
     supportsAlpha: false,
@@ -36,7 +44,7 @@ export const EXPORT_FORMATS: readonly ExportFormatInfo[] = [
   {
     id: 'webp',
     label: 'WebP',
-    description: 'smaller file, transparent background',
+    description: 'smaller file, keeps transparency',
     mime: 'image/webp',
     extension: 'webp',
     supportsAlpha: true,
@@ -67,26 +75,35 @@ export function canEncode(format: ExportFormat): boolean {
 }
 
 /**
- * Data URL for the composited result in the requested format. JPEG has no alpha
- * channel, so the transparent cut-out is composited onto white first; PNG and
- * WebP keep the real transparency.
+ * Data URL for the composited result in the requested format, flattened onto the
+ * chosen background. The cut-out keeps its alpha; the background is painted
+ * underneath. A transparent background passes through untouched for PNG/WebP; a
+ * colour (or a partially transparent colour) is composited, and JPEG — which has
+ * no alpha channel — is flattened onto the opaque version of the colour.
  */
 export function canvasToDataUrl(
   canvas: HTMLCanvasElement,
   format: ExportFormat,
+  background: BackgroundChoice = DEFAULT_BACKGROUND,
   quality = 0.92,
 ): string {
-  if (format === 'png') return canvas.toDataURL('image/png');
-  if (format === 'webp') {
-    if (!canEncode('webp')) return canvas.toDataURL('image/png');
-    return canvas.toDataURL('image/webp', quality);
+  const needsComposite = format === 'jpeg' || !isTransparent(background);
+  if (!needsComposite) {
+    if (format === 'png') return canvas.toDataURL('image/png');
+    if (canEncode('webp')) return canvas.toDataURL('image/webp', quality);
+    return canvas.toDataURL('image/png');
   }
-  const white = document.createElement('canvas');
-  white.width = canvas.width;
-  white.height = canvas.height;
-  const ctx = white.getContext('2d')!;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, white.width, white.height);
+
+  const bg = document.createElement('canvas');
+  bg.width = canvas.width;
+  bg.height = canvas.height;
+  const ctx = bg.getContext('2d')!;
+  // JPEG cannot carry alpha: flatten onto the fully opaque colour.
+  ctx.fillStyle = format === 'jpeg' ? opaqueFallback(background) : toRgba(background);
+  ctx.fillRect(0, 0, bg.width, bg.height);
   ctx.drawImage(canvas, 0, 0);
-  return white.toDataURL('image/jpeg', quality);
+
+  if (format === 'jpeg') return bg.toDataURL('image/jpeg', quality);
+  if (format === 'webp') return canEncode('webp') ? bg.toDataURL('image/webp', quality) : bg.toDataURL('image/png');
+  return bg.toDataURL('image/png');
 }

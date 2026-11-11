@@ -83,11 +83,20 @@ jobs:
         run: |
           test -s dist/models/model_512_int8_fp16.onnx
           test -s dist/models-manifest.json
-      # puppeteer-core needs an executable at the harnesses' default CHROME_BIN.
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
-          test -x /usr/bin/chromium
+      # puppeteer-core needs a real Chromium executable. Ubuntu 24.04+ only ships
+      # `chromium-browser` as a snap shim, so `apt-get install` hands off to snapd
+      # and pulls the whole GNOME snap stack (mesa-2404 alone ~40 min) — or fails
+      # outright when the snap preinst script errors. Install Chrome for Testing
+      # directly instead and point the harnesses at it via CHROME_BIN.
+      - name: Setup Chrome
+        id: chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+      - name: Export CHROME_BIN for the harnesses
+        run: echo "CHROME_BIN=${{ steps.chrome.outputs.chrome-path }}" >> "$GITHUB_ENV"
+      - name: Verify Chrome
+        run: '"$CHROME_BIN" --version && test -x "$CHROME_BIN"'
       # Real-browser flow tests: upload → inference → transparent PNG + JPG,
       # error surfacing, keyboard access, and the no-third-party-request check.
       # Runs its own dev server (which serves public/, where fetch-models put

@@ -4,6 +4,8 @@ import {
   assessNetwork,
   shouldConfirmDownload,
   downloadConfirmationText,
+  shouldAutoFetchModel,
+  isUnmeteredConnection,
 } from './network-preflight';
 
 describe('classifyConnection', () => {
@@ -133,5 +135,34 @@ describe('confirmation copy', () => {
 
   it('handles an unknown size without printing "0 B"', () => {
     expect(downloadConfirmationText(0)).toContain('large file');
+  });
+});
+
+describe('isUnmeteredConnection', () => {
+  it('accepts wifi, ethernet and unknown, rejects cellular and data-saver', () => {
+    expect(isUnmeteredConnection('wifi')).toBe(true);
+    expect(isUnmeteredConnection('unknown')).toBe(true);
+    expect(isUnmeteredConnection('cellular')).toBe(false);
+    expect(isUnmeteredConnection('metered')).toBe(false);
+  });
+});
+
+describe('shouldAutoFetchModel', () => {
+  const idle = { cached: false, ready: false, inFlight: false };
+
+  it('fetches on an unmetered link when the model is absent and idle', () => {
+    expect(shouldAutoFetchModel({ connection: 'wifi', ...idle })).toBe(true);
+    expect(shouldAutoFetchModel({ connection: 'unknown', ...idle })).toBe(true);
+  });
+
+  it('never fetches on a metered link', () => {
+    expect(shouldAutoFetchModel({ connection: 'cellular', ...idle })).toBe(false);
+    expect(shouldAutoFetchModel({ connection: 'metered', ...idle })).toBe(false);
+  });
+
+  it('does nothing when the model is already cached, ready or in flight', () => {
+    expect(shouldAutoFetchModel({ connection: 'wifi', ...idle, cached: true })).toBe(false);
+    expect(shouldAutoFetchModel({ connection: 'wifi', ...idle, ready: true })).toBe(false);
+    expect(shouldAutoFetchModel({ connection: 'wifi', ...idle, inFlight: true })).toBe(false);
   });
 });

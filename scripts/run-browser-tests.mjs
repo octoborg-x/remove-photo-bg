@@ -183,6 +183,40 @@ const browser = await puppeteer.launch({
 try {
   if (!providedUrl) await waitForServer(pageUrl.toString());
 
+  // ——— Scenario 0: the hero tagline stays on one unbroken, animating line ———
+  {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 360, height: 800 });
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    const shape = await page.evaluate(() => {
+      const el = document.querySelector('.heroTaglineText');
+      const wrap = el.parentElement;
+      const cs = getComputedStyle(el);
+      const wcs = getComputedStyle(wrap);
+      return {
+        nowrap: cs.whiteSpace === 'nowrap',
+        padding: parseFloat(wcs.paddingLeft) > 0,
+        clipped: wcs.overflow === 'hidden' || wcs.overflowX === 'hidden',
+        lines: Math.round(el.offsetHeight / parseFloat(cs.lineHeight)),
+        animation: cs.animationName,
+      };
+    });
+    record('hero tagline is one unbroken line', shape.nowrap && shape.lines === 1);
+    record('hero tagline keeps its padding and clips overflow', shape.padding && shape.clipped);
+    // The loop dwells at 360deg for half of its 8s cycle, so sample across a
+    // window that is guaranteed to include the moving half before concluding.
+    let turned = false;
+    let prev = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineText')).transform);
+    for (let attempt = 0; attempt < 24 && !turned; attempt += 1) {
+      await sleep(300);
+      const now = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineText')).transform);
+      turned = now !== prev;
+      prev = now;
+    }
+    record('hero tagline animates (turns around its own axis)', shape.animation === 'taglineOrbit' && turned);
+    await page.close();
+  }
+
   // ——— Scenario 1: JPEG upload → inference → both exports ———
   {
     const page = await browser.newPage();

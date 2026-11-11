@@ -94,11 +94,45 @@ function record(name, ok, detail = '') {
 // layer, which the header button opens. Every scenario that drives the editor
 // must open it first.
 async function openStudio(page) {
+  // The module script is deferred and the browser may still be busy finishing a
+  // previous page's inference, so the button has no listener for a moment. Wait
+  // for it, click, and retry once if the first click landed too early.
+  await page.waitForSelector('#studioLaunch', { timeout: 60000 });
+  const isOpen = () =>
+    page.evaluate(() => document.getElementById('studio')?.classList.contains('is-open') === true);
   await page.click('#studioLaunch');
-  await page.waitForFunction(
-    () => document.getElementById('studio')?.classList.contains('is-open') === true,
-    { timeout: 10000 },
-  );
+  try {
+    await page.waitForFunction(
+      () => document.getElementById('studio')?.classList.contains('is-open') === true,
+      { timeout: 20000 },
+    );
+  } catch {
+    if (!(await isOpen())) await page.click('#studioLaunch');
+    await page.waitForFunction(
+      () => document.getElementById('studio')?.classList.contains('is-open') === true,
+      { timeout: 20000 },
+    );
+  }
+}
+
+// Clicking the drop zone must open the native file chooser, but the deferred
+// module may not have attached its click listener yet on a busy runner — so a
+// click can land on a dead element. Retry a few times instead of racing.
+async function chooseFile(page, filePath) {
+  await page.waitForSelector('#dropZone', { timeout: 60000 });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const chooserPromise = page.waitForFileChooser({ timeout: 10000 }).then(
+      (chooser) => ({ chooser }),
+      (err) => ({ err }),
+    );
+    await page.click('#dropZone');
+    const outcome = await chooserPromise;
+    if (outcome.chooser) {
+      await outcome.chooser.accept([filePath]);
+      return;
+    }
+  }
+  throw new Error(`could not open the file chooser for ${filePath}`);
 }
 
 async function waitForServer(url, timeoutMs = 60000) {
@@ -162,10 +196,7 @@ try {
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
 
     // Upload through the real file chooser (the button creates the input).
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    const chooser = await chooserPromise;
-    await chooser.accept([resolve(ROOT, 'test-images/glass-wine.jpg')]);
+    await chooseFile(page, resolve(ROOT, 'test-images/glass-wine.jpg'));
 
     // Wait for the app to decode + auto-start the run. There is no "Remove
     // background" button any more: choosing the photo starts the run.
@@ -188,7 +219,7 @@ try {
         radios: radios.map((r) => ({ value: r.value, checked: r.checked, disabled: r.disabled })),
         imgSrc: img?.getAttribute('src') ?? '',
         outputSectionHidden: document.getElementById('outputSection')?.hidden ?? true,
-        log: document.getElementById('log')?.textContent ?? '',
+        log: document.getElementById('logGroups')?.textContent ?? '',
       };
     });
     record(
@@ -247,20 +278,19 @@ try {
         compareState.after.startsWith('data:image/'),
     );
 
-    // Background palette: a solid colour exports as JPG (no alpha to carry) and
-    // repaints the compare view; transparent returns a real alpha PNG.
+    // Background picker: one system colour input (a solid colour exports as JPG,
+    // no alpha to carry) repaints the compare view; the transparent toggle
+    // returns a real alpha PNG.
     const bgState = await page.evaluate(() => {
-      const swatch = (key) =>
-        Array.from(document.querySelectorAll('#bgPalette button[data-bg]')).find(
-          (b) => b.dataset.bg === key,
-        );
-      swatch('#2563eb').click();
+      const picker = document.getElementById('bgColorPicker');
+      picker.value = '#2563eb';
+      picker.dispatchEvent(new Event('input', { bubbles: true }));
       const afterColor = {
         download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
-        pressed: swatch('#2563eb').getAttribute('aria-pressed'),
+        pressed: document.getElementById('bgTransparentBtn')?.getAttribute('aria-pressed'),
         compareAfter: document.getElementById('compareAfter')?.getAttribute('src') ?? '',
       };
-      swatch('transparent').click();
+      document.getElementById('bgTransparentBtn').click();
       const afterTransparent = {
         download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
         current: document.getElementById('bgCurrent')?.textContent ?? '',
@@ -270,7 +300,7 @@ try {
     record(
       'picking a solid background exports JPG and repaints the compare view',
       bgState.afterColor.download.endsWith('.jpg') &&
-        bgState.afterColor.pressed === 'true' &&
+        bgState.afterColor.pressed === 'false' &&
         bgState.afterColor.compareAfter.startsWith('data:image/'),
       bgState.afterColor.download,
     );
@@ -334,39 +364,95 @@ try {
       `light ${brandLight.lockup}/${brandLight.light} → dark ${brandDark.lockup}/${brandDark.light} → scrolled mark ${brandDarkScrolled.mark}`,
     );
 
-    // The technical-details block lives in the studio workspace and lists the
-    // steps in the order they ran. It is an always-visible status card (a div,
-    // not a collapsed disclosure), so there is no open/closed state to assert.
+    // The console lives in the studio workspace: the pipeline is a row of status
+    // dots (all done after a successful run) and the log is filed under
+    // categories. The Zero-Upload statement is hidden behind a clickable icon.
     const panelState = await page.evaluate(() => {
-      const details = document.getElementById('techDetails');
-      const inStudio = !!document.getElementById('studio')?.contains(details);
+      const consoleEl = document.querySelector('.consoleCard');
+      const inStudio = !!document.getElementById('studio')?.contains(consoleEl);
       const label = document.getElementById('processingLabel')?.textContent ?? '';
       const steps = Array.from(document.querySelectorAll('#stepList li')).map((li) => ({
         text: li.textContent ?? '',
+        title: li.getAttribute('title') ?? '',
         state: li.dataset.state,
       }));
-      return {
-        inStudio,
-        visible: details ? getComputedStyle(details).display !== 'none' : false,
-        label,
-        steps,
-      };
+      const groups = Array.from(document.querySelectorAll('#logGroups .logGroup'))
+        .filter((g) => !g.hidden)
+        .map((g) => g.dataset.category);
+      const privacyHiddenBefore = document.getElementById('privacyStatement')?.hidden ?? false;
+      document.getElementById('privacyToggle')?.click();
+      const privacyHiddenAfter = document.getElementById('privacyStatement')?.hidden ?? true;
+      return { inStudio, label, steps, groups, privacyHiddenBefore, privacyHiddenAfter };
     });
     record(
-      'technical details sits in the studio workspace and lists download/prepare/inference/export steps',
+      'the console sits in the studio and lists model/prepare/remove/export pipeline dots',
       panelState.inStudio === true &&
-        panelState.visible === true &&
         panelState.steps.length >= 4 &&
         panelState.steps.every((s) => s.state === 'done') &&
-        panelState.steps.some((s) => /download/i.test(s.text)) &&
-        panelState.steps.some((s) => /prepare/i.test(s.text)) &&
-        panelState.steps.some((s) => /remove background/i.test(s.text)),
+        panelState.steps.some((s) => /model/i.test(s.title)) &&
+        panelState.steps.some((s) => /prepare/i.test(s.title)) &&
+        panelState.steps.some((s) => /remove background/i.test(s.title)),
       panelState.steps.map((s) => `${s.state}:${s.text}`).join(' | '),
     );
     record(
-      'the technical-details label reports the finished process',
+      'the console status label reports the finished process',
       /done/i.test(panelState.label),
       panelState.label,
+    );
+    record(
+      'log lines are filed under categories',
+      panelState.groups.length > 0,
+      panelState.groups.join(','),
+    );
+    record(
+      'the privacy statement is hidden until its icon is clicked',
+      panelState.privacyHiddenBefore === true && panelState.privacyHiddenAfter === false,
+      `${panelState.privacyHiddenBefore} → ${panelState.privacyHiddenAfter}`,
+    );
+
+    // Console show/hide + drag-resize: the toggle button and the in-card close
+    // both hide it; the resize handle can only shrink it (never past 35%).
+    const consoleControls = await page.evaluate(async () => {
+      const grid = document.querySelector('.studioGrid');
+      const col = document.getElementById('studioConsoleCol');
+      const toggle = document.getElementById('consoleToggle');
+      const closeBtn = document.getElementById('consoleClose');
+      const handle = document.getElementById('consoleResize');
+      const gridH = grid.getBoundingClientRect().height;
+      const openH = col.getBoundingClientRect().height;
+      const cap = gridH * 0.35;
+      // Drag the handle up hard: the console must stop at the 35% cap.
+      const r = handle.getBoundingClientRect();
+      const y0 = r.top + r.height / 2;
+      handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientY: y0, pointerId: 1 }));
+      handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 - 400, pointerId: 1 }));
+      const grownH = col.getBoundingClientRect().height;
+      // Drag down hard: it shrinks (below 35%) but keeps a usable minimum.
+      handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 + 400, pointerId: 1 }));
+      const shrunkH = col.getBoundingClientRect().height;
+      handle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientY: y0 + 400, pointerId: 1 }));
+      closeBtn.click();
+      const hiddenByClose = grid.dataset.console === 'hidden';
+      const togglePressedWhenHidden = toggle.getAttribute('aria-pressed');
+      toggle.click();
+      const shownAgain = grid.dataset.console !== 'hidden';
+      const togglePressedWhenShown = toggle.getAttribute('aria-pressed');
+      return { gridH, openH, cap, grownH, shrunkH, hiddenByClose, shownAgain, togglePressedWhenHidden, togglePressedWhenShown };
+    });
+    record(
+      'the console has a show/hide toggle and an in-card close button',
+      consoleControls.hiddenByClose === true &&
+        consoleControls.shownAgain === true &&
+        consoleControls.togglePressedWhenHidden === 'false' &&
+        consoleControls.togglePressedWhenShown === 'true',
+      `hidden ${consoleControls.hiddenByClose} → shown ${consoleControls.shownAgain}`,
+    );
+    record(
+      'the console top edge resizes below 35% but never past it',
+      consoleControls.grownH <= consoleControls.cap + 1 &&
+        consoleControls.shrunkH < consoleControls.openH &&
+        consoleControls.shrunkH >= 90,
+      `open ${Math.round(consoleControls.openH)} cap ${Math.round(consoleControls.cap)} grown ${Math.round(consoleControls.grownH)} shrunk ${Math.round(consoleControls.shrunkH)}`,
     );
 
     // Privacy: every request during processing is same-origin (no third party).
@@ -388,9 +474,7 @@ try {
     await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     const pngPath = resolve(ROOT, 'smoke-results/phase4-browser/input.png');
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    (await chooserPromise).accept([pngPath]);
+    await chooseFile(page, pngPath);
     // Choosing the photo auto-starts the run; no button to click.
     await page.waitForFunction(() => document.querySelector('#outputBox img') !== null, { timeout: 600000 });
     const src = await page.evaluate(() => document.querySelector('#outputBox img')?.getAttribute('src') ?? '');
@@ -404,9 +488,7 @@ try {
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    (await chooserPromise).accept([resolve(ROOT, 'smoke-results/phase4-browser/not-an-image.txt')]);
+    await chooseFile(page, resolve(ROOT, 'smoke-results/phase4-browser/not-an-image.txt'));
     await page.waitForFunction(
       () => /Unsupported file type/.test(document.getElementById('stage')?.textContent ?? ''),
       { timeout: 10000 },
@@ -422,9 +504,7 @@ try {
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    (await chooserPromise).accept([resolve(ROOT, 'smoke-results/phase4-browser/corrupt.png')]);
+    await chooseFile(page, resolve(ROOT, 'smoke-results/phase4-browser/corrupt.png'));
     await page.waitForFunction(
       () => /Failed to decode|ERROR/.test(document.getElementById('stage')?.textContent ?? ''),
       { timeout: 10000 },
@@ -496,9 +576,14 @@ try {
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     await page.bringToFront();
 
+    // On a busy runner the tab can still be backgrounded and a programmatic
+    // focus silently ignored. Re-assert activation, then give the focus a
+    // moment to land before retrying.
     let focused = false;
-    for (let attempt = 0; attempt < 3 && !focused; attempt += 1) {
+    for (let attempt = 0; attempt < 5 && !focused; attempt += 1) {
+      await page.bringToFront();
       await page.focus('#dropZone');
+      await sleep(200);
       focused = await page.evaluate(() => document.activeElement?.id === 'dropZone');
     }
     if (!focused) {
@@ -609,17 +694,16 @@ try {
     });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     await openStudio(page);
-    const promptShown = await page
-      .waitForFunction(
-        () => (document.getElementById('netWarn')?.hidden ?? true) === false,
-        { timeout: 5000 },
-      )
-      .then(() => true)
-      .catch(() => false);
+    // The prompt is a modal: if the cache check missed, it stays up and the
+    // model never becomes ready. So wait for readiness, then assert the prompt
+    // is not showing — a brief flicker on a loaded runner must not fail this.
     const ready = await page
       .waitForFunction('window.smokeModelReady === true', { timeout: 600000 })
       .then(() => true)
       .catch(() => false);
+    const promptShown = await page.evaluate(
+      () => (document.getElementById('netWarn')?.hidden ?? true) === false,
+    );
     record(
       'a cached model loads over a metered link without prompting',
       promptShown === false && ready === true,

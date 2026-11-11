@@ -115,9 +115,11 @@ async function openStudio(page) {
   }
 }
 
-// Clicking the drop zone must open the native file chooser, but the deferred
-// module may not have attached its click listener yet on a busy runner — so a
-// click can land on a dead element. Retry a few times instead of racing.
+// Clicking the input opens the native file chooser, but the deferred module may
+// not have attached its click listener yet on a busy runner — so a click can
+// land on a dead element. Retry a few times instead of racing. Once a photo is
+// chosen the drop zone is hidden and the preview takes over as the picker
+// target, so click whichever one is currently visible.
 async function chooseFile(page, filePath) {
   await page.waitForSelector('#dropZone', { timeout: 60000 });
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -125,7 +127,15 @@ async function chooseFile(page, filePath) {
       (chooser) => ({ chooser }),
       (err) => ({ err }),
     );
-    await page.click('#dropZone');
+    const target = await page.evaluate(() => {
+      const dz = document.getElementById('dropZone');
+      const pv = document.getElementById('inputPreview');
+      const visible = (el) => el && !el.hidden && el.getBoundingClientRect().height > 0;
+      if (visible(dz)) return 'dropZone';
+      if (visible(pv)) return 'inputPreview';
+      return 'dropZone';
+    });
+    await page.click(`#${target}`);
     const outcome = await chooserPromise;
     if (outcome.chooser) {
       await outcome.chooser.accept([filePath]);
@@ -604,6 +614,55 @@ try {
     await page.waitForFunction(() => document.querySelector('#outputBox img') !== null, { timeout: 600000 });
     const src = await page.evaluate(() => document.querySelector('#outputBox img')?.getAttribute('src') ?? '');
     record('PNG upload → transparent PNG rendered', src.startsWith('data:image/png'));
+    await page.close();
+  }
+
+  // ——— Scenario 2b: input tab shows exactly one of drop zone / preview ———
+  // The drop zone is the default; once a photo is chosen it is replaced by the
+  // preview (never both at once), and the preview reopens the picker.
+  {
+    const page = await browser.newPage();
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+    await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
+
+    const initial = await page.evaluate(() => {
+      const visible = (el) => !!el && !el.hidden && el.getBoundingClientRect().height > 0;
+      return {
+        dropZone: visible(document.getElementById('dropZone')),
+        preview: visible(document.getElementById('inputPreview')),
+      };
+    });
+    record('input tab shows only the drop-zone placeholder before a photo is chosen', initial.dropZone && !initial.preview);
+
+    await chooseFile(page, resolve(ROOT, 'test-images/glass-wine.jpg'));
+    await page.waitForFunction(
+      () => document.getElementById('panelInput')?.classList.contains('has-preview') === true,
+      { timeout: 30000 },
+    );
+    // Choosing a photo auto-starts the run, which moves to the Processing tab;
+    // return to the Input tab to inspect the editor view the user sees.
+    await page.click('#tabInput');
+    await page.waitForFunction(
+      () => document.getElementById('tabInput')?.getAttribute('aria-selected') === 'true',
+      { timeout: 10000 },
+    );
+    const afterSelect = await page.evaluate(() => {
+      const visible = (el) => !!el && !el.hidden && el.getBoundingClientRect().height > 0;
+      return {
+        dropZone: visible(document.getElementById('dropZone')),
+        preview: visible(document.getElementById('inputPreview')),
+      };
+    });
+    record('input tab shows only the preview once a photo is chosen (drop zone hidden)', afterSelect.preview && !afterSelect.dropZone);
+
+    // The preview itself is now the picker target.
+    const [chooser] = await Promise.all([
+      page.waitForFileChooser({ timeout: 10000 }).catch(() => null),
+      page.click('#inputPreview'),
+    ]);
+    if (chooser) await chooser.cancel();
+    record('clicking the selected preview reopens the file chooser', !!chooser);
     await page.close();
   }
 

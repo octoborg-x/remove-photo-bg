@@ -656,15 +656,7 @@
 
             <!-- Result tab: the generated cut-out -->
             <div id="panelResult" class="editorPanel" role="tabpanel" aria-labelledby="tabResult" hidden>
-            <section id="outputSection" class="relative rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-7 shadow-sm transition-all" hidden aria-labelledby="outputHeading">
-              <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
-                <div class="flex items-center gap-2.5">
-                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                  <h3 id="outputHeading" class="text-sm sm:text-base font-bold text-slate-900">Background Removed</h3>
-                </div>
-                <span class="text-xs font-medium text-slate-400">High-Fidelity Output</span>
-              </div>
-
+            <section id="outputSection" class="relative rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-7 shadow-sm transition-all" hidden aria-label="Background-removed output">
               <!-- Relative Image Container Holding Top-Left Gear -->
               <div id="outputFrame" class="relative rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-100 shadow-inner group/output">
                 <!-- Gear button on Top-Left Corner of generated image -->
@@ -822,13 +814,6 @@
             <!-- Compare tab: interactive original ↔ result slider -->
             <div id="panelCompare" class="editorPanel" role="tabpanel" aria-labelledby="tabCompare" hidden>
               <div class="rounded-3xl border border-slate-200/80 p-5 sm:p-6 bg-slate-50/60">
-                <div class="flex items-center justify-between mb-4">
-                  <div class="flex items-center gap-2.5">
-                    <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-                    <h3 class="text-sm sm:text-base font-bold text-slate-900">Before &amp; After</h3>
-                  </div>
-                  <span class="text-xs font-medium text-slate-400">Drag to compare</span>
-                </div>
                 <figure id="studioCompare" class="compare group" data-compare data-pos="50">
                   <div class="compareStage">
                     <img id="compareBefore" class="compareImg compareBefore" alt="Original photo before background removal" />

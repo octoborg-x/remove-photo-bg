@@ -198,6 +198,28 @@
     }
   }
 
+  /* ——— Hero tagline: one unbroken line that orbits on its own axis ———
+     The line must never wrap, so it is kept on a single nowrap run inside a
+     padded box whose overflow is hidden — the padding is preserved and
+     anything past it is simply clipped, with no overlay drawn on top. */
+  .heroTagline {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    max-width: 100%;
+    padding-inline: 1.25rem;
+    overflow: hidden;
+  }
+  .heroTaglineText {
+    display: inline-block;
+    margin: 0;
+    white-space: nowrap;
+    transform-style: preserve-3d;
+    backface-visibility: visible;
+    will-change: transform;
+    animation: taglineOrbit 8s linear infinite;
+  }
+
   /* ——— Animated progress ring ——— */
   .ring {
     display: inline-flex;
@@ -1462,6 +1484,17 @@
     transform: translateY(0);
   }
 }
+@keyframes taglineOrbit {
+  0% {
+    transform: perspective(420px) rotateY(0deg);
+  }
+  50% {
+    transform: perspective(420px) rotateY(360deg);
+  }
+  100% {
+    transform: perspective(420px) rotateY(360deg);
+  }
+}
 @keyframes procWaveDrift {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -1485,7 +1518,8 @@
     transform: none;
   }
   .procWaves,
-  .procPixels {
+  .procPixels,
+  .heroTaglineText {
     animation: none;
   }
   .stepList li[data-state='active'] .dot,

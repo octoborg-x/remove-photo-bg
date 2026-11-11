@@ -931,11 +931,16 @@ privacyToggle.addEventListener('click', () => {
 
 function setStage(s: string): void {
   stageEl.textContent = s;
+  stageEl.classList.remove('is-error');
 }
 
 function showError(msg: string): void {
   log(`ERROR: ${msg}`);
   setStage(`Error: ${msg}`);
+  stageEl.classList.add('is-error');
+  // Also surface the failure as a floating error notification (top-right), so it
+  // is seen even when the studio console is scrolled out of view.
+  showToast(msg.split('\n')[0], { kind: 'error', title: 'Something went wrong' });
 }
 
 function error(msg: string, kind: ErrorKind = 'generic'): void {
@@ -2088,40 +2093,34 @@ log('Detecting GPU…');
 initCompareSliders();
 
 // Header: full lockup, full-height bar and the labelled Studio button at the top
-// of the page; once the page is scrolled past 100px (or the mobile system bar is
-// showing) the bar shrinks, the brand crossfades to the figure-only mark and the
-// Studio button drops its label. data-collapsed drives all three in CSS
-// (src/style.css), so there is no per-scroll class churn on the elements.
+// of the page. Scrolling down collapses it (shorter bar, the brand crossfades to
+// the figure-only mark, the Studio button drops its label); scrolling back up
+// expands it, and at the very top it is always full height. data-collapsed drives
+// all three in CSS (src/style.css), so there is no per-scroll class churn.
 const brandLink = document.getElementById('brandLink');
-// Two thresholds, not one. A single 100px cutoff flips state on every scroll
-// event while the page rests within a pixel of it (scroll momentum, sub-pixel
-// offsets), and the collapse/expand transition then visibly oscillates. A gap
-// between the collapse and expand points gives the state hysteresis so it only
-// changes once per crossing.
-const COLLAPSE_AT_PX = 100;
-const EXPAND_AT_PX = 72;
-// The system bar hiding/showing changes the visual viewport height (not the
-// layout viewport). Remember the tallest height seen; a drop below it means the
-// bar is back on screen.
-let maxViewportHeight = window.visualViewport?.height ?? window.innerHeight;
+// A direction-aware header (the common "hide on scroll down, reveal on scroll
+// up" pattern). Collapsing needs a small downward move so a jittery or
+// sub-pixel scroll does not collapse on the first pixel; expanding is immediate
+// so the full bar returns the moment the user scrolls back up. Near the top the
+// header is always expanded, so the top of the page is never left collapsed —
+// including after a viewport resize, which the old height-based check got stuck on.
+const COLLAPSE_AFTER_PX = 8; // must scroll this far DOWN past the last top before collapsing
+const TOP_REVEAL_PX = 4; // at or above this scrollY the header is always expanded
+let lastScrollY = window.scrollY;
 let headerCollapsed = false;
 function updateHeaderCollapse(): void {
   if (!brandLink) return;
-  const vv = window.visualViewport;
-  const height = vv?.height ?? window.innerHeight;
-  maxViewportHeight = Math.max(maxViewportHeight, height);
-  const barShowing = height < maxViewportHeight - 24;
-  // Hysteresis: expand only once the page is back above the lower threshold, so
-  // a rest position between the two thresholds keeps whatever state it entered.
-  headerCollapsed = barShowing
-    ? true
-    : window.scrollY > (headerCollapsed ? EXPAND_AT_PX : COLLAPSE_AT_PX);
+  const y = window.scrollY;
+  const goingDown = y > lastScrollY + COLLAPSE_AFTER_PX;
+  const goingUp = y < lastScrollY - 1;
+  if (y <= TOP_REVEAL_PX) headerCollapsed = false;
+  else if (goingDown) headerCollapsed = true;
+  else if (goingUp) headerCollapsed = false;
+  lastScrollY = y;
   brandLink.dataset.collapsed = headerCollapsed ? 'true' : 'false';
   siteHeaderEl.dataset.collapsed = headerCollapsed ? 'true' : 'false';
 }
 window.addEventListener('scroll', updateHeaderCollapse, { passive: true });
-window.visualViewport?.addEventListener('resize', updateHeaderCollapse, { passive: true });
-window.addEventListener('resize', updateHeaderCollapse, { passive: true });
 updateHeaderCollapse();
 
 async function boot(): Promise<void> {

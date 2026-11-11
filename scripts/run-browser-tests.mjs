@@ -412,23 +412,35 @@ try {
       `light ${brandLight.lockup}/${brandLight.light} → dark ${brandDark.lockup}/${brandDark.light} → scrolled mark ${brandDarkScrolled.mark}`,
     );
 
-    // The collapse is threshold-based with hysteresis: it collapses past 100px
-    // and only expands again below 72px, so a rest position between the two does
-    // not flip back and forth. The mark is also narrower than the full lockup.
-    // Scroll with a Node-side settle between steps (headless rAF alone is racy).
-    const collapsedAt = async (y) => {
+    // The header is direction-aware: scrolling DOWN collapses it (shorter bar,
+    // brand crossfades to the mark, Studio label drops), scrolling UP expands it,
+    // and the top of the page is always full height. Scroll with a Node-side
+    // settle between steps (headless rAF alone is racy).
+    const headerAt = async (y) => {
       await page.evaluate((scrollY) => window.scrollTo(0, scrollY), y);
-      await sleep(300);
+      await sleep(350);
       return page.evaluate(() => ({
         collapsed: document.getElementById('siteHeader').dataset.collapsed,
         y: Math.round(window.scrollY),
+        innerH: Math.round(document.querySelector('.siteHeaderInner').getBoundingClientRect().height),
+        labelW: Math.round(document.querySelector('.studioLaunchText').getBoundingClientRect().width),
       }));
     };
-    const s0 = await collapsedAt(0);
-    const s99 = await collapsedAt(99);
-    const s101 = await collapsedAt(101);
-    const s90 = await collapsedAt(90);
-    const s71 = await collapsedAt(71);
+    const hTop = await headerAt(0); // rest
+    const hDown = await headerAt(400); // scroll down → collapse
+    const hUp = await headerAt(200); // scroll up → expand
+    const hTopAgain = await headerAt(0); // back at the top → expand
+    // A viewport resize (e.g. the mobile system bar or devtools) must not leave
+    // the header stuck collapsed at the top of the page.
+    await page.setViewport({ width: 1280, height: 720 });
+    await sleep(350);
+    const hAfterResize = await page.evaluate(() => ({
+      collapsed: document.getElementById('siteHeader').dataset.collapsed,
+      innerH: Math.round(document.querySelector('.siteHeaderInner').getBoundingClientRect().height),
+    }));
+    await page.setViewport({ width: 1280, height: 900 });
+    await sleep(200);
+    await page.evaluate(() => window.scrollTo(0, 0));
     const markWidth = await page.evaluate(() => {
       const mark = document.getElementById('brandMark');
       const lockup = document.getElementById('brandLockup');
@@ -437,15 +449,23 @@ try {
         h: lockup.getBoundingClientRect().height,
       };
     });
-    await page.evaluate(() => window.scrollTo(0, 0));
     record(
-      'the header collapses past 100px and expands only below 72px (no flicker)',
-      s0.collapsed === 'false' &&
-        s99.collapsed === 'false' &&
-        s101.collapsed === 'true' &&
-        s90.collapsed === 'true' &&
-        s71.collapsed === 'false',
-      `0:${s0.collapsed}(${s0.y}) 99:${s99.collapsed}(${s99.y}) 101:${s101.collapsed}(${s101.y}) 90:${s90.collapsed}(${s90.y}) 71:${s71.collapsed}(${s71.y})`,
+      'the header collapses on scroll down and expands on scroll up',
+      hTop.collapsed === 'false' &&
+        hDown.collapsed === 'true' &&
+        hUp.collapsed === 'false' &&
+        hTopAgain.collapsed === 'false',
+      `top:${hTop.collapsed} down400:${hDown.collapsed} up200:${hUp.collapsed} top:${hTopAgain.collapsed}`,
+    );
+    record(
+      'the collapsed header is shorter and drops the Studio label',
+      hDown.innerH < hTop.innerH && hDown.labelW === 0 && hTop.labelW > 0,
+      `height ${hTop.innerH}→${hDown.innerH}px, label ${hTop.labelW}→${hDown.labelW}px`,
+    );
+    record(
+      'the header is never stuck collapsed at the top after a resize',
+      hAfterResize.collapsed === 'false' && hAfterResize.innerH === hTop.innerH,
+      `collapsed:${hAfterResize.collapsed} height:${hAfterResize.innerH}px`,
     );
     record(
       'the collapsed mark is ~25% narrower than the lockup figure',
@@ -695,6 +715,28 @@ try {
     );
     const hasOutput = await page.evaluate(() => document.querySelector('#outputBox img') !== null);
     record('corrupt image shows a decode error and no output', hasOutput === false);
+    // The failure also surfaces as a floating error notification (top-right, red).
+    const toast = await page.evaluate(() => {
+      const t = document.querySelector('#toastHost .toast.error');
+      if (!t) return null;
+      const host = document.getElementById('toastHost').getBoundingClientRect();
+      const r = t.getBoundingClientRect();
+      const body = getComputedStyle(t.querySelector('.toastBody')).color;
+      const stage = document.getElementById('stage');
+      return {
+        onRight: Math.abs(window.innerWidth - host.right) < 40,
+        nearTop: host.top < 60,
+        floatAbove: r.width > 0,
+        redText: /rgb\(\s*127|\s*252, 165, 165/.test(body),
+        stageError: stage?.classList.contains('is-error') === true,
+      };
+    });
+    record(
+      'errors show a red floating notification at the top-right',
+      !!toast && toast.onRight && toast.nearTop && toast.floatAbove && toast.redText,
+      toast ? `right:${toast.onRight} top:${toast.nearTop} red:${toast.redText}` : 'no error toast',
+    );
+    record('the stage line turns to the error colour theme', !!toast && toast.stageError);
     await page.close();
   }
 

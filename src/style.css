@@ -61,6 +61,9 @@
   --color-amber-800: light-dark(#92400e, #fcd34d);
   --color-amber-900: light-dark(#78350f, #fde68a);
   --color-red-50: light-dark(#fef2f2, #2c1618);
+  --color-red-200: light-dark(#fecaca, #4a1f22);
+  --color-red-500: light-dark(#ef4444, #f87171);
+  --color-red-600: light-dark(#dc2626, #f87171);
   --color-red-900: light-dark(#7f1d1d, #fca5a5);
   --color-indigo-50: light-dark(#eef2ff, #1a1f45);
   --color-indigo-600: light-dark(#4f46e5, #818cf8);
@@ -555,10 +558,11 @@
   .toastHost {
     position: fixed;
     top: 1.25rem;
-    left: 1.25rem;
+    right: 1.25rem;
     z-index: 1000;
     display: flex;
     flex-direction: column;
+    align-items: flex-end;
     gap: 0.6rem;
     max-width: min(380px, calc(100vw - 2.5rem));
     pointer-events: none;
@@ -583,6 +587,17 @@
   .toast.error {
     border-left-color: var(--color-red-500);
     background: var(--color-red-50);
+  }
+  /* Error notifications read in the error colour theme: red text and border. */
+  .toast.error .toastBody,
+  .toast.error .toastTitle {
+    color: var(--color-red-900);
+  }
+  .toast.error .toastClose {
+    color: var(--color-red-600);
+  }
+  .toast.error .toastClose:hover {
+    color: var(--color-red-900);
   }
   .toast .toastBody {
     flex: 1;
@@ -711,10 +726,12 @@
   .header-stagger > *:nth-child(2) { animation-delay: 0.12s; }
   .header-stagger > *:nth-child(3) { animation-delay: 0.22s; }
 
-  /* ——— Compact header on scroll (>100px) ———
-     The header shrinks, the brand crossfades to the mark, and the Studio button
-     drops its label. Height + brand opacity animate; the label is removed from
-     the flow (width: 0) so the button shrinks smoothly. */
+  /* ——— Compact header on scroll ———
+     Direction-aware: scrolling DOWN shrinks the bar, crossfades the brand to
+     the mark and drops the Studio button's label; scrolling UP restores the
+     full header, and the top of the page is always full height. Height + brand
+     opacity animate; the label is removed from the flow (width: 0) so the
+     button shrinks smoothly. */
   .siteHeaderInner {
     height: 4.5rem;
     transition: height 0.3s ease;
@@ -1441,6 +1458,12 @@
     padding: 0.5rem 0.7rem;
     line-height: 1.4;
   }
+  /* Error state: the stage line reads in the error colour theme. */
+  .consoleStage.is-error {
+    color: var(--color-red-900);
+    background: var(--color-red-50);
+    border-color: var(--color-red-200);
+  }
   /* Borderless collapsible blocks. The summary is a quiet header row with a
      chevron; the body is indented as the "children" of that thread, with the
      extra left space the brief asked for. */
@@ -1647,7 +1670,7 @@
 @keyframes toastIn {
   from {
     opacity: 0;
-    transform: translateX(-12px);
+    transform: translateX(12px);
   }
   to {
     opacity: 1;

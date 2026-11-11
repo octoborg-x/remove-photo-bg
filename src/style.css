@@ -1127,9 +1127,11 @@
     flex: none;
   }
   /* Once a photo is chosen the preview replaces the drop zone entirely, so the
-     input tab shows just the image (click it to pick another). */
+     input tab shows just the image (click it to pick another). `!important`
+     is required because the drop zone carries the `flex` utility class, and in
+     Tailwind's layer order utilities beat components. */
   #panelInput.has-preview .dropZone {
-    display: none;
+    display: none !important;
   }
   #panelInput.has-preview .dropZone .dzIcon {
     display: none;

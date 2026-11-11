@@ -190,30 +190,34 @@ try {
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     const shape = await page.evaluate(() => {
       const el = document.querySelector('.heroTaglineText');
-      const wrap = el.parentElement;
+      const wrap = el.closest('.heroTagline');
+      const track = el.closest('.heroTaglineTrack');
       const cs = getComputedStyle(el);
       const wcs = getComputedStyle(wrap);
+      const tcs = getComputedStyle(track);
       return {
         nowrap: cs.whiteSpace === 'nowrap',
         padding: parseFloat(wcs.paddingLeft) > 0,
         clipped: wcs.overflow === 'hidden' || wcs.overflowX === 'hidden',
         lines: Math.round(el.offsetHeight / parseFloat(cs.lineHeight)),
-        animation: cs.animationName,
+        copies: track.querySelectorAll('.heroTaglineText').length,
+        animation: tcs.animationName,
       };
     });
     record('hero tagline is one unbroken line', shape.nowrap && shape.lines === 1);
     record('hero tagline keeps its padding and clips overflow', shape.padding && shape.clipped);
-    // The loop dwells at 360deg for half of its 8s cycle, so sample across a
-    // window that is guaranteed to include the moving half before concluding.
-    let turned = false;
-    let prev = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineText')).transform);
-    for (let attempt = 0; attempt < 24 && !turned; attempt += 1) {
-      await sleep(300);
-      const now = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineText')).transform);
-      turned = now !== prev;
+    record('hero tagline loops with a seamless second copy', shape.copies === 2);
+    // A linear marquee moves continuously, so sampling a couple of frames is
+    // enough to see the track's transform change.
+    let moved = false;
+    let prev = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineTrack')).transform);
+    for (let attempt = 0; attempt < 24 && !moved; attempt += 1) {
+      await sleep(200);
+      const now = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineTrack')).transform);
+      moved = now !== prev;
       prev = now;
     }
-    record('hero tagline animates (turns around its own axis)', shape.animation === 'taglineOrbit' && turned);
+    record('hero tagline scrolls horizontally (marquee animation)', shape.animation === 'taglineMarquee' && moved);
     await page.close();
   }
 
@@ -398,6 +402,47 @@ try {
       `light ${brandLight.lockup}/${brandLight.light} → dark ${brandDark.lockup}/${brandDark.light} → scrolled mark ${brandDarkScrolled.mark}`,
     );
 
+    // The collapse is threshold-based with hysteresis: it collapses past 100px
+    // and only expands again below 72px, so a rest position between the two does
+    // not flip back and forth. The mark is also narrower than the full lockup.
+    // Scroll with a Node-side settle between steps (headless rAF alone is racy).
+    const collapsedAt = async (y) => {
+      await page.evaluate((scrollY) => window.scrollTo(0, scrollY), y);
+      await sleep(300);
+      return page.evaluate(() => ({
+        collapsed: document.getElementById('siteHeader').dataset.collapsed,
+        y: Math.round(window.scrollY),
+      }));
+    };
+    const s0 = await collapsedAt(0);
+    const s99 = await collapsedAt(99);
+    const s101 = await collapsedAt(101);
+    const s90 = await collapsedAt(90);
+    const s71 = await collapsedAt(71);
+    const markWidth = await page.evaluate(() => {
+      const mark = document.getElementById('brandMark');
+      const lockup = document.getElementById('brandLockup');
+      return {
+        markW: mark.getBoundingClientRect().width,
+        h: lockup.getBoundingClientRect().height,
+      };
+    });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    record(
+      'the header collapses past 100px and expands only below 72px (no flicker)',
+      s0.collapsed === 'false' &&
+        s99.collapsed === 'false' &&
+        s101.collapsed === 'true' &&
+        s90.collapsed === 'true' &&
+        s71.collapsed === 'false',
+      `0:${s0.collapsed}(${s0.y}) 99:${s99.collapsed}(${s99.y}) 101:${s101.collapsed}(${s101.y}) 90:${s90.collapsed}(${s90.y}) 71:${s71.collapsed}(${s71.y})`,
+    );
+    record(
+      'the collapsed mark is ~25% narrower than the lockup figure',
+      markWidth.markW > 0 && markWidth.markW < markWidth.h * 0.6,
+      `mark ${markWidth.markW.toFixed(1)}px vs brand height ${markWidth.h.toFixed(1)}px`,
+    );
+
     // The console lives in the studio workspace: the pipeline is a row of status
     // dots (all done after a successful run) and the log is filed under
     // categories. The Zero-Upload statement is hidden behind a clickable icon.
@@ -414,9 +459,38 @@ try {
         .filter((g) => !g.hidden)
         .map((g) => g.dataset.category);
       const privacyHiddenBefore = document.getElementById('privacyStatement')?.hidden ?? false;
-      document.getElementById('privacyToggle')?.click();
+      const privacyBtn = document.getElementById('privacyToggle');
+      // The icon must sit beside the "Console" heading, be borderless, and carry
+      // no text label of its own.
+      const head = privacyBtn?.closest('.consoleHead');
+      const privacyInHead = !!head && /console/i.test(head.textContent ?? '');
+      const privacyBorderless = getComputedStyle(privacyBtn).borderTopWidth === '0px';
+      const privacyNoLabel = !privacyBtn?.parentElement?.querySelector('.privacyToggleLabel');
+      privacyBtn?.click();
       const privacyHiddenAfter = document.getElementById('privacyStatement')?.hidden ?? true;
-      return { inStudio, label, steps, groups, privacyHiddenBefore, privacyHiddenAfter };
+      // Console log chrome: chevrons (not dots), no block borders, indented body.
+      const logDots = Array.from(document.querySelectorAll('#logDots .logDot'));
+      const chevronsInDots = logDots.filter((d) => d.querySelector('.logChevron svg')).length;
+      const group = document.querySelector('#logGroups .logGroup');
+      const groupBorderless = group ? getComputedStyle(group).borderTopWidth === '0px' : false;
+      const bodyIndented = group
+        ? parseFloat(getComputedStyle(group.querySelector('.consoleGroupBody')).marginLeft) > 8
+        : false;
+      return {
+        inStudio,
+        label,
+        steps,
+        groups,
+        privacyHiddenBefore,
+        privacyHiddenAfter,
+        privacyInHead,
+        privacyBorderless,
+        privacyNoLabel,
+        chevronsInDots,
+        dotsTotal: logDots.length,
+        groupBorderless,
+        bodyIndented,
+      };
     });
     record(
       'the console sits in the studio and lists model/prepare/remove/export pipeline dots',
@@ -443,6 +517,21 @@ try {
       panelState.privacyHiddenBefore === true && panelState.privacyHiddenAfter === false,
       `${panelState.privacyHiddenBefore} → ${panelState.privacyHiddenAfter}`,
     );
+    record(
+      'the privacy icon sits borderless beside the Console heading with no label',
+      panelState.privacyInHead === true &&
+        panelState.privacyBorderless === true &&
+        panelState.privacyNoLabel === true,
+      `inHead ${panelState.privacyInHead} borderless ${panelState.privacyBorderless} noLabel ${panelState.privacyNoLabel}`,
+    );
+    record(
+      'the console log uses chevrons instead of dots, with borderless indented blocks',
+      panelState.dotsTotal > 0 &&
+        panelState.chevronsInDots === panelState.dotsTotal &&
+        panelState.groupBorderless === true &&
+        panelState.bodyIndented === true,
+      `chevrons ${panelState.chevronsInDots}/${panelState.dotsTotal} borderless ${panelState.groupBorderless} indented ${panelState.bodyIndented}`,
+    );
 
     // Console show/hide + drag-resize: the toggle button and the in-card close
     // both hide it; the resize handle can only shrink it (never past 35%).
@@ -454,24 +543,25 @@ try {
       const handle = document.getElementById('consoleResize');
       const gridH = grid.getBoundingClientRect().height;
       const openH = col.getBoundingClientRect().height;
-      const cap = gridH * 0.35;
-      // Drag the handle up hard: the console must stop at the 35% cap.
+      const cap = gridH * 0.5;
+      const floor = gridH * 0.2;
+      // Drag the handle up hard: the console must stop at the 50% cap.
       const r = handle.getBoundingClientRect();
       const y0 = r.top + r.height / 2;
       handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientY: y0, pointerId: 1 }));
-      handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 - 400, pointerId: 1 }));
+      handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 - 900, pointerId: 1 }));
       const grownH = col.getBoundingClientRect().height;
       // Drag down hard: it shrinks (below 35%) but keeps a usable minimum.
-      handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 + 400, pointerId: 1 }));
+      handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 + 900, pointerId: 1 }));
       const shrunkH = col.getBoundingClientRect().height;
-      handle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientY: y0 + 400, pointerId: 1 }));
+      handle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientY: y0 + 900, pointerId: 1 }));
       closeBtn.click();
       const hiddenByClose = grid.dataset.console === 'hidden';
       const togglePressedWhenHidden = toggle.getAttribute('aria-pressed');
       toggle.click();
       const shownAgain = grid.dataset.console !== 'hidden';
       const togglePressedWhenShown = toggle.getAttribute('aria-pressed');
-      return { gridH, openH, cap, grownH, shrunkH, hiddenByClose, shownAgain, togglePressedWhenHidden, togglePressedWhenShown };
+      return { gridH, openH, cap, floor, grownH, shrunkH, hiddenByClose, shownAgain, togglePressedWhenHidden, togglePressedWhenShown };
     });
     record(
       'the console has a show/hide toggle and an in-card close button',
@@ -482,11 +572,12 @@ try {
       `hidden ${consoleControls.hiddenByClose} → shown ${consoleControls.shownAgain}`,
     );
     record(
-      'the console top edge resizes below 35% but never past it',
+      'the console top edge resizes between 20% and 50%',
       consoleControls.grownH <= consoleControls.cap + 1 &&
+        consoleControls.grownH >= consoleControls.openH - 1 &&
         consoleControls.shrunkH < consoleControls.openH &&
-        consoleControls.shrunkH >= 90,
-      `open ${Math.round(consoleControls.openH)} cap ${Math.round(consoleControls.cap)} grown ${Math.round(consoleControls.grownH)} shrunk ${Math.round(consoleControls.shrunkH)}`,
+        consoleControls.shrunkH >= consoleControls.floor - 1,
+      `open ${Math.round(consoleControls.openH)} cap ${Math.round(consoleControls.cap)} floor ${Math.round(consoleControls.floor)} grown ${Math.round(consoleControls.grownH)} shrunk ${Math.round(consoleControls.shrunkH)}`,
     );
 
     // Privacy: every request during processing is same-origin (no third party).

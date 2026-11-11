@@ -197,35 +197,43 @@ function renderStudioView(): void {
   }
 }
 
-function setStudioTab(tab: StudioTab): void {
-  if (!tabEnabled(studioView, tab)) return;
+function setStudioTab(tab: StudioTab, force = false): void {
+  if (!force && !tabEnabled(studioView, tab)) return;
   studioView = { ...studioView, tab };
   renderStudioView();
 }
 
+// The re-process button's visibility depends on the studio's running/result
+// state, so it is refreshed alongside every view transition (the helper itself
+// is declared below, with the mask controls it also depends on).
+function applyStudioView(): void {
+  renderStudioView();
+  updateReprocessButton();
+}
+
 function studioSelectImage(): void {
   studioView = reduceStudio(studioView, { type: 'select-image' });
-  renderStudioView();
+  applyStudioView();
 }
 
 function studioRunStart(): void {
   studioView = reduceStudio(studioView, { type: 'run-start' });
-  renderStudioView();
+  applyStudioView();
 }
 
 function studioProgress(percent: number | null): void {
   studioView = reduceStudio(studioView, { type: 'progress', percent });
-  renderStudioView();
+  applyStudioView();
 }
 
 function studioResult(): void {
   studioView = reduceStudio(studioView, { type: 'result' });
-  renderStudioView();
+  applyStudioView();
 }
 
 function studioError(): void {
   studioView = reduceStudio(studioView, { type: 'error' });
-  renderStudioView();
+  applyStudioView();
 }
 
 // The studio covers the page, so everything behind it must leave the tab order
@@ -274,10 +282,11 @@ for (const tab of STUDIO_TABS) {
 }
 
 // ——— Console column: show/hide, close, and drag-resize ———
-// The console may shrink below its default 35% but never grow past it, so the
-// editor always keeps at least 65% of the workspace. `null` means "use the
-// responsive 35% default"; a number is an explicit, clamped pixel height.
-const CONSOLE_MAX_FRACTION = 0.35;
+// The console drags between 20% and 50% of the workspace height; its resting
+// default is the 35% track in CSS. `null` means "use that default"; a number is
+// an explicit, clamped pixel height.
+const CONSOLE_MAX_FRACTION = 0.5;
+const CONSOLE_MIN_FRACTION = 0.2;
 const CONSOLE_MIN_PX = 96;
 let consoleHeightPx: number | null = null;
 
@@ -299,7 +308,8 @@ function applyConsoleHeight(px: number | null): void {
     return;
   }
   const max = gridH * CONSOLE_MAX_FRACTION;
-  const height = Math.max(CONSOLE_MIN_PX, Math.min(px, max));
+  const min = Math.max(CONSOLE_MIN_PX, gridH * CONSOLE_MIN_FRACTION);
+  const height = Math.max(min, Math.min(px, max));
   consoleHeightPx = height;
   studioGridEl.style.setProperty('--console-h', `${Math.round(height)}px`);
 }
@@ -802,10 +812,26 @@ const logGroupEls = new Map<
 >();
 const logDotEls = new Map<ConsoleCategory, HTMLButtonElement>();
 
+// A chevron glyph, pointing down by default. The collapsible blocks rotate it
+// to point up while open (see the CSS), so a single icon reads as up/down.
+const CHEVRON_DOWN_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<polyline points="6 9 12 15 18 9" /></svg>';
+
+function makeChevron(className: string): HTMLSpanElement {
+  const el = document.createElement('span');
+  el.className = className;
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = CHEVRON_DOWN_SVG;
+  return el;
+}
+
 function buildConsoleLog(): void {
   for (const category of CONSOLE_CATEGORIES) {
     const meta = CONSOLE_CATEGORY_META[category];
 
+    // One chevron per category, mirroring the group it reveals.
     const dot = document.createElement('button');
     dot.type = 'button';
     dot.className = 'logDot';
@@ -813,11 +839,13 @@ function buildConsoleLog(): void {
     dot.dataset.active = 'false';
     dot.title = `${meta.label} — ${meta.hint}`;
     dot.setAttribute('aria-label', `${meta.label} log`);
+    dot.setAttribute('aria-expanded', 'false');
+    dot.appendChild(makeChevron('logChevron'));
     dot.addEventListener('click', () => {
       const entry = logGroupEls.get(category);
       if (!entry) return;
-      entry.group.open = true;
-      entry.group.scrollIntoView({ block: 'nearest' });
+      entry.group.open = !entry.group.open;
+      if (entry.group.open) entry.group.scrollIntoView({ block: 'nearest' });
     });
     logDotsEl.appendChild(dot);
     logDotEls.set(category, dot);
@@ -828,18 +856,21 @@ function buildConsoleLog(): void {
     group.hidden = true;
     const summary = document.createElement('summary');
     summary.className = 'consoleGroupSummary';
-    const groupDot = document.createElement('span');
-    groupDot.className = 'consoleGroupDot';
     const name = document.createElement('span');
     name.className = 'consoleGroupName';
     name.textContent = meta.label;
     const count = document.createElement('span');
     count.className = 'consoleGroupCount';
     count.textContent = '0';
-    summary.append(groupDot, name, count);
+    summary.append(makeChevron('consoleChevron'), name, count);
     const body = document.createElement('div');
     body.className = 'consoleGroupBody logBody';
     group.append(summary, body);
+    // Keep the category chevron in step with the block it reveals.
+    group.addEventListener('toggle', () => {
+      const chevron = logDotEls.get(category);
+      if (chevron) chevron.setAttribute('aria-expanded', String(group.open));
+    });
     logGroupsEl.appendChild(group);
     logGroupEls.set(category, { group, body, count });
   }
@@ -1412,6 +1443,10 @@ async function initWorker(): Promise<void> {
       setStep('export', 'done');
       setProcessingLabel('Done — your image is ready', false);
       studioResult();
+      // Record the settings this cut-out was produced with; changing them later
+      // reveals the re-process button.
+      resultSettingsKey = engineSettingsKey();
+      updateReprocessButton();
       setStage('Done — download your image below.');
 
       log(`Rendered cut-out (${width}x${height}) as ${exportFormatInfo(exportFormat).label} on a ${describeChoice(background)} background, ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
@@ -1623,14 +1658,36 @@ providerToggle.addEventListener('change', () => {
   log(`Provider selected: ${PROVIDER_LABELS[selectedProvider]}`);
   if (selectedProvider === 'webgpu') warnOnGpuChoice();
   applyProviderUi();
+  updateReprocessButton();
   loadSelectedModel();
 });
 
 // ——— Mask adjust controls ———
+// The engine settings a result was produced with. The re-process button appears
+// whenever the current settings differ, so it is clear the on-screen cut-out is
+// stale. `null` means "no result rendered yet".
+let resultSettingsKey: string | null = null;
+const reprocessBtn = document.getElementById('reprocessBtn') as HTMLButtonElement | null;
+
+function engineSettingsKey(): string {
+  return `${selectedProvider}|${maskAdjust.threshold}|${maskAdjust.feather}`;
+}
+
+function updateReprocessButton(): void {
+  if (!reprocessBtn) return;
+  const stale =
+    resultSettingsKey !== null &&
+    studioView.hasResult &&
+    !studioView.running &&
+    engineSettingsKey() !== resultSettingsKey;
+  reprocessBtn.hidden = !stale;
+}
+
 function setMaskAdjust(adjust: MaskAdjust): void {
   maskAdjust = adjust;
   saveMaskAdjust();
   applyMaskUi();
+  updateReprocessButton();
   log(`Mask adjust: threshold ${adjust.threshold || 'off'}, feather ${adjust.feather || 'off'}`);
 }
 
@@ -1674,6 +1731,15 @@ if (settingsGearBtn && advancedMenu) {
     }
   });
 }
+
+// Re-run inference with the current engine settings, then jump to the Processing
+// tab so the user sees the run they asked for.
+reprocessBtn?.addEventListener('click', () => {
+  advancedMenu?.setAttribute('hidden', '');
+  if (!currentImageData) return;
+  setStudioTab('processing', true);
+  void runSmoke();
+});
 
 type PendingRun = { resolve: (ms: number) => void; reject: (err: Error) => void };
 const pendingRuns = new Map<number, PendingRun>();
@@ -1929,20 +1995,31 @@ initCompareSliders();
 // Studio button drops its label. data-collapsed drives all three in CSS
 // (src/style.css), so there is no per-scroll class churn on the elements.
 const brandLink = document.getElementById('brandLink');
-const COLLAPSE_THRESHOLD_PX = 100;
+// Two thresholds, not one. A single 100px cutoff flips state on every scroll
+// event while the page rests within a pixel of it (scroll momentum, sub-pixel
+// offsets), and the collapse/expand transition then visibly oscillates. A gap
+// between the collapse and expand points gives the state hysteresis so it only
+// changes once per crossing.
+const COLLAPSE_AT_PX = 100;
+const EXPAND_AT_PX = 72;
 // The system bar hiding/showing changes the visual viewport height (not the
 // layout viewport). Remember the tallest height seen; a drop below it means the
 // bar is back on screen.
 let maxViewportHeight = window.visualViewport?.height ?? window.innerHeight;
+let headerCollapsed = false;
 function updateHeaderCollapse(): void {
   if (!brandLink) return;
   const vv = window.visualViewport;
   const height = vv?.height ?? window.innerHeight;
   maxViewportHeight = Math.max(maxViewportHeight, height);
   const barShowing = height < maxViewportHeight - 24;
-  const collapsed = window.scrollY > COLLAPSE_THRESHOLD_PX || barShowing;
-  brandLink.dataset.collapsed = collapsed ? 'true' : 'false';
-  siteHeaderEl.dataset.collapsed = collapsed ? 'true' : 'false';
+  // Hysteresis: expand only once the page is back above the lower threshold, so
+  // a rest position between the two thresholds keeps whatever state it entered.
+  headerCollapsed = barShowing
+    ? true
+    : window.scrollY > (headerCollapsed ? EXPAND_AT_PX : COLLAPSE_AT_PX);
+  brandLink.dataset.collapsed = headerCollapsed ? 'true' : 'false';
+  siteHeaderEl.dataset.collapsed = headerCollapsed ? 'true' : 'false';
 }
 window.addEventListener('scroll', updateHeaderCollapse, { passive: true });
 window.visualViewport?.addEventListener('resize', updateHeaderCollapse, { passive: true });

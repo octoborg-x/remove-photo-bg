@@ -473,18 +473,14 @@ try {
       `mark ${markWidth.markW.toFixed(1)}px vs brand height ${markWidth.h.toFixed(1)}px`,
     );
 
-    // The console lives in the studio workspace: the pipeline is a row of status
-    // dots (all done after a successful run) and the log is filed under
-    // categories. The Zero-Upload statement is hidden behind a clickable icon.
+    // The console lives in the studio workspace. It has no pipeline-dot row or
+    // category-chevron row: the log is filed under plain collapsible threads,
+    // and the live status is a single label. The Zero-Upload statement is hidden
+    // behind a clickable icon.
     const panelState = await page.evaluate(() => {
       const consoleEl = document.querySelector('.consoleCard');
       const inStudio = !!document.getElementById('studio')?.contains(consoleEl);
       const label = document.getElementById('processingLabel')?.textContent ?? '';
-      const steps = Array.from(document.querySelectorAll('#stepList li')).map((li) => ({
-        text: li.textContent ?? '',
-        title: li.getAttribute('title') ?? '',
-        state: li.dataset.state,
-      }));
       const groups = Array.from(document.querySelectorAll('#logGroups .logGroup'))
         .filter((g) => !g.hidden)
         .map((g) => g.dataset.category);
@@ -498,44 +494,50 @@ try {
       const privacyNoLabel = !privacyBtn?.parentElement?.querySelector('.privacyToggleLabel');
       privacyBtn?.click();
       const privacyHiddenAfter = document.getElementById('privacyStatement')?.hidden ?? true;
-      // Console log chrome: chevrons (not dots), no block borders, indented body.
-      const logDots = Array.from(document.querySelectorAll('#logDots .logDot'));
-      const chevronsInDots = logDots.filter((d) => d.querySelector('.logChevron svg')).length;
+      // The two "vertical" components are gone.
+      const noStepList = !document.getElementById('stepList');
+      const noLogDots = !document.getElementById('logDots');
+      // Each thread header ends with its chevron (after the label), not before.
       const group = document.querySelector('#logGroups .logGroup');
+      const summary = group?.querySelector('.consoleGroupSummary');
+      const kids = summary ? Array.from(summary.children) : [];
+      const chevronIsLast = kids.length > 0 && kids[kids.length - 1].classList.contains('consoleChevron');
       const groupBorderless = group ? getComputedStyle(group).borderTopWidth === '0px' : false;
       const bodyIndented = group
         ? parseFloat(getComputedStyle(group.querySelector('.consoleGroupBody')).marginLeft) > 8
         : false;
+      // The status band spans the full console width (no side padding on the
+      // scroll container that would inset its background).
+      const stage = document.getElementById('stage');
+      const stageW = stage?.getBoundingClientRect().width ?? 0;
+      const cardW = consoleEl?.getBoundingClientRect().width ?? 0;
+      const stageFullWidth = stageW > 0 && Math.abs(stageW - cardW) < 6;
       return {
         inStudio,
         label,
-        steps,
         groups,
         privacyHiddenBefore,
         privacyHiddenAfter,
         privacyInHead,
         privacyBorderless,
         privacyNoLabel,
-        chevronsInDots,
-        dotsTotal: logDots.length,
+        noStepList,
+        noLogDots,
+        chevronIsLast,
         groupBorderless,
         bodyIndented,
+        stageFullWidth,
       };
     });
     record(
-      'the console sits in the studio and lists model/prepare/remove/export pipeline dots',
-      panelState.inStudio === true &&
-        panelState.steps.length >= 4 &&
-        panelState.steps.every((s) => s.state === 'done') &&
-        panelState.steps.some((s) => /model/i.test(s.title)) &&
-        panelState.steps.some((s) => /prepare/i.test(s.title)) &&
-        panelState.steps.some((s) => /remove background/i.test(s.title)),
-      panelState.steps.map((s) => `${s.state}:${s.text}`).join(' | '),
+      'the console sits in the studio with its live status label',
+      panelState.inStudio === true && /done/i.test(panelState.label),
+      `inStudio ${panelState.inStudio} label "${panelState.label}"`,
     );
     record(
-      'the console status label reports the finished process',
-      /done/i.test(panelState.label),
-      panelState.label,
+      'the console removed the pipeline-dot row and the log-chevron row',
+      panelState.noStepList === true && panelState.noLogDots === true,
+      `noStepList ${panelState.noStepList} noLogDots ${panelState.noLogDots}`,
     );
     record(
       'log lines are filed under categories',
@@ -555,12 +557,42 @@ try {
       `inHead ${panelState.privacyInHead} borderless ${panelState.privacyBorderless} noLabel ${panelState.privacyNoLabel}`,
     );
     record(
-      'the console log uses chevrons instead of dots, with borderless indented blocks',
-      panelState.dotsTotal > 0 &&
-        panelState.chevronsInDots === panelState.dotsTotal &&
+      'the thread headers put the chevron after the label, in borderless indented blocks',
+      panelState.chevronIsLast === true &&
         panelState.groupBorderless === true &&
         panelState.bodyIndented === true,
-      `chevrons ${panelState.chevronsInDots}/${panelState.dotsTotal} borderless ${panelState.groupBorderless} indented ${panelState.bodyIndented}`,
+      `chevronLast ${panelState.chevronIsLast} borderless ${panelState.groupBorderless} indented ${panelState.bodyIndented}`,
+    );
+    record(
+      'the status band spans the full console width',
+      panelState.stageFullWidth === true,
+      `stageFullWidth ${panelState.stageFullWidth}`,
+    );
+
+    // While a run is in flight, the console thread labels animate: grey text with
+    // a white light sweeping across it (opt-in via [data-running] on the card).
+    const runningSweep = await page.evaluate(() => {
+      const card = document.querySelector('.consoleCard');
+      const name = document.querySelector('#logGroups .logGroup .consoleGroupName');
+      if (!card || !name) return null;
+      // getComputedStyle returns a live object, so read the values immediately.
+      const read = () => {
+        const s = getComputedStyle(name);
+        return { anim: s.animationName, clip: s.webkitBackgroundClip || s.backgroundClip };
+      };
+      const before = read();
+      card.dataset.running = 'true';
+      const during = read();
+      card.dataset.running = 'false';
+      return { beforeAnim: before.anim, duringAnim: during.anim, clip: during.clip };
+    });
+    record(
+      'while running, thread labels are grey with a white-light sweep',
+      !!runningSweep &&
+        runningSweep.duringAnim === 'threadSweep' &&
+        runningSweep.beforeAnim === 'none' &&
+        /text/.test(runningSweep.clip),
+      runningSweep ? `anim ${runningSweep.beforeAnim}→${runningSweep.duringAnim} clip ${runningSweep.clip}` : 'no thread label',
     );
 
     // Console show/hide + drag-resize: the toggle button and the in-card close

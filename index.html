@@ -904,29 +904,17 @@
               </div>
 
               <div class="consoleScroll">
-                <!-- Status dots: pipeline stages (left) + log categories (right) -->
-                <div class="consoleDotsRow">
-                  <ol id="stepList" class="stepList" aria-label="Pipeline progress"></ol>
-                  <span id="modelProgress" class="ring" hidden aria-hidden="true">
-                    <svg viewBox="0 0 36 36" class="w-5 h-5">
-                      <circle class="ringTrack" cx="18" cy="18" r="15"></circle>
-                      <circle class="ringValue" cx="18" cy="18" r="15"></circle>
-                    </svg>
-                  </span>
-                  <div id="logDots" class="logDots" aria-label="Log categories"></div>
-                </div>
-
                 <!-- Live stage status -->
                 <p id="stage" class="consoleStage" role="status">Starting…</p>
 
                 <!-- Engine details (was "Technical details"): a collapsible block -->
                 <details class="consoleGroup" data-console-group="engine">
                   <summary class="consoleGroupSummary">
+                    <span class="consoleGroupName">Engine details</span>
+                    <span class="consoleGroupCount" id="engineHint">on-device</span>
                     <span class="consoleChevron" aria-hidden="true">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
                     </span>
-                    <span class="consoleGroupName">Engine details</span>
-                    <span class="consoleGroupCount" id="engineHint">on-device</span>
                   </summary>
                   <div class="consoleGroupBody">
                     <div class="flex items-center justify-between gap-2">

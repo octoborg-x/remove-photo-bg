@@ -115,7 +115,6 @@ declare const __BUILD_ID__: string;
 
 const stageEl = document.getElementById('stage')!;
 const logGroupsEl = document.getElementById('logGroups')!;
-const logDotsEl = document.getElementById('logDots')!;
 const outputBox = document.getElementById('outputBox')!;
 const outputSection = document.getElementById('outputSection')!;
 const modelNameEl = document.getElementById('modelName')!;
@@ -131,10 +130,7 @@ const maskFeatherValue = document.getElementById('maskFeatherValue')!;
 const dropZone = document.getElementById('dropZone')!;
 const limitBytesEl = document.getElementById('limitBytes')!;
 const limitSideEl = document.getElementById('limitSide')!;
-const modelProgressEl = document.getElementById('modelProgress')!;
-const modelProgressValue = modelProgressEl.querySelector('.ringValue') as SVGCircleElement;
 const processingLabel = document.getElementById('processingLabel')!;
-const stepListEl = document.getElementById('stepList')!;
 const recoveryEl = document.getElementById('recovery')!;
 const netWarnEl = document.getElementById('netWarn')!;
 const netWarnText = document.getElementById('netWarnText')!;
@@ -179,6 +175,7 @@ const studioGridEl = document.querySelector<HTMLElement>('.studioGrid')!;
 const consoleToggleBtn = document.getElementById('consoleToggle')! as HTMLButtonElement;
 const consoleCloseBtn = document.getElementById('consoleClose')! as HTMLButtonElement;
 const consoleResizeEl = document.getElementById('consoleResize')!;
+const consoleCardEl = document.querySelector<HTMLElement>('.consoleCard')!;
 let studioView = initialStudioView();
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
@@ -202,6 +199,9 @@ function renderStudioView(): void {
   } else {
     procPctEl.textContent = `${studioView.percent}%`;
   }
+  // While a run is in flight, the console thread labels animate (grey text with
+  // a white light sweeping across it).
+  consoleCardEl.dataset.running = String(studioView.running);
 }
 
 function setStudioTab(tab: StudioTab, force = false): void {
@@ -818,15 +818,14 @@ function log(msg: string): void {
 }
 
 // ——— Console: categorised log ———
-// The pipeline is a row of dots (renderSteps); every log line is filed under a
-// category with its own dot. Categories are built once and revealed on demand,
-// so the compact console stays quiet until something happens.
+// Every log line is filed under a category; each category is a collapsible
+// thread built once and revealed on demand, so the compact console stays quiet
+// until something happens.
 const consoleLogState = emptyConsoleLogState();
 const logGroupEls = new Map<
   ConsoleCategory,
   { group: HTMLDetailsElement; body: HTMLDivElement; count: HTMLSpanElement }
 >();
-const logDotEls = new Map<ConsoleCategory, HTMLButtonElement>();
 
 // A chevron glyph, pointing down by default. The collapsible blocks rotate it
 // to point up while open (see the CSS), so a single icon reads as up/down.
@@ -847,25 +846,6 @@ function buildConsoleLog(): void {
   for (const category of CONSOLE_CATEGORIES) {
     const meta = CONSOLE_CATEGORY_META[category];
 
-    // One chevron per category, mirroring the group it reveals.
-    const dot = document.createElement('button');
-    dot.type = 'button';
-    dot.className = 'logDot';
-    dot.dataset.category = category;
-    dot.dataset.active = 'false';
-    dot.title = `${meta.label} — ${meta.hint}`;
-    dot.setAttribute('aria-label', `${meta.label} log`);
-    dot.setAttribute('aria-expanded', 'false');
-    dot.appendChild(makeChevron('logChevron'));
-    dot.addEventListener('click', () => {
-      const entry = logGroupEls.get(category);
-      if (!entry) return;
-      entry.group.open = !entry.group.open;
-      if (entry.group.open) entry.group.scrollIntoView({ block: 'nearest' });
-    });
-    logDotsEl.appendChild(dot);
-    logDotEls.set(category, dot);
-
     const group = document.createElement('details');
     group.className = 'consoleGroup logGroup';
     group.dataset.category = category;
@@ -878,15 +858,10 @@ function buildConsoleLog(): void {
     const count = document.createElement('span');
     count.className = 'consoleGroupCount';
     count.textContent = '0';
-    summary.append(makeChevron('consoleChevron'), name, count);
+    summary.append(name, count, makeChevron('consoleChevron'));
     const body = document.createElement('div');
     body.className = 'consoleGroupBody logBody';
     group.append(summary, body);
-    // Keep the category chevron in step with the block it reveals.
-    group.addEventListener('toggle', () => {
-      const chevron = logDotEls.get(category);
-      if (chevron) chevron.setAttribute('aria-expanded', String(group.open));
-    });
     logGroupsEl.appendChild(group);
     logGroupEls.set(category, { group, body, count });
   }
@@ -908,14 +883,6 @@ function appendConsoleLine(line: string): void {
     // An error is worth surfacing without a click.
     if (classified.level === 'error') entry.group.open = true;
     entry.body.scrollTop = entry.body.scrollHeight;
-  }
-  const dot = logDotEls.get(category);
-  if (dot) {
-    dot.dataset.active = 'true';
-    dot.classList.remove('flash');
-    // Force a reflow so the flash restarts even on a burst of rapid lines.
-    void dot.offsetWidth;
-    dot.classList.add('flash');
   }
 }
 
@@ -1048,118 +1015,11 @@ function hideRecovery(): void {
   recoveryEl.innerHTML = '';
 }
 
-// ——— Model progress ring ———
-// A small animated circle beside the model name. Determinate while the download
-// reports a real percentage; indeterminate for the unmeasurable phases (runtime
-// setup, session creation).
-function showRing(percent: number | null): void {
-  modelProgressEl.hidden = false;
-  const determinate = typeof percent === 'number' && Number.isFinite(percent);
-  modelProgressEl.classList.toggle('indeterminate', !determinate);
-  if (determinate) {
-    const clamped = Math.max(0, Math.min(100, percent));
-    const circumference = 94.25; // 2 * pi * r, r = 15
-    modelProgressValue.style.strokeDashoffset = String(circumference * (1 - clamped / 100));
-  } else {
-    modelProgressValue.style.strokeDashoffset = '';
-  }
-}
-
-function hideRing(): void {
-  modelProgressEl.hidden = true;
-  modelProgressEl.classList.remove('indeterminate');
-  modelProgressValue.style.strokeDashoffset = '';
-}
-
 // ——— Processing panel ———
-// The "Technical details" summary is the live status label for the current
-// process. Expanding it lists the steps in the order they ran — downloading,
-// preparing, removing the background, creating the image — plus the model
-// identity and the raw log, so the phases are distinguishable at a glance.
-type StepId = 'download' | 'prepare' | 'inference' | 'export';
-type StepState = 'todo' | 'active' | 'done';
-interface Step {
-  id: StepId;
-  label: string;
-  state: StepState;
-  detail: string;
-}
-let steps: Step[] = [];
-
-function stepLabel(id: StepId): string {
-  switch (id) {
-    case 'download':
-      return 'Download model';
-    case 'prepare':
-      return 'Prepare model';
-    case 'inference':
-      return 'Remove background';
-    case 'export':
-      return 'Create image';
-  }
-}
-
-// Short caption shown under each pipeline dot (the full label is the tooltip).
-function stepShortLabel(id: StepId): string {
-  switch (id) {
-    case 'download':
-      return 'Model';
-    case 'prepare':
-      return 'Prepare';
-    case 'inference':
-      return 'Remove';
-    case 'export':
-      return 'Export';
-  }
-}
-
-function ensureStep(id: StepId): Step {
-  let step = steps.find((s) => s.id === id);
-  if (!step) {
-    step = { id, label: stepLabel(id), state: 'todo', detail: '' };
-    steps.push(step);
-  }
-  return step;
-}
-
-function setStep(id: StepId, state: StepState, detail = ''): void {
-  const step = ensureStep(id);
-  step.state = state;
-  if (detail) step.detail = detail;
-  renderSteps();
-}
-
-function renderSteps(): void {
-  stepListEl.innerHTML = '';
-  for (const step of steps) {
-    const li = document.createElement('li');
-    li.dataset.state = step.state;
-    li.title = step.detail ? `${step.label} — ${step.detail}` : step.label;
-    const dot = document.createElement('span');
-    dot.className = 'dot';
-    li.appendChild(dot);
-    const name = document.createElement('span');
-    name.textContent = stepShortLabel(step.id);
-    li.appendChild(name);
-    if (step.detail) {
-      const detail = document.createElement('span');
-      detail.className = 'stepDetail';
-      detail.textContent = step.detail;
-      li.appendChild(detail);
-    }
-    stepListEl.appendChild(li);
-  }
-}
-
-function resetSteps(): void {
-  steps = [];
-  ensureStep('download');
-  ensureStep('prepare');
-  renderSteps();
-}
-
-// Sets the live status label on the technical-details summary. The summary is
-// always visible, so there is nothing to show/hide.
+// The live status label for the current process, plus the model identity and the
+// raw log, so the phases are distinguishable at a glance.
+// Sets the live status label on the console head. It is always visible, so there
+// is nothing to show/hide.
 function setProcessingLabel(label: string, working: boolean): void {
   processingLabel.textContent = label;
   processingLabel.classList.toggle('working', working);
@@ -1251,17 +1111,10 @@ async function loadImageFromFile(file: File): Promise<void> {
   if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
   currentObjectUrl = url;
   showInputImage(img);
-  // A new photo invalidates the previous result and any error panel, but must
-  // not wipe the step list while the model is still loading: keep the download
-  // step active so the panel keeps showing the load in progress.
+  // A new photo invalidates the previous result and any error panel.
   clearOutput();
   studioSelectImage();
   hideRecovery();
-  if (!modelLoadInFlight) {
-    resetSteps();
-    setStep('download', modelReady ? 'done' : 'todo');
-    setStep('prepare', modelReady ? 'done' : 'todo');
-  }
   // Clear any previous error text so a successful load after a rejected one does
   // not leave a stale error on the stage line.
   setStage(modelReady ? 'Removing the background…' : 'Photo ready — waiting for the model…');
@@ -1373,10 +1226,7 @@ async function initWorker(): Promise<void> {
       window.smokeProvider = msg.provider;
       window.smokeModelId = loadedModelId;
       announcedLog.push(msg.provider);
-      // Model loading is done: settle the download/prepare steps and the ring.
-      setStep('download', 'done', 'on this device');
-      setStep('prepare', 'done', `running on ${msg.provider}`);
-      hideRing();
+      // Model loading is done.
       hideRecovery();
       setProcessingLabel(
         currentImageData ? 'Removing the background…' : 'Model ready — choose a photo',
@@ -1413,7 +1263,6 @@ async function initWorker(): Promise<void> {
       if (msg.fatal) {
         settleModel(msg.message);
         setSelectorsDisabled(false);
-        hideRing();
       }
       // A run-level failure (e.g. an allocation error) does not kill the
       // session; the worker retries on CPU, so the app stays usable.
@@ -1431,8 +1280,6 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
     return;
   }
   const image = currentImageData;
-  setStep('inference', 'done');
-  setStep('export', 'active');
   // The inference is done; the only work left is compositing the cut-out, which
   // has no measurable percentage of its own.
   beginProcPhase('finalize', phaseExpectedMs('finalize', 0));
@@ -1484,7 +1331,6 @@ function finishResult(canvas: HTMLCanvasElement, preview: HTMLCanvasElement, siz
   applyFormatUi();
 
   outputSection.hidden = false;
-  setStep('export', 'done');
   setProcessingLabel('Done — your image is ready', false);
   endProcPhase();
   studioResult();
@@ -1543,13 +1389,8 @@ function loadSelectedModel(): void {
   window.smokeProvider = selectedProvider;
   workerResponded = false;
   resetProgressClock();
-  // Model (re)load: reset the step list to download → prepare and show the
-  // animated ring next to the model name while the worker reports progress.
   hideRecovery();
-  resetSteps();
-  setStep('download', 'active');
   setProcessingLabel(`Downloading ${selectedModel.label}…`, true);
-  showRing(null);
   setStage(`Loading model ${selectedModel.id}…`);
   log(`Loading model: ${selectedModel.id} (${selectedModel.url})`);
   const force = providerForce(selectedProvider);
@@ -1575,7 +1416,6 @@ function loadSelectedModel(): void {
       `WARNING: the inference worker has not responded in ${WORKER_START_TIMEOUT_MS / 1000}s. ` +
         'Its script or the ONNX Runtime files may have failed to load; check the browser console.',
     );
-    hideRing();
     setProcessingLabel('Could not start', false);
     setSelectorsDisabled(false);
     showRecovery(
@@ -1788,7 +1628,6 @@ function failPendingRuns(err: Error): void {
 function runOneInference(): Promise<number> {
   if (!currentImageData || !worker) return Promise.reject(new Error('No image loaded'));
   const imageData = currentImageData;
-  setStep('inference', 'active');
   setProcessingLabel('Removing background…', true);
   if (window.smokeProvider === 'webgpu' && timings.length === 0) {
     log('First GPU run compiles shaders; this can take a minute or two.');
@@ -2026,9 +1865,7 @@ function updateLoadProgress(msg: {
   const phase = phaseForStage(msg.stage);
   const pct = Math.max(0, Math.min(100, Math.round(msg.percent)));
   if (phase === 'download') {
-    // Only the download has a real, measurable percentage; the ring shows it.
-    showRing(msg.stage === 'cache-check' ? null : pct);
-    setStep('download', 'active', msg.stage === 'downloading' ? `${pct}%` : '');
+    // Only the download has a real, measurable percentage.
     if (msg.stage !== 'downloaded') {
       setProcessingLabel(`Downloading ${selectedModel?.label ?? 'model'} — ${pct}%`, true);
     }
@@ -2037,13 +1874,10 @@ function updateLoadProgress(msg: {
     procStageLabelEl.textContent = 'Downloading model';
   } else {
     // Everything else (runtime, session creation) is not a measurable
-    // percentage, so the ring spins indeterminately rather than lying.
+    // percentage, so the panel stays indeterminate rather than lying.
     // A cached model reports its download stage during the run; once it is past
     // that, move the panel from the download band into the prepare band.
     if (activeProcPhase === 'download') beginProcPhase('prepare', phaseExpectedMs('prepare', 0));
-    showRing(null);
-    setStep('download', 'done');
-    setStep('prepare', 'active', msg.detail ?? '');
     setProcessingLabel(PHASE_LABELS[phase] + '…', true);
     studioProgress(currentProcPercent());
     procStageLabelEl.textContent = PHASE_LABELS[phase];

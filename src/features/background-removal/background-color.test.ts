@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_BACKGROUND,
-  PALETTE,
   TRANSPARENT,
   describeChoice,
   formatForChoice,
@@ -13,17 +12,6 @@ import {
 } from './background-color';
 
 const color = (hex: string, alpha = 100): BackgroundChoice => ({ kind: 'color', hex, alpha });
-
-describe('PALETTE', () => {
-  it('offers a handful of solid colours with valid hex values', () => {
-    expect(PALETTE.length).toBeGreaterThanOrEqual(6);
-    for (const swatch of PALETTE) {
-      expect(swatch.hex).toMatch(/^#[0-9a-f]{6}$/i);
-      expect(swatch.label.length).toBeGreaterThan(0);
-    }
-    expect(new Set(PALETTE.map((s) => s.id)).size).toBe(PALETTE.length);
-  });
-});
 
 describe('isTransparent', () => {
   it('treats the transparent option and a zero-alpha colour as transparent', () => {

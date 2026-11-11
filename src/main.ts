@@ -72,7 +72,6 @@ import {
 } from './features/theme';
 import {
   DEFAULT_BACKGROUND,
-  PALETTE,
   isBackgroundChoice,
   isTransparent,
   describeChoice,
@@ -87,6 +86,17 @@ import {
   tabEnabled,
   type StudioTab,
 } from './features/background-removal/studio-view';
+import {
+  CONSOLE_CATEGORIES,
+  CONSOLE_CATEGORY_META,
+  appendLogLine,
+  emptyConsoleLogState,
+  type ConsoleCategory,
+} from './features/background-removal/console-log';
+import {
+  pickColorFromScreen,
+  supportsScreenPicker,
+} from './features/background-removal/screen-picker';
 import type {
   LoadStage,
   ModelManifestEntry,
@@ -97,7 +107,8 @@ import type {
 declare const __BUILD_ID__: string;
 
 const stageEl = document.getElementById('stage')!;
-const logEl = document.getElementById('log')! as HTMLPreElement;
+const logGroupsEl = document.getElementById('logGroups')!;
+const logDotsEl = document.getElementById('logDots')!;
 const outputBox = document.getElementById('outputBox')!;
 const outputSection = document.getElementById('outputSection')!;
 const modelNameEl = document.getElementById('modelName')!;
@@ -144,12 +155,23 @@ const tabPanels: Record<StudioTab, HTMLElement> = {
 };
 const compareBeforeEl = document.getElementById('compareBefore')! as HTMLImageElement;
 const compareAfterEl = document.getElementById('compareAfter')! as HTMLImageElement;
-const bgPaletteEl = document.getElementById('bgPalette')!;
-const bgCustomEl = document.getElementById('bgCustom')!;
+const inputPreviewEl = document.getElementById('inputPreview')!;
+const inputPreviewImg = document.getElementById('inputPreviewImg')! as HTMLImageElement;
+const panelInputEl = document.getElementById('panelInput')!;
+const bgTransparentBtn = document.getElementById('bgTransparentBtn')! as HTMLButtonElement;
 const bgColorPicker = document.getElementById('bgColorPicker')! as HTMLInputElement;
+const bgColorSwatch = document.getElementById('bgColorSwatch')!;
+const bgEyeDropperBtn = document.getElementById('bgEyeDropper')! as HTMLButtonElement;
 const bgAlphaInput = document.getElementById('bgAlpha')! as HTMLInputElement;
 const bgAlphaValue = document.getElementById('bgAlphaValue')!;
 const bgCurrentEl = document.getElementById('bgCurrent')!;
+const privacyToggle = document.getElementById('privacyToggle')! as HTMLButtonElement;
+const privacyStatement = document.getElementById('privacyStatement')!;
+const siteHeaderEl = document.getElementById('siteHeader')!;
+const studioGridEl = document.querySelector<HTMLElement>('.studioGrid')!;
+const consoleToggleBtn = document.getElementById('consoleToggle')! as HTMLButtonElement;
+const consoleCloseBtn = document.getElementById('consoleClose')! as HTMLButtonElement;
+const consoleResizeEl = document.getElementById('consoleResize')!;
 let studioView = initialStudioView();
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
@@ -221,12 +243,15 @@ function setBackgroundInert(on: boolean): void {
 }
 
 function openStudio(): void {
+  closeMenu();
   studioEl.classList.add('is-open');
   studioEl.setAttribute('aria-hidden', 'false');
   document.body.classList.add('studio-open');
   setBackgroundInert(true);
   studioEl.scrollTop = 0;
   renderStudioView();
+  // The workspace has a size again, so a dragged console height can be re-clamped.
+  if (consoleHeightPx != null) applyConsoleHeight(consoleHeightPx);
   (document.activeElement as HTMLElement | null)?.blur();
   studioCloseBtn.focus();
 }
@@ -247,8 +272,124 @@ document.querySelectorAll<HTMLElement>('[data-studio-launch]').forEach((btn) => 
 for (const tab of STUDIO_TABS) {
   tabButtons[tab].addEventListener('click', () => setStudioTab(tab));
 }
+
+// ——— Console column: show/hide, close, and drag-resize ———
+// The console may shrink below its default 35% but never grow past it, so the
+// editor always keeps at least 65% of the workspace. `null` means "use the
+// responsive 35% default"; a number is an explicit, clamped pixel height.
+const CONSOLE_MAX_FRACTION = 0.35;
+const CONSOLE_MIN_PX = 96;
+let consoleHeightPx: number | null = null;
+
+function setConsoleVisible(visible: boolean): void {
+  studioGridEl.dataset.console = visible ? 'shown' : 'hidden';
+  consoleToggleBtn.setAttribute('aria-pressed', String(visible));
+  consoleToggleBtn.setAttribute('aria-label', visible ? 'Hide console' : 'Show console');
+  if (visible) applyConsoleHeight(consoleHeightPx);
+}
+
+// Pins the console to an explicit pixel height (or back to the default) so a
+// drag can shrink it. The value is always clamped to the 35% cap.
+function applyConsoleHeight(px: number | null): void {
+  const gridH = studioGridEl.getBoundingClientRect().height;
+  if (!gridH) return;
+  if (px == null) {
+    consoleHeightPx = null;
+    studioGridEl.style.removeProperty('--console-h');
+    return;
+  }
+  const max = gridH * CONSOLE_MAX_FRACTION;
+  const height = Math.max(CONSOLE_MIN_PX, Math.min(px, max));
+  consoleHeightPx = height;
+  studioGridEl.style.setProperty('--console-h', `${Math.round(height)}px`);
+}
+
+let resizeStartY = 0;
+let resizeStartH = 0;
+let resizing = false;
+
+consoleResizeEl.addEventListener('pointerdown', (e) => {
+  const pointer = e as PointerEvent;
+  const col = document.getElementById('studioConsoleCol');
+  if (!col) return;
+  resizing = true;
+  resizeStartY = pointer.clientY;
+  resizeStartH = col.getBoundingClientRect().height;
+  consoleResizeEl.setPointerCapture(pointer.pointerId);
+  document.body.classList.add('console-resizing');
+});
+consoleResizeEl.addEventListener('pointermove', (e) => {
+  if (!resizing) return;
+  const pointer = e as PointerEvent;
+  // Dragging the handle down moves the console's top edge down, so the height
+  // shrinks by the same delta.
+  applyConsoleHeight(resizeStartH - (pointer.clientY - resizeStartY));
+});
+function endResize(): void {
+  if (!resizing) return;
+  resizing = false;
+  document.body.classList.remove('console-resizing');
+}
+consoleResizeEl.addEventListener('pointerup', endResize);
+consoleResizeEl.addEventListener('pointercancel', endResize);
+consoleResizeEl.addEventListener('keydown', (e) => {
+  const key = (e as KeyboardEvent).key;
+  if (key !== 'ArrowUp' && key !== 'ArrowDown') return;
+  e.preventDefault();
+  const col = document.getElementById('studioConsoleCol');
+  const current = col ? col.getBoundingClientRect().height : 0;
+  applyConsoleHeight(current + (key === 'ArrowUp' ? 24 : -24));
+});
+window.addEventListener('resize', () => {
+  if (consoleHeightPx != null) applyConsoleHeight(consoleHeightPx);
+});
+
+consoleToggleBtn.addEventListener('click', () => {
+  setConsoleVisible(studioGridEl.dataset.console === 'hidden');
+});
+consoleCloseBtn.addEventListener('click', () => {
+  setConsoleVisible(false);
+  consoleToggleBtn.focus();
+});
+
+// ——— Slide-in menu (burger) ———
+// Right-hand panel holding the navigation, the user profile and the theme mode.
+const menuToggleBtn = document.getElementById('menuToggle')! as HTMLButtonElement;
+const menuPanelEl = document.getElementById('menuPanel')!;
+const menuScrimEl = document.getElementById('menuScrim')!;
+const menuCloseBtn = document.getElementById('menuClose')! as HTMLButtonElement;
+
+function openMenu(): void {
+  menuScrimEl.hidden = false;
+  menuPanelEl.classList.add('is-open');
+  menuPanelEl.setAttribute('aria-hidden', 'false');
+  menuToggleBtn.setAttribute('aria-expanded', 'true');
+  menuCloseBtn.focus();
+}
+
+function closeMenu(): void {
+  if (!menuPanelEl.classList.contains('is-open')) return;
+  menuPanelEl.classList.remove('is-open');
+  menuPanelEl.setAttribute('aria-hidden', 'true');
+  menuToggleBtn.setAttribute('aria-expanded', 'false');
+  menuScrimEl.hidden = true;
+}
+
+menuToggleBtn.addEventListener('click', () => {
+  if (menuPanelEl.classList.contains('is-open')) closeMenu();
+  else openMenu();
+});
+menuCloseBtn.addEventListener('click', closeMenu);
+menuScrimEl.addEventListener('click', closeMenu);
+// Following a menu link closes the panel so the target section is visible.
+menuPanelEl.querySelectorAll('a[href^="#"]').forEach((link) => {
+  link.addEventListener('click', closeMenu);
+});
+
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && studioEl.classList.contains('is-open')) closeStudio();
+  if (e.key !== 'Escape') return;
+  if (menuPanelEl.classList.contains('is-open')) closeMenu();
+  else if (studioEl.classList.contains('is-open')) closeStudio();
 });
 renderStudioView();
 
@@ -261,6 +402,9 @@ const themeToggles = [
   document.getElementById('themeToggle'),
   document.getElementById('studioThemeToggle'),
 ].filter((el): el is HTMLButtonElement => el instanceof HTMLButtonElement);
+const menuThemeModes = Array.from(
+  document.querySelectorAll<HTMLButtonElement>('[data-theme-mode]'),
+);
 
 function systemPrefersDark(): boolean {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
@@ -279,6 +423,18 @@ function applyTheme(preference: ThemePreference): void {
         ? `Theme: follow system (${resolved})`
         : `Theme: ${resolved}`;
   }
+  // Keep the menu's Light/Dark/System control in step with the header toggle.
+  for (const btn of menuThemeModes) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.themeMode === preference));
+  }
+}
+
+/** Pin an explicit mode (or 'system') from the menu's theme control. */
+function setThemePreference(preference: ThemePreference): void {
+  savePref(THEME_STORAGE_KEY, preference);
+  document.documentElement.classList.add('theme-transition');
+  applyTheme(preference);
+  window.setTimeout(() => document.documentElement.classList.remove('theme-transition'), 300);
 }
 
 function currentPreference(): ThemePreference {
@@ -298,6 +454,12 @@ function toggleTheme(): void {
 }
 
 for (const btn of themeToggles) btn.addEventListener('click', toggleTheme);
+for (const btn of menuThemeModes) {
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.themeMode;
+    if (isThemePreference(mode)) setThemePreference(mode);
+  });
+}
 applyTheme(currentPreference());
 // Keep 'system' in step with an OS theme change while no override is set.
 window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
@@ -530,9 +692,10 @@ function applyFormatUi(): void {
 renderFormatOptions();
 
 // ——— Background colour ———
-// A palette of solid colours + transparent + a custom picker with an alpha
-// channel. The choice paints the result preview, feeds the export encoder and
-// repaints the compare view's cut-out, so all three stay in agreement.
+// One system picker replaces the old swatch palette: a transparent toggle, the
+// browser's native colour input, and a screen eyedropper (EyeDropper API). The
+// alpha slider refines a chosen colour. The choice paints the result preview,
+// feeds the export encoder and repaints the compare view, so all three agree.
 const LS_BACKGROUND = 'remove-bg:background';
 let background: BackgroundChoice = initBackground();
 
@@ -554,11 +717,6 @@ function saveBackground(): void {
   savePref(LS_BACKGROUND, background);
 }
 
-function setCustomVisible(on: boolean): void {
-  bgCustomEl.classList.toggle('hidden', !on);
-  bgCustomEl.classList.toggle('flex', on);
-}
-
 // Re-render the result preview from the stored cut-out, composited onto the
 // chosen background. The preview is always a PNG (the only format that can show
 // real transparency); a transparent choice lets the checkerboard show through.
@@ -573,17 +731,13 @@ function renderResultPreview(): void {
   compareAfterEl.src = img.src;
 }
 
-function updatePaletteState(): void {
+function updateBackgroundUi(): void {
   const color = background.kind === 'color';
-  for (const btn of Array.from(bgPaletteEl.querySelectorAll<HTMLButtonElement>('button[data-bg]'))) {
-    const key = btn.dataset.bg ?? '';
-    const pressed = key === 'transparent' ? isTransparent(background) : color && key === background.hex.toLowerCase();
-    btn.setAttribute('aria-pressed', String(pressed));
-  }
+  bgTransparentBtn.setAttribute('aria-pressed', String(isTransparent(background)));
   bgCurrentEl.textContent = describeChoice(background);
-  setCustomVisible(color);
   if (color) {
     bgColorPicker.value = background.hex;
+    bgColorSwatch.style.background = background.hex;
     bgAlphaInput.value = String(background.alpha);
     bgAlphaValue.textContent = `${background.alpha}%`;
   }
@@ -597,7 +751,7 @@ function setBackground(choice: BackgroundChoice): void {
   const target = formatForChoice(background);
   if (target !== exportFormat) setExportFormat(target);
   renderResultPreview();
-  updatePaletteState();
+  updateBackgroundUi();
   applyFormatUi();
   // A background change is a result-stage edit: keep the current tab.
   studioView = reduceStudio(studioView, { type: 'show-background' });
@@ -605,39 +759,9 @@ function setBackground(choice: BackgroundChoice): void {
   log(`Background: ${describeChoice(background)}`);
 }
 
-function makeSwatchButton(key: string, label: string, extraClass = ''): HTMLButtonElement {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = `paletteSwatch ${extraClass}`.trim();
-  btn.dataset.bg = key;
-  btn.setAttribute('aria-label', label);
-  btn.title = label;
-  return btn;
-}
-
-function renderPalette(): void {
-  bgPaletteEl.innerHTML = '';
-  const transparent = makeSwatchButton('transparent', 'Transparent', 'paletteSwatch--transparent');
-  transparent.addEventListener('click', () =>
-    setBackground({ kind: 'transparent', hex: background.hex, alpha: 100 }),
-  );
-  bgPaletteEl.appendChild(transparent);
-
-  for (const swatch of PALETTE) {
-    const btn = makeSwatchButton(swatch.hex.toLowerCase(), swatch.label);
-    btn.style.backgroundColor = swatch.hex;
-    btn.addEventListener('click', () => setBackground({ kind: 'color', hex: swatch.hex, alpha: 100 }));
-    bgPaletteEl.appendChild(btn);
-  }
-
-  const custom = makeSwatchButton('custom', 'Custom colour', 'paletteSwatch--custom');
-  custom.textContent = '+';
-  custom.addEventListener('click', () => {
-    setBackground({ kind: 'color', hex: bgColorPicker.value, alpha: Number(bgAlphaInput.value) });
-  });
-  bgPaletteEl.appendChild(custom);
-}
-
+bgTransparentBtn.addEventListener('click', () =>
+  setBackground({ kind: 'transparent', hex: background.hex, alpha: 100 }),
+);
 bgColorPicker.addEventListener('input', () =>
   setBackground({ kind: 'color', hex: bgColorPicker.value, alpha: Number(bgAlphaInput.value) }),
 );
@@ -647,16 +771,116 @@ bgAlphaInput.addEventListener('input', () => {
   const hex = background.kind === 'color' ? background.hex : bgColorPicker.value;
   setBackground({ kind: 'color', hex, alpha: Number(bgAlphaInput.value) });
 });
+// Screen eyedropper: sample any pixel on the display. The button is disabled
+// when the browser has no EyeDropper API, so it never looks broken.
+if (!supportsScreenPicker()) {
+  bgEyeDropperBtn.disabled = true;
+  bgEyeDropperBtn.title = 'Screen colour picking is not supported by this browser';
+}
+bgEyeDropperBtn.addEventListener('click', async () => {
+  const picked = await pickColorFromScreen();
+  if (!picked) return;
+  setBackground({ kind: 'color', hex: picked, alpha: Number(bgAlphaInput.value) });
+});
 
-renderPalette();
-updatePaletteState();
+updateBackgroundUi();
 
 function log(msg: string): void {
   // The log is rendered in the user-facing Console, so scrub internal commands
   // and private URLs before they reach the DOM (see studio-view.ts).
-  logEl.textContent += scrubConsoleLine(msg) + '\n';
-  logEl.scrollTop = logEl.scrollHeight;
+  appendConsoleLine(msg);
 }
+
+// ——— Console: categorised log ———
+// The pipeline is a row of dots (renderSteps); every log line is filed under a
+// category with its own dot. Categories are built once and revealed on demand,
+// so the compact console stays quiet until something happens.
+const consoleLogState = emptyConsoleLogState();
+const logGroupEls = new Map<
+  ConsoleCategory,
+  { group: HTMLDetailsElement; body: HTMLDivElement; count: HTMLSpanElement }
+>();
+const logDotEls = new Map<ConsoleCategory, HTMLButtonElement>();
+
+function buildConsoleLog(): void {
+  for (const category of CONSOLE_CATEGORIES) {
+    const meta = CONSOLE_CATEGORY_META[category];
+
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.className = 'logDot';
+    dot.dataset.category = category;
+    dot.dataset.active = 'false';
+    dot.title = `${meta.label} — ${meta.hint}`;
+    dot.setAttribute('aria-label', `${meta.label} log`);
+    dot.addEventListener('click', () => {
+      const entry = logGroupEls.get(category);
+      if (!entry) return;
+      entry.group.open = true;
+      entry.group.scrollIntoView({ block: 'nearest' });
+    });
+    logDotsEl.appendChild(dot);
+    logDotEls.set(category, dot);
+
+    const group = document.createElement('details');
+    group.className = 'consoleGroup logGroup';
+    group.dataset.category = category;
+    group.hidden = true;
+    const summary = document.createElement('summary');
+    summary.className = 'consoleGroupSummary';
+    const groupDot = document.createElement('span');
+    groupDot.className = 'consoleGroupDot';
+    const name = document.createElement('span');
+    name.className = 'consoleGroupName';
+    name.textContent = meta.label;
+    const count = document.createElement('span');
+    count.className = 'consoleGroupCount';
+    count.textContent = '0';
+    summary.append(groupDot, name, count);
+    const body = document.createElement('div');
+    body.className = 'consoleGroupBody logBody';
+    group.append(summary, body);
+    logGroupsEl.appendChild(group);
+    logGroupEls.set(category, { group, body, count });
+  }
+}
+
+function appendConsoleLine(line: string): void {
+  const category = appendLogLine(consoleLogState, scrubConsoleLine(line));
+  const entry = logGroupEls.get(category);
+  if (entry) {
+    const lines = consoleLogState.byCategory[category];
+    const classified = lines[lines.length - 1];
+    const el = document.createElement('span');
+    el.className = classified.level === 'info' ? 'logLine' : `logLine ${classified.level}`;
+    el.textContent = classified.text;
+    entry.body.appendChild(el);
+    entry.group.hidden = false;
+    entry.group.dataset.active = 'true';
+    entry.count.textContent = String(lines.length);
+    // An error is worth surfacing without a click.
+    if (classified.level === 'error') entry.group.open = true;
+    entry.body.scrollTop = entry.body.scrollHeight;
+  }
+  const dot = logDotEls.get(category);
+  if (dot) {
+    dot.dataset.active = 'true';
+    dot.classList.remove('flash');
+    // Force a reflow so the flash restarts even on a burst of rapid lines.
+    void dot.offsetWidth;
+    dot.classList.add('flash');
+  }
+}
+
+buildConsoleLog();
+
+// The Zero-Upload statement is hidden behind a clickable shield icon.
+privacyToggle.addEventListener('click', () => {
+  const show = privacyStatement.hidden;
+  privacyStatement.hidden = !show;
+  privacyToggle.setAttribute('aria-expanded', String(show));
+  privacyToggle.setAttribute('aria-label', show ? 'Hide privacy statement' : 'Show privacy statement');
+});
 
 function setStage(s: string): void {
   stageEl.textContent = s;
@@ -823,6 +1047,20 @@ function stepLabel(id: StepId): string {
   }
 }
 
+// Short caption shown under each pipeline dot (the full label is the tooltip).
+function stepShortLabel(id: StepId): string {
+  switch (id) {
+    case 'download':
+      return 'Model';
+    case 'prepare':
+      return 'Prepare';
+    case 'inference':
+      return 'Remove';
+    case 'export':
+      return 'Export';
+  }
+}
+
 function ensureStep(id: StepId): Step {
   let step = steps.find((s) => s.id === id);
   if (!step) {
@@ -844,16 +1082,17 @@ function renderSteps(): void {
   for (const step of steps) {
     const li = document.createElement('li');
     li.dataset.state = step.state;
+    li.title = step.detail ? `${step.label} — ${step.detail}` : step.label;
     const dot = document.createElement('span');
     dot.className = 'dot';
     li.appendChild(dot);
     const name = document.createElement('span');
-    name.textContent = step.label;
+    name.textContent = stepShortLabel(step.id);
     li.appendChild(name);
     if (step.detail) {
       const detail = document.createElement('span');
       detail.className = 'stepDetail';
-      detail.textContent = `— ${step.detail}`;
+      detail.textContent = step.detail;
       li.appendChild(detail);
     }
     stepListEl.appendChild(li);
@@ -913,11 +1152,13 @@ function describeError(msg: string): string {
   );
 }
 
-function showInputImage(_img: HTMLImageElement): void {
-  // The editor does not display the selected image: the input tab keeps the drop
-  // zone, and the processing tab shows an animated wallpaper instead. Kept as a
-  // no-op hook so the load flow reads the same and the decoded image stays
-  // available for inference (see loadImageFromFile).
+function showInputImage(img: HTMLImageElement): void {
+  // The chosen photo is shown on the input tab so the user can see what they
+  // picked; the drop zone stays below it as the "choose another photo" target.
+  // The object URL keeps the decoded image available for inference too.
+  inputPreviewImg.src = img.src;
+  inputPreviewEl.hidden = false;
+  panelInputEl.classList.add('has-preview');
 }
 
 async function loadImageFromFile(file: File): Promise<void> {
@@ -1682,27 +1923,31 @@ log('Detecting GPU…');
 // the model, so wire them immediately rather than waiting on boot().
 initCompareSliders();
 
-// Header brand: full lockup at the top of the page, figure-only mark once the
-// page is scrolled OR the browser's system bar (mobile address bar) is showing,
-// so the sticky header stays compact. data-collapsed drives the crossfade in
-// CSS (src/style.css), so there is no per-scroll class churn on the elements.
+// Header: full lockup, full-height bar and the labelled Studio button at the top
+// of the page; once the page is scrolled past 100px (or the mobile system bar is
+// showing) the bar shrinks, the brand crossfades to the figure-only mark and the
+// Studio button drops its label. data-collapsed drives all three in CSS
+// (src/style.css), so there is no per-scroll class churn on the elements.
 const brandLink = document.getElementById('brandLink');
+const COLLAPSE_THRESHOLD_PX = 100;
 // The system bar hiding/showing changes the visual viewport height (not the
 // layout viewport). Remember the tallest height seen; a drop below it means the
 // bar is back on screen.
 let maxViewportHeight = window.visualViewport?.height ?? window.innerHeight;
-function updateBrandCollapse(): void {
+function updateHeaderCollapse(): void {
   if (!brandLink) return;
   const vv = window.visualViewport;
   const height = vv?.height ?? window.innerHeight;
   maxViewportHeight = Math.max(maxViewportHeight, height);
   const barShowing = height < maxViewportHeight - 24;
-  brandLink.dataset.collapsed = window.scrollY > 24 || barShowing ? 'true' : 'false';
+  const collapsed = window.scrollY > COLLAPSE_THRESHOLD_PX || barShowing;
+  brandLink.dataset.collapsed = collapsed ? 'true' : 'false';
+  siteHeaderEl.dataset.collapsed = collapsed ? 'true' : 'false';
 }
-window.addEventListener('scroll', updateBrandCollapse, { passive: true });
-window.visualViewport?.addEventListener('resize', updateBrandCollapse, { passive: true });
-window.addEventListener('resize', updateBrandCollapse, { passive: true });
-updateBrandCollapse();
+window.addEventListener('scroll', updateHeaderCollapse, { passive: true });
+window.visualViewport?.addEventListener('resize', updateHeaderCollapse, { passive: true });
+window.addEventListener('resize', updateHeaderCollapse, { passive: true });
+updateHeaderCollapse();
 
 async function boot(): Promise<void> {
   // GPU gate first: it decides which provider is offered and the default.

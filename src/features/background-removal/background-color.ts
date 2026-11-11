@@ -1,28 +1,10 @@
-// Background options for the Studio result: a small palette of solid colours, a
-// transparent option, and a custom picker with an alpha channel. Kept pure (no
-// DOM) so the format/alpha rules are unit-testable; main.ts maps a choice onto
-// the result preview, the compare view and the export encoder.
+// Background options for the Studio result: a transparent option and a single
+// system colour (chosen with the native picker or the screen eyedropper) plus an
+// alpha channel. Kept pure (no DOM) so the format/alpha rules are unit-testable;
+// main.ts maps a choice onto the result preview, the compare view and the
+// export encoder.
 
 import type { ExportFormat } from './export-image';
-
-export interface SwatchColor {
-  id: string;
-  label: string;
-  /** CSS colour used for the swatch chip. */
-  hex: string;
-}
-
-/** Solid colours offered as one-tap swatches. */
-export const PALETTE: readonly SwatchColor[] = [
-  { id: 'white', label: 'White', hex: '#ffffff' },
-  { id: 'light', label: 'Light grey', hex: '#f1f5f9' },
-  { id: 'grey', label: 'Grey', hex: '#94a3b8' },
-  { id: 'black', label: 'Black', hex: '#0f172a' },
-  { id: 'blue', label: 'Blue', hex: '#2563eb' },
-  { id: 'green', label: 'Green', hex: '#16a34a' },
-  { id: 'amber', label: 'Amber', hex: '#f59e0b' },
-  { id: 'red', label: 'Red', hex: '#dc2626' },
-];
 
 export interface BackgroundChoice {
   /** 'transparent' keeps the alpha channel; 'color' paints a solid/alpha colour. */

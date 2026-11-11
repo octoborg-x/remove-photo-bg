@@ -298,64 +298,79 @@
     accent-color: var(--color-blue-600);
   }
 
-  /* ——— Background palette ——— */
-  .palette {
+  /* ——— Background picker (one system picker + screen eyedropper) ——— */
+  .bgPicker {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.6rem;
   }
-  .paletteSwatch {
-    position: relative;
-    width: 1.9rem;
-    height: 1.9rem;
+  .bgTransparentBtn,
+  .bgEyeDropperBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.4rem 0.7rem;
     border-radius: 0.6rem;
     border: 1px solid var(--color-slate-300);
+    background: var(--color-white);
+    color: var(--color-slate-700);
+    font-size: 0.72rem;
+    font-weight: 600;
     cursor: pointer;
-    padding: 0;
-    background-clip: padding-box;
-    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
   }
-  .paletteSwatch:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgb(15 23 42 / 0.18);
-  }
-  .paletteSwatch[aria-pressed='true'] {
+  .bgTransparentBtn[aria-pressed='true'] {
     border-color: var(--color-blue-600);
     box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-blue-600) 45%, transparent);
   }
-  /* Transparent swatch shows the checkerboard behind a slash. */
-  .paletteSwatch--transparent {
+  .bgEyeDropperBtn svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  .bgEyeDropperBtn:hover {
+    color: var(--color-blue-700);
+    border-color: var(--color-blue-500);
+  }
+  .bgTransparentChip {
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 0.35rem;
+    border: 1px solid var(--color-slate-300);
     background-color: var(--checker-b);
     background-image:
       linear-gradient(45deg, var(--checker-a) 25%, transparent 25%),
       linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%),
       linear-gradient(45deg, transparent 75%, var(--checker-a) 75%),
       linear-gradient(-45deg, transparent 75%, var(--checker-a) 75%);
-    background-size: 10px 10px;
-    background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+    background-size: 8px 8px;
+    background-position: 0 0, 0 4px, 4px -4px, -4px 0;
   }
-  .paletteSwatch--transparent::after {
-    content: '';
+  .bgColorField {
+    position: relative;
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--color-slate-300);
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .bgColorField input[type='color'] {
     position: absolute;
     inset: 0;
-    background: linear-gradient(
-      to top right,
-      transparent 46%,
-      var(--color-red-900) 46%,
-      var(--color-red-900) 54%,
-      transparent 54%
-    );
-    border-radius: inherit;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    opacity: 0;
   }
-  .paletteSwatch--custom {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: conic-gradient(#ef4444, #f59e0b, #22c55e, #06b6d4, #3b82f6, #8b5cf6, #ef4444);
-    color: #ffffff;
-    font-size: 0.7rem;
-    font-weight: 700;
+  .bgColorSwatch {
+    position: absolute;
+    inset: 0;
+    background: #ffffff;
+    pointer-events: none;
   }
   .paletteAlpha {
     display: flex;
@@ -365,7 +380,7 @@
     color: var(--color-slate-500);
   }
   .paletteAlpha input[type='range'] {
-    width: 8rem;
+    width: 7rem;
     accent-color: var(--color-blue-600);
   }
 
@@ -405,37 +420,82 @@
     cursor: not-allowed;
   }
 
-  /* ——— Step list ——— */
-  .stepList li {
+  /* ——— Status dots: pipeline stages (left) + log categories (right) ———
+     The console is now a compact strip: the pipeline is a row of labelled dots
+     and each log category has its own dot that flashes when a line lands. */
+  .consoleDotsRow {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.35rem 0;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .stepList {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    flex-wrap: wrap;
+  }
+  .stepList li {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
     color: var(--color-slate-500);
-    font-size: 0.82rem;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
   }
   .stepList li .dot {
-    width: 0.55rem;
-    height: 0.55rem;
+    width: 0.6rem;
+    height: 0.6rem;
     border-radius: 50%;
     background: var(--color-slate-300);
     flex: none;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
   }
   .stepList li[data-state='active'] {
     color: var(--color-slate-900);
-    font-weight: 600;
   }
   .stepList li[data-state='active'] .dot {
     background: var(--color-blue-500);
     box-shadow: 0 0 8px color-mix(in oklab, var(--color-blue-500) 60%, transparent);
+    animation: dotPulse 1.2s ease-in-out infinite;
   }
   .stepList li[data-state='done'] .dot {
     background: var(--color-emerald-500);
   }
   .stepList li .stepDetail {
-    color: var(--color-slate-500);
-    font-weight: 400;
-    margin-left: 0.25rem;
+    color: var(--color-slate-400);
+    font-weight: 500;
+    font-size: 0.55rem;
+    text-transform: none;
+  }
+
+  .logDots {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: auto;
+  }
+  .logDots .logDot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--color-slate-300);
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+  .logDots .logDot[data-active='true'] {
+    background: var(--color-blue-500);
+  }
+  .logDots .logDot.flash {
+    animation: logDotFlash 0.7s ease-out;
   }
 
   /* ——— Toasts ——— */
@@ -546,6 +606,12 @@
     object-fit: contain;
     will-change: opacity;
   }
+  /* The collapsed mark takes ~25% less width than the lockup's mark would, so
+     the compact header reads lighter. `height: auto` keeps the aspect ratio. */
+  .brand-mark {
+    width: calc(var(--brand-h, 2.5rem) * 0.71);
+    height: auto;
+  }
   /* Transitions start only after the first frame (html.ui-ready), so the initial
      paint uses the final hidden state instead of animating from the default. */
   html.ui-ready .brandStack > * {
@@ -593,6 +659,198 @@
   .header-stagger > *:nth-child(2) { animation-delay: 0.12s; }
   .header-stagger > *:nth-child(3) { animation-delay: 0.22s; }
 
+  /* ——— Compact header on scroll (>100px) ———
+     The header shrinks, the brand crossfades to the mark, and the Studio button
+     drops its label. Height + brand opacity animate; the label is removed from
+     the flow (width: 0) so the button shrinks smoothly. */
+  .siteHeaderInner {
+    height: 4.5rem;
+    transition: height 0.3s ease;
+  }
+  .siteHeader[data-collapsed='true'] .siteHeaderInner {
+    height: 3.5rem; /* shrinks by ~1rem on scroll */
+  }
+  .studioLaunchText {
+    display: inline-block;
+    max-width: 6rem;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: max-width 0.3s ease, opacity 0.3s ease;
+  }
+  .siteHeader[data-collapsed='true'] .studioLaunchText {
+    max-width: 0;
+    opacity: 0;
+  }
+  .siteHeader[data-collapsed='true'] .studioLaunchBtn {
+    padding-left: 0.7rem;
+    padding-right: 0.7rem;
+  }
+
+  /* ——— Menu toggle (burger) + slide-in panel ——— */
+  .menuToggle,
+  .menuClose {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 0.75rem;
+    color: var(--color-slate-600);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+  }
+  .menuToggle:hover,
+  .menuClose:hover {
+    color: var(--color-slate-900);
+    background: var(--color-slate-100);
+  }
+  .menuToggle svg,
+  .menuClose svg {
+    width: 1.3rem;
+    height: 1.3rem;
+  }
+  .menuScrim {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    background: rgb(15 23 42 / 0.35);
+    backdrop-filter: blur(2px);
+  }
+  .menuScrim[hidden] {
+    display: none;
+  }
+  .menuPanel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 80;
+    display: flex;
+    flex-direction: column;
+    width: min(21rem, 88vw);
+    height: 100dvh;
+    padding: 1.1rem;
+    background: var(--color-white);
+    border-left: 1px solid var(--color-slate-200);
+    box-shadow: -18px 0 40px -18px rgb(15 23 42 / 0.35);
+    transform: translateX(100%);
+    visibility: hidden;
+    transition: transform 0.28s ease, visibility 0s linear 0.28s;
+  }
+  .menuPanel.is-open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 0.28s ease;
+  }
+  .menuHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-slate-100);
+  }
+  .menuTitle {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: var(--color-slate-900);
+  }
+  .menuNav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.9rem 0;
+  }
+  .menuNavLink {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.7rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-slate-700);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .menuNavLink:hover {
+    background: var(--color-slate-100);
+    color: var(--color-blue-700);
+  }
+  .menuNavAction {
+    color: var(--color-blue-700);
+  }
+  .menuFoot {
+    margin-top: auto;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--color-slate-100);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .menuProfile {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .menuAvatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--color-blue-500), var(--color-indigo-600));
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 800;
+  }
+  .menuProfileText {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+  }
+  .menuProfileText strong {
+    font-size: 0.88rem;
+    color: var(--color-slate-900);
+  }
+  .menuProfileText small {
+    font-size: 0.72rem;
+    color: var(--color-slate-500);
+  }
+  .menuThemeLabel {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-slate-400);
+    margin-bottom: 0.45rem;
+  }
+  .menuThemeModes {
+    display: flex;
+    gap: 0.35rem;
+  }
+  .menuThemeMode {
+    flex: 1;
+    padding: 0.45rem 0.5rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-slate-50);
+    color: var(--color-slate-600);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .menuThemeMode[aria-pressed='true'] {
+    background: var(--color-blue-50);
+    border-color: var(--color-blue-500);
+    color: var(--color-blue-700);
+  }
+
   /* ——— Studio overlay layer ———
      Full-screen: fixed to the viewport with no margin, so it masks the whole
      page. It lives outside the page-flow `<main>`, so no section spacing leaks
@@ -607,7 +865,7 @@
     display: flex;
     flex-direction: column;
     background: var(--color-slate-50);
-    overflow-y: auto;
+    overflow: hidden;
     opacity: 0;
     visibility: hidden;
     transform: translateY(8px);
@@ -627,6 +885,193 @@
     overflow: hidden;
   }
 
+  /* ——— Studio layout: compact top bar, full-width grid, fixed 65/35 split ———
+     The studio is a fixed-height shell: the top bar and the tab bar keep their
+     size, the editor takes 65% of what is left and the console the other 35%.
+     Every panel scrolls inside its own column, so the shell itself never does. */
+  .studioTopBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 3.25rem;
+    padding: 0 1rem;
+    border-bottom: 1px solid var(--color-slate-200);
+    background: color-mix(in oklab, var(--color-white) 90%, transparent);
+    backdrop-filter: blur(8px);
+  }
+  .studioCloseBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.75rem;
+    background: var(--color-slate-100);
+    color: var(--color-slate-600);
+    border: 0;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .studioCloseBtn:hover {
+    background: var(--color-slate-200);
+    color: var(--color-slate-900);
+  }
+  .studioBarBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.75rem;
+    background: var(--color-slate-100);
+    color: var(--color-slate-600);
+    border: 0;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .studioBarBtn:hover {
+    background: var(--color-slate-200);
+    color: var(--color-slate-900);
+  }
+  .studioBarBtn svg {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+  .studioBarBtn[aria-pressed='false'] {
+    color: var(--color-slate-400);
+  }
+  .studioBody {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0.9rem 1rem 1rem;
+  }
+  /* Full-width stack: the editor takes the rest, the console 35% by default.
+     `--console-h` (set on drag) overrides that with a capped pixel height. */
+  .studioGrid {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, var(--console-h, 35%));
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+  /* Hiding the console gives the editor the whole workspace. */
+  .studioGrid[data-console='hidden'] {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .studioGrid[data-console='hidden'] .studioConsoleCol {
+    display: none;
+  }
+  .studioEditorCol,
+  .studioConsoleCol {
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+  }
+  .studioCard,
+  .consoleCard {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-white);
+    border-radius: 0.85rem;
+    overflow: hidden;
+  }
+  .studioTabs {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid var(--color-slate-100);
+    overflow-x: auto;
+    flex: none;
+  }
+  .studioTabBody {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.9rem;
+  }
+  #panelInput,
+  #panelResult {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  #panelInput {
+    gap: 0.75rem;
+  }
+
+  /* Selected-photo preview on the input tab. */
+  .inputPreview {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.9rem;
+    overflow: hidden;
+    background: var(--color-slate-50);
+    border: 1px solid var(--color-slate-200);
+  }
+  .inputPreview[hidden] {
+    display: none;
+  }
+  .inputPreviewImg {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .inputPreviewBadge {
+    position: absolute;
+    top: 0.6rem;
+    left: 0.6rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 0.6rem;
+    background: rgb(15 23 42 / 0.72);
+    color: #e2e8f0;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .dropZone {
+    flex: none;
+  }
+  #panelInput.has-preview .dropZone {
+    padding: 0.9rem;
+  }
+  #panelInput.has-preview .dropZone .dzIcon {
+    display: none;
+  }
+
+  /* Result panel: the cut-out shrinks to fit the fixed editor height. */
+  #outputSection {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #outputBox {
+    flex: 1;
+    min-height: 0 !important;
+    overflow: hidden;
+    padding: 0.75rem !important;
+  }
+  #outputBox img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .procWallpaper {
+    min-height: 0;
+    height: 100%;
+  }
+
   /* ——— Editor tabs ——— */
   .editorTab {
     display: inline-flex;
@@ -636,6 +1081,7 @@
     border-radius: 0.7rem;
     font-size: 0.75rem;
     font-weight: 600;
+    white-space: nowrap;
     color: var(--color-slate-500);
     background: transparent;
     border: 1px solid transparent;
@@ -711,11 +1157,257 @@
     color: #94a3b8;
   }
 
-  /* Console panel: a terminal, intentionally dark in both modes. */
-  .consolePanel {
-    background: #0f172a;
-    color: #cbd5e1;
-    border-radius: 1rem;
+  /* ——— Console: compact strip, categorised log, privacy toggle ——— */
+  /* Drag handle on the console's top edge. The console can only shrink below
+     its 35% default, never grow past it (the cap lives in main.ts). */
+  .consoleResize {
+    flex: none;
+    height: 0.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: row-resize;
+    background: transparent;
+    touch-action: none;
+  }
+  .consoleResizeGrip {
+    width: 2.5rem;
+    height: 0.22rem;
+    border-radius: 999px;
+    background: var(--color-slate-300);
+    transition: background 0.15s ease, width 0.15s ease;
+  }
+  .consoleResize:hover .consoleResizeGrip,
+  .consoleResize:focus-visible .consoleResizeGrip {
+    background: var(--color-blue-500);
+    width: 3.6rem;
+  }
+  /* While dragging, keep the resize cursor and stop text selection everywhere. */
+  body.console-resizing,
+  body.console-resizing * {
+    cursor: row-resize !important;
+    user-select: none !important;
+  }
+  .consoleCloseBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 0.5rem;
+    border: 0;
+    background: transparent;
+    color: var(--color-slate-500);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .consoleCloseBtn:hover {
+    background: var(--color-slate-200);
+    color: var(--color-slate-900);
+  }
+  .consoleCloseBtn svg {
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+  .consoleHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--color-slate-100);
+    flex: none;
+  }
+  .consoleStatus {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--color-slate-500);
+    text-align: right;
+  }
+  .consoleStatus.working {
+    animation: workingText 1.6s ease-in-out infinite;
+  }
+  .consoleScroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0.8rem 0.9rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-300) transparent;
+  }
+  .consoleScroll::-webkit-scrollbar {
+    width: 8px;
+  }
+  .consoleScroll::-webkit-scrollbar-thumb {
+    background: var(--color-slate-300);
+    border-radius: 4px;
+  }
+  .consoleStage {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--color-slate-700);
+    background: var(--color-slate-100);
+    border: 1px solid var(--color-slate-200);
+    border-radius: 0.6rem;
+    padding: 0.5rem 0.7rem;
+    line-height: 1.4;
+  }
+  .consoleGroup {
+    border: 1px solid var(--color-slate-200);
+    border-radius: 0.7rem;
+    overflow: hidden;
+  }
+  .consoleGroupSummary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.65rem;
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--color-slate-700);
+    background: var(--color-slate-50);
+  }
+  .consoleGroupSummary::-webkit-details-marker {
+    display: none;
+  }
+  .consoleGroupDot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--color-slate-300);
+    flex: none;
+  }
+  .consoleGroup[data-active='true'] .consoleGroupDot {
+    background: var(--color-blue-500);
+  }
+  .consoleGroupName {
+    flex: 1;
+  }
+  .consoleGroupCount {
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: var(--color-slate-500);
+  }
+  .consoleGroupBody {
+    padding: 0.6rem 0.65rem;
+    border-top: 1px solid var(--color-slate-100);
+  }
+  .logGroups {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .logGroup .consoleGroupSummary {
+    font-weight: 600;
+  }
+  .logBody {
+    max-height: 12rem;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-300) transparent;
+  }
+  .logLine {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--color-slate-600);
+  }
+  .logLine.warn {
+    color: var(--color-amber-800);
+  }
+  .logLine.error {
+    color: var(--color-red-900);
+  }
+
+  /* Zero-upload privacy: a clickable icon reveals the statement. */
+  .privacyRow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: none;
+  }
+  .privacyToggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--color-emerald-500);
+    background: color-mix(in oklab, var(--color-emerald-500) 10%, transparent);
+    color: var(--color-emerald-600);
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .privacyToggle:hover {
+    background: color-mix(in oklab, var(--color-emerald-500) 20%, transparent);
+  }
+  .privacyToggle svg {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+  .privacyToggleLabel {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-slate-600);
+  }
+  .privacyStatement {
+    border-radius: 0.7rem;
+    padding: 0.6rem 0.7rem;
+    background: color-mix(in oklab, var(--color-emerald-500) 8%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-emerald-500) 25%, transparent);
+  }
+  .privacyStatement[hidden] {
+    display: none;
+  }
+
+  /* ——— Footer brand (theme-aware) ——— */
+  .footerWordmark {
+    height: 1rem;
+    width: auto;
+    object-fit: contain;
+  }
+  .footerWordmarkLight {
+    display: none;
+  }
+  [data-theme='dark'] .footerWordmarkDark {
+    display: none;
+  }
+  [data-theme='dark'] .footerWordmarkLight {
+    display: block;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .footerWordmarkDark {
+      display: none;
+    }
+    :root:not([data-theme='light']) .footerWordmarkLight {
+      display: block;
+    }
+  }
+
+  /* ——— Metered-connection preflight warning ——— */
+  .netWarn {
+    margin-bottom: 0.75rem;
+    padding: 0.9rem;
+    border-radius: 0.9rem;
+    background: var(--color-amber-50);
+    border: 1px solid var(--color-amber-100);
+    color: var(--color-amber-900);
+    font-size: 0.85rem;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+    flex: none;
+  }
+  .netWarn[hidden] {
+    display: none;
   }
 }
 
@@ -723,6 +1415,31 @@
 @keyframes ringSpin {
   to {
     transform: rotate(360deg);
+  }
+}
+@keyframes dotPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-blue-500) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-blue-500) 0%, transparent);
+  }
+}
+@keyframes logDotFlash {
+  0% {
+    transform: scale(1.9);
+    background: var(--color-cyan-400, #22d3ee);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes workingText {
+  0%, 100% {
+    color: var(--color-slate-500);
+  }
+  50% {
+    color: var(--color-blue-600);
   }
 }
 @keyframes toastIn {
@@ -769,6 +1486,11 @@
   }
   .procWaves,
   .procPixels {
+    animation: none;
+  }
+  .stepList li[data-state='active'] .dot,
+  .consoleStatus.working,
+  .logDots .logDot.flash {
     animation: none;
   }
   html.theme-transition * {

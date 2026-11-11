@@ -198,26 +198,28 @@
     }
   }
 
-  /* ——— Hero tagline: one unbroken line that orbits on its own axis ———
-     The line must never wrap, so it is kept on a single nowrap run inside a
-     padded box whose overflow is hidden — the padding is preserved and
-     anything past it is simply clipped, with no overlay drawn on top. */
+  /* ——— Hero tagline: a seamless right-to-left text banner ———
+     The line must never wrap, so it is one nowrap run inside a padded box whose
+     overflow is hidden — the padding is preserved and anything past it is simply
+     clipped, with no overlay drawn on top. Two identical copies sit in a track
+     that slides by exactly one copy's width, so the copy leaving on the left is
+     followed seamlessly by the next entering from the right (an endless loop). */
   .heroTagline {
-    display: flex;
-    justify-content: center;
     width: 100%;
     max-width: 100%;
     padding-inline: 1.25rem;
     overflow: hidden;
   }
+  .heroTaglineTrack {
+    display: inline-flex;
+    width: max-content;
+    will-change: transform;
+    animation: taglineMarquee 26s linear infinite;
+  }
   .heroTaglineText {
     display: inline-block;
-    margin: 0;
+    padding-right: 3rem;
     white-space: nowrap;
-    transform-style: preserve-3d;
-    backface-visibility: visible;
-    will-change: transform;
-    animation: taglineOrbit 8s linear infinite;
   }
 
   /* ——— Animated progress ring ——— */
@@ -497,24 +499,50 @@
     text-transform: none;
   }
 
+  /* One chevron per log category: dim until the category has lines, then tinted
+     and flipping to point up when its block is open. */
   .logDots {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.1rem;
     margin-left: auto;
   }
   .logDots .logDot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 50%;
-    background: var(--color-slate-300);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.35rem;
+    height: 1.35rem;
     border: 0;
     padding: 0;
+    border-radius: 0.4rem;
+    background: transparent;
+    color: var(--color-slate-300);
     cursor: pointer;
-    transition: background 0.2s ease, transform 0.2s ease;
+    transition: color 0.2s ease, background 0.2s ease;
+  }
+  .logDots .logDot:hover {
+    background: var(--color-slate-100);
   }
   .logDots .logDot[data-active='true'] {
-    background: var(--color-blue-500);
+    color: var(--color-blue-500);
+  }
+  .logChevron,
+  .consoleChevron {
+    display: inline-flex;
+    flex: none;
+    transition: transform 0.2s ease;
+  }
+  .logChevron svg {
+    width: 0.85rem;
+    height: 0.85rem;
+  }
+  .consoleChevron svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+  .logDots .logDot[aria-expanded='true'] .logChevron {
+    transform: rotate(180deg);
   }
   .logDots .logDot.flash {
     animation: logDotFlash 0.7s ease-out;
@@ -628,11 +656,10 @@
     object-fit: contain;
     will-change: opacity;
   }
-  /* The collapsed mark takes ~25% less width than the lockup's mark would, so
-     the compact header reads lighter. `height: auto` keeps the aspect ratio. */
+  /* The collapsed mark is 25% narrower than the figure's natural width, so the
+     compact header reads lighter. `object-fit: contain` keeps it undistorted. */
   .brand-mark {
-    width: calc(var(--brand-h, 2.5rem) * 0.71);
-    height: auto;
+    width: calc(var(--brand-h, 2.5rem) * 0.53);
   }
   /* Transitions start only after the first frame (html.ui-ready), so the initial
      paint uses the final hidden state instead of animating from the default. */
@@ -1180,8 +1207,9 @@
   }
 
   /* ——— Console: compact strip, categorised log, privacy toggle ——— */
-  /* Drag handle on the console's top edge. The console can only shrink below
-     its 35% default, never grow past it (the cap lives in main.ts). */
+  /* Drag handle on the console's top edge. The console drags between 20% and
+     50% of the workspace height (the clamp lives in main.ts); 35% is the
+     resting default (the CSS grid track). */
   .consoleResize {
     flex: none;
     height: 0.6rem;
@@ -1278,35 +1306,37 @@
     padding: 0.5rem 0.7rem;
     line-height: 1.4;
   }
+  /* Borderless collapsible blocks. The summary is a quiet header row with a
+     chevron; the body is indented as the "children" of that thread, with the
+     extra left space the brief asked for. */
   .consoleGroup {
-    border: 1px solid var(--color-slate-200);
+    border: 0;
     border-radius: 0.7rem;
     overflow: hidden;
   }
   .consoleGroupSummary {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.45rem 0.65rem;
+    gap: 0.4rem;
+    padding: 0.3rem 0.15rem;
     cursor: pointer;
     list-style: none;
     font-size: 0.72rem;
     font-weight: 700;
     color: var(--color-slate-700);
-    background: var(--color-slate-50);
+    background: transparent;
+  }
+  .consoleGroupSummary:hover {
+    color: var(--color-slate-900);
   }
   .consoleGroupSummary::-webkit-details-marker {
     display: none;
   }
-  .consoleGroupDot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 50%;
-    background: var(--color-slate-300);
-    flex: none;
+  .consoleGroup[open] > .consoleGroupSummary .consoleChevron {
+    transform: rotate(180deg);
   }
-  .consoleGroup[data-active='true'] .consoleGroupDot {
-    background: var(--color-blue-500);
+  .consoleGroup[data-active='true'] .consoleChevron {
+    color: var(--color-blue-500);
   }
   .consoleGroupName {
     flex: 1;
@@ -1316,14 +1346,15 @@
     font-weight: 600;
     color: var(--color-slate-500);
   }
+  /* Thread children: indented to the right of the header chevron. */
   .consoleGroupBody {
-    padding: 0.6rem 0.65rem;
-    border-top: 1px solid var(--color-slate-100);
+    margin-left: 1.4rem;
+    padding: 0.35rem 0 0.5rem;
   }
   .logGroups {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.15rem;
   }
   .logGroup .consoleGroupSummary {
     font-weight: 600;
@@ -1333,6 +1364,13 @@
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--color-slate-300) transparent;
+  }
+  .logBody::-webkit-scrollbar {
+    width: 8px;
+  }
+  .logBody::-webkit-scrollbar-thumb {
+    background: var(--color-slate-300);
+    border-radius: 4px;
   }
   .logLine {
     display: block;
@@ -1350,37 +1388,30 @@
     color: var(--color-red-900);
   }
 
-  /* Zero-upload privacy: a clickable icon reveals the statement. */
-  .privacyRow {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex: none;
-  }
+  /* Zero-upload privacy: a borderless shield icon beside the Console heading
+     reveals the statement. */
   .privacyToggle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.9rem;
-    height: 1.9rem;
-    border-radius: 0.6rem;
-    border: 1px solid var(--color-emerald-500);
-    background: color-mix(in oklab, var(--color-emerald-500) 10%, transparent);
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 0.5rem;
+    border: 0;
+    background: transparent;
     color: var(--color-emerald-600);
     cursor: pointer;
-    transition: background 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease;
   }
   .privacyToggle:hover {
-    background: color-mix(in oklab, var(--color-emerald-500) 20%, transparent);
+    background: color-mix(in oklab, var(--color-emerald-500) 14%, transparent);
+  }
+  .privacyToggle[aria-expanded='true'] {
+    background: color-mix(in oklab, var(--color-emerald-500) 18%, transparent);
   }
   .privacyToggle svg {
-    width: 1.1rem;
-    height: 1.1rem;
-  }
-  .privacyToggleLabel {
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: var(--color-slate-600);
+    width: 1.05rem;
+    height: 1.05rem;
   }
   .privacyStatement {
     border-radius: 0.7rem;
@@ -1484,15 +1515,15 @@
     transform: translateY(0);
   }
 }
-@keyframes taglineOrbit {
-  0% {
-    transform: perspective(420px) rotateY(0deg);
+/* The track holds two identical copies; shifting it left by exactly half its
+   width (= one copy) makes the copy that scrolls off the left edge line up
+   perfectly with the start of the next one, so the loop is seamless. */
+@keyframes taglineMarquee {
+  from {
+    transform: translateX(0);
   }
-  50% {
-    transform: perspective(420px) rotateY(360deg);
-  }
-  100% {
-    transform: perspective(420px) rotateY(360deg);
+  to {
+    transform: translateX(-50%);
   }
 }
 @keyframes procWaveDrift {
@@ -1519,7 +1550,7 @@
   }
   .procWaves,
   .procPixels,
-  .heroTaglineText {
+  .heroTaglineTrack {
     animation: none;
   }
   .stepList li[data-state='active'] .dot,

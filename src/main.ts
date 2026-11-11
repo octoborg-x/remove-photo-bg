@@ -15,12 +15,12 @@ import {
   probabilityToMask,
   cropLetterboxMask,
   upscaleMask,
-  applyMaskToImage,
   applyMaskAdjust,
   DEFAULT_MASK_ADJUST,
   isMaskAdjust,
   type MaskAdjust,
 } from './features/background-removal/mask-postprocess';
+import { composeResult } from './features/background-removal/composite';
 import { recoverForegroundMask } from './features/background-removal/mask-recovery';
 import {
   canvasToDataUrl,
@@ -613,6 +613,7 @@ function clearOutput(): void {
   downloadImageBtn.hidden = true;
   downloadImageBtn.removeAttribute('href');
   lastResultCanvas = null;
+  lastPreviewCanvas = null;
   compareBeforeEl.removeAttribute('src');
   compareAfterEl.removeAttribute('src');
   outputSection.hidden = true;
@@ -622,6 +623,10 @@ function clearOutput(): void {
 // The composited cut-out is kept so changing the format (or the background)
 // re-encodes without re-running inference.
 let lastResultCanvas: HTMLCanvasElement | null = null;
+// The on-screen preview, at most ≤450 px on its longest side, so switching the
+// background or format never re-encodes a full-resolution PNG just to repaint
+// the display. Rebuilt whenever a new result is composited.
+let lastPreviewCanvas: HTMLCanvasElement | null = null;
 let exportFormat: ExportFormat = initExportFormat();
 
 function initExportFormat(): ExportFormat {
@@ -720,11 +725,15 @@ function saveBackground(): void {
 // Re-render the result preview from the stored cut-out, composited onto the
 // chosen background. The preview is always a PNG (the only format that can show
 // real transparency); a transparent choice lets the checkerboard show through.
+// The ≤450 px display canvas is used so a background/format change never
+// re-encodes a full-resolution PNG; the full-resolution cut-out still feeds the
+// export (see `applyFormatUi`).
 function renderResultPreview(): void {
-  if (!lastResultCanvas) return;
+  const display = lastPreviewCanvas ?? lastResultCanvas;
+  if (!display) return;
   outputBox.innerHTML = '';
   const img = document.createElement('img');
-  img.src = canvasToDataUrl(lastResultCanvas, 'png', background);
+  img.src = canvasToDataUrl(display, 'png', background);
   img.alt = 'Background removed';
   outputBox.appendChild(img);
   // The compare view's right-hand side shows the same composite.
@@ -1351,81 +1360,7 @@ async function initWorker(): Promise<void> {
       log(`Inference ${timings.length}: ${msg.ms.toFixed(1)} ms`);
       pending.resolve(msg.ms);
     } else if (msg.kind === 'result-ready') {
-      if (!currentImageData) {
-        log('WARNING: got a result with no loaded image; ignoring');
-        return;
-      }
-      const { mask, width, height } = msg;
-      setStep('inference', 'done');
-      setStep('export', 'active');
-      setProcessingLabel('Creating your image…', true);
-      // The worker reports the model's actual input size so a per-model input
-      // change (e.g. a 384 variant) never mis-scales the mask. The mask covers
-      // the letterboxed content rect inside that square (the same geometry the
-      // pre-processing used), so crop the padding away before upscaling.
-      const inputSize = msg.inputSize ?? MODEL_SIZE;
-      const rect = letterboxRect(currentImageData.width, currentImageData.height, inputSize);
-      const maskU8 = cropLetterboxMask(probabilityToMask(mask), inputSize, rect);
-      const upscaled = upscaleMask(maskU8, rect.width, rect.height, currentImageData.width, currentImageData.height);
-      // The model occasionally floods the whole frame (keeps the background
-      // attached). Detect that and recover a real cut-out from the border-
-      // connected background before compositing. See mask-recovery.ts. This runs
-      // on the raw model mask so the user's threshold/feather below still applies
-      // to the recovered result.
-      const { mask: recoveredMask, recovered } = recoverForegroundMask(
-        currentImageData,
-        upscaled,
-      );
-      if (recovered) {
-        log('Model kept the whole frame; recovered the subject from the background edges.');
-      }
-      // Apply the user's mask threshold/feather at full destination resolution
-      // (the values are percentages/pixels of the *output* mask).
-      const finalMask = applyMaskAdjust(
-        recoveredMask,
-        currentImageData.width,
-        currentImageData.height,
-        maskAdjust,
-      );
-      const out = applyMaskToImage(currentImageData, finalMask);
-      const canvas = document.createElement('canvas');
-      canvas.width = out.width;
-      canvas.height = out.height;
-      const ctx = canvas.getContext('2d')!;
-      ctx.putImageData(out, 0, 0);
-      lastResultCanvas = canvas;
-
-      let opaquePx = 0;
-      for (let i = 3; i < out.data.length; i += 4) if (out.data[i] > 127) opaquePx++;
-
-      // The compare view pairs the original photo with the current composite.
-      compareBeforeEl.src = currentObjectUrl ?? '';
-      // Preview + compare "after" are painted from the stored cut-out onto the
-      // chosen background; the download link follows the chosen format.
-      renderResultPreview();
-
-      // One download link, re-encoded whenever the format or background changes.
-      applyFormatUi();
-
-      outputSection.hidden = false;
-
-      setStep('export', 'done');
-      setProcessingLabel('Done — your image is ready', false);
-      studioResult();
-      setStage('Done — download your image below.');
-
-      log(`Rendered cut-out (${width}x${height}) as ${exportFormatInfo(exportFormat).label} on a ${describeChoice(background)} background, ${((opaquePx / (out.width * out.height)) * 100).toFixed(1)}% opaque.`);
-      // A uniform mask means the model did not segment anything; say so rather
-      // than leaving the user staring at a blank (fully transparent) image.
-      if (opaquePx === 0) {
-        log('WARNING: the mask is fully transparent, so there is no subject to show.');
-      } else if (opaquePx >= out.width * out.height * 0.995) {
-        // Essentially nothing was removed even after the flood-fill recovery —
-        // the image has no background separable from its edges (a busy scene, or
-        // a full-frame subject). Tell the user rather than showing the original
-        // silently.
-        log('WARNING: no background was found, so nothing was removed.');
-      }
+      handleResultReady(msg);
     } else if (msg.kind === 'error') {
       // Errors tied to a run are delivered through that run's promise, so the
       // caller reports them once. Anything else is surfaced here.
@@ -1441,6 +1376,85 @@ async function initWorker(): Promise<void> {
       // session; the worker retries on CPU, so the app stays usable.
     }
   };
+}
+
+// A worker `result-ready` message: scale the mask to the photo, run the flood-fill
+// recovery, apply the user's threshold/feather, then composite off the main thread
+// (composite.ts). The compositing is async, so the worker handler returns and the
+// UI settles in `finishResult`.
+function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-ready' }>): void {
+  if (!currentImageData) {
+    log('WARNING: got a result with no loaded image; ignoring');
+    return;
+  }
+  const image = currentImageData;
+  setStep('inference', 'done');
+  setStep('export', 'active');
+  setProcessingLabel('Creating your image…', true);
+  // The worker reports the model's actual input size so a per-model input change
+  // (e.g. a 384 variant) never mis-scales the mask. The mask covers the
+  // letterboxed content rect inside that square (the same geometry the
+  // pre-processing used), so crop the padding away before upscaling.
+  const inputSize = msg.inputSize ?? MODEL_SIZE;
+  const rect = letterboxRect(image.width, image.height, inputSize);
+  const maskU8 = cropLetterboxMask(probabilityToMask(msg.mask), inputSize, rect);
+  const upscaled = upscaleMask(maskU8, rect.width, rect.height, image.width, image.height);
+  // The model occasionally floods the whole frame (keeps the background
+  // attached). Detect that and recover a real cut-out from the border-connected
+  // background before compositing. See mask-recovery.ts. This runs on the raw
+  // model mask so the user's threshold/feather below still applies to the
+  // recovered result.
+  const { mask: recoveredMask, recovered } = recoverForegroundMask(image, upscaled);
+  if (recovered) {
+    log('Model kept the whole frame; recovered the subject from the background edges.');
+  }
+  // Apply the user's mask threshold/feather at full destination resolution (the
+  // values are percentages/pixels of the *output* mask).
+  const finalMask = applyMaskAdjust(recoveredMask, image.width, image.height, maskAdjust);
+  const size = `${image.width}x${image.height}`;
+  composeResult(image, finalMask)
+    .then(({ canvas, preview }) => finishResult(canvas, preview, size))
+    .catch((err) => error(`Could not compose the cut-out: ${err instanceof Error ? err.message : String(err)}`));
+}
+
+// Paints a freshly composited result: the compare view, the preview, the download
+// link and the step list, then reports how much of the frame stayed opaque so a
+// blank or a fully-kept result is called out rather than shown silently.
+function finishResult(canvas: HTMLCanvasElement, preview: HTMLCanvasElement, size: string): void {
+  lastResultCanvas = canvas;
+  lastPreviewCanvas = preview;
+
+  let opaquePx = 0;
+  const ctx = canvas.getContext('2d')!;
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  for (let i = 3; i < data.length; i += 4) if (data[i] > 127) opaquePx++;
+
+  // The compare view pairs the original photo with the current composite.
+  compareBeforeEl.src = currentObjectUrl ?? '';
+  // Preview + compare "after" are painted from the stored cut-out onto the chosen
+  // background; the download link follows the chosen format.
+  renderResultPreview();
+  applyFormatUi();
+
+  outputSection.hidden = false;
+  setStep('export', 'done');
+  setProcessingLabel('Done — your image is ready', false);
+  studioResult();
+  setStage('Done — download your image below.');
+
+  const pct = ((opaquePx / (canvas.width * canvas.height)) * 100).toFixed(1);
+  log(`Rendered cut-out (${size}) as ${exportFormatInfo(exportFormat).label} on a ${describeChoice(background)} background, ${pct}% opaque.`);
+  // A uniform mask means the model did not segment anything; say so rather than
+  // leaving the user staring at a blank (fully transparent) image.
+  if (opaquePx === 0) {
+    log('WARNING: the mask is fully transparent, so there is no subject to show.');
+  } else if (opaquePx >= canvas.width * canvas.height * 0.995) {
+    // Essentially nothing was removed even after the flood-fill recovery — the
+    // image has no background separable from its edges (a busy scene, or a
+    // full-frame subject). Tell the user rather than showing the original
+    // silently.
+    log('WARNING: no background was found, so nothing was removed.');
+  }
 }
 
 function setSelectorsDisabled(disabled: boolean): void {

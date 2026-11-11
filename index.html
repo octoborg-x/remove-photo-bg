@@ -61,6 +61,7 @@
           <a href="#showcase" class="hover:text-blue-600 transition-colors whitespace-nowrap">Showcase</a>
           <a href="#how" class="hover:text-blue-600 transition-colors whitespace-nowrap">How It Works</a>
           <a href="#benchmarks" class="hover:text-blue-600 transition-colors whitespace-nowrap">Benchmarks</a>
+          <a href="#support" class="hover:text-blue-600 transition-colors whitespace-nowrap">What's Supported</a>
           <a href="#faq" class="hover:text-blue-600 transition-colors whitespace-nowrap">FAQ</a>
         </nav>
 
@@ -350,6 +351,86 @@
             </p>
           </div>
         </div>
+      </section>
+
+      <!-- What's Supported (plain-language capability reference) -->
+      <section id="support" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
+        <div class="text-center max-w-2xl mx-auto mb-12">
+          <span class="text-xs font-bold text-blue-600 tracking-wider uppercase mb-2 block">Plain-Language Reference</span>
+          <h2 class="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+            What SmartCutAI Supports
+          </h2>
+          <p class="text-sm sm:text-base text-slate-600 mt-3">
+            No jargon required. Here is exactly what works, what it runs on, and what you get back.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
+            <h3 class="text-base font-bold text-slate-900 mb-2">Photos you can drop in</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              PNG, JPEG, and WebP images up to <strong>20 MB</strong> and <strong>4096 pixels</strong> on the
+              longest side. Files are read as-is — the app never trusts the file name, and a mislabelled or
+              corrupt image is caught and explained instead of silently failing.
+            </p>
+          </div>
+
+          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
+            <h3 class="text-base font-bold text-slate-900 mb-2">Images it handles well</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              Product shots, portraits, clothing, accessories, hair and fur, glass and transparent items, and
+              busy or flat backgrounds. Very wide or very tall images (like banners and logos) are padded with a
+              faithful copy of their edges, so the subject is not stretched out of shape. When the AI keeps the
+              whole frame, the app falls back to a classic edge-based cut-out so you still get a clean result.
+            </p>
+          </div>
+
+          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
+            <h3 class="text-base font-bold text-slate-900 mb-2">Where it runs</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              Any modern browser. It uses the GPU automatically when a real, capable graphics chip is available
+              (WebGPU), and otherwise runs on the CPU with multi-threaded WebAssembly. Software-only "fake GPUs"
+              and known-slow mobile chips are detected and steered to the CPU, which is faster and more accurate
+              there. You can override the choice in the Studio's advanced options.
+            </p>
+          </div>
+
+          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
+            <h3 class="text-base font-bold text-slate-900 mb-2">What you get back</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              A transparent <strong>PNG</strong> by default, a studio-white <strong>JPG</strong> for marketplaces,
+              or a compact <strong>WebP</strong> that keeps transparency. You can also place the cut-out on a solid
+              colour, on pure white, or leave it transparent — and tune the mask's edge with a threshold and a
+              feather slider before you download.
+            </p>
+          </div>
+
+          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
+            <h3 class="text-base font-bold text-slate-900 mb-2">Speed and the one-time download</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              The model is about <strong>58 MB</strong> and downloads once, then stays cached on your device.
+              Inference is typically a few seconds per photo on the CPU and faster on a GPU. On a metered mobile
+              link the app asks before that first download. Large photos are composited in bounded strips off the
+              main thread, so the page stays responsive.
+            </p>
+          </div>
+
+          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
+            <h3 class="text-base font-bold text-slate-900 mb-2">Privacy and what is never done</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              Your photo never leaves your device — there is no upload path in the app at all. No account, no
+              watermark, no per-image limit, and no third-party scripts or fonts loaded. Everything runs in your
+              browser, and you can verify it in your browser's Network tab or by going fully offline.
+            </p>
+          </div>
+        </div>
+
+        <p class="mt-8 text-center text-xs text-slate-400">
+          Curious how the cut-out is assembled? The compositing and preview layer is adapted from
+          <a href="https://github.com/Remove-Background-ai/rembg-webgpu" class="hover:text-blue-600 underline">rembg-webgpu</a>
+          — Background Removal Library provided by
+          <a href="https://www.rembg.com" class="hover:text-blue-600 underline">www.rembg.com</a>.
+        </p>
       </section>
 
       <!-- Benchmarks & Scientific Rigor -->
@@ -888,6 +969,13 @@
           Build <code id="buildStamp">__BUILD_ID__</code>
         </p>
       </div>
+
+      <p class="mt-6 text-center text-[11px] text-slate-400">
+        Compositing and preview code adapted from
+        <a href="https://github.com/Remove-Background-ai/rembg-webgpu" class="hover:text-blue-600 underline">rembg-webgpu</a>
+        — Background Removal Library provided by
+        <a href="https://www.rembg.com" class="hover:text-blue-600 underline">www.rembg.com</a>.
+      </p>
     </footer>
 
     <!-- Main module & diagnostic guard scripts -->

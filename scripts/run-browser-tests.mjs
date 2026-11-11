@@ -115,6 +115,26 @@ async function openStudio(page) {
   }
 }
 
+// Clicking the drop zone must open the native file chooser, but the deferred
+// module may not have attached its click listener yet on a busy runner — so a
+// click can land on a dead element. Retry a few times instead of racing.
+async function chooseFile(page, filePath) {
+  await page.waitForSelector('#dropZone', { timeout: 60000 });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const chooserPromise = page.waitForFileChooser({ timeout: 10000 }).then(
+      (chooser) => ({ chooser }),
+      (err) => ({ err }),
+    );
+    await page.click('#dropZone');
+    const outcome = await chooserPromise;
+    if (outcome.chooser) {
+      await outcome.chooser.accept([filePath]);
+      return;
+    }
+  }
+  throw new Error(`could not open the file chooser for ${filePath}`);
+}
+
 async function waitForServer(url, timeoutMs = 60000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -176,10 +196,7 @@ try {
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
 
     // Upload through the real file chooser (the button creates the input).
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    const chooser = await chooserPromise;
-    await chooser.accept([resolve(ROOT, 'test-images/glass-wine.jpg')]);
+    await chooseFile(page, resolve(ROOT, 'test-images/glass-wine.jpg'));
 
     // Wait for the app to decode + auto-start the run. There is no "Remove
     // background" button any more: choosing the photo starts the run.
@@ -457,9 +474,7 @@ try {
     await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     const pngPath = resolve(ROOT, 'smoke-results/phase4-browser/input.png');
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    (await chooserPromise).accept([pngPath]);
+    await chooseFile(page, pngPath);
     // Choosing the photo auto-starts the run; no button to click.
     await page.waitForFunction(() => document.querySelector('#outputBox img') !== null, { timeout: 600000 });
     const src = await page.evaluate(() => document.querySelector('#outputBox img')?.getAttribute('src') ?? '');
@@ -473,9 +488,7 @@ try {
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    (await chooserPromise).accept([resolve(ROOT, 'smoke-results/phase4-browser/not-an-image.txt')]);
+    await chooseFile(page, resolve(ROOT, 'smoke-results/phase4-browser/not-an-image.txt'));
     await page.waitForFunction(
       () => /Unsupported file type/.test(document.getElementById('stage')?.textContent ?? ''),
       { timeout: 10000 },
@@ -491,9 +504,7 @@ try {
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
-    const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-    await page.click('#dropZone');
-    (await chooserPromise).accept([resolve(ROOT, 'smoke-results/phase4-browser/corrupt.png')]);
+    await chooseFile(page, resolve(ROOT, 'smoke-results/phase4-browser/corrupt.png'));
     await page.waitForFunction(
       () => /Failed to decode|ERROR/.test(document.getElementById('stage')?.textContent ?? ''),
       { timeout: 10000 },

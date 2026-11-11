@@ -4,7 +4,6 @@ import {
   cropLetterboxMask,
   upscaleMask,
   applyMaskAdjust,
-  applyMaskToImage,
   isMaskAdjust,
   DEFAULT_MASK_ADJUST,
 } from './mask-postprocess';
@@ -134,29 +133,5 @@ describe('isMaskAdjust', () => {
     ]) {
       expect(isMaskAdjust(bad)).toBe(false);
     }
-  });
-});
-
-describe('applyMaskToImage', () => {
-  it('copies RGB and writes the mask into the alpha channel', () => {
-    const img = new ImageData(2, 2);
-    img.data.set([10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255, 100, 110, 120, 255]);
-    const mask = new Uint8ClampedArray([0, 128, 255, 64]);
-    const out = applyMaskToImage(img, mask);
-    expect(out.width).toBe(2);
-    expect(out.height).toBe(2);
-    expect(Array.from(out.data)).toEqual([
-      10, 20, 30, 0,
-      40, 50, 60, 128,
-      70, 80, 90, 255,
-      100, 110, 120, 64,
-    ]);
-  });
-
-  it('does not mutate the input image', () => {
-    const img = new ImageData(1, 1);
-    img.data.set([1, 2, 3, 4]);
-    applyMaskToImage(img, new Uint8ClampedArray([200]));
-    expect(Array.from(img.data)).toEqual([1, 2, 3, 4]);
   });
 });

@@ -26,6 +26,20 @@ const IMAGES = [
     out: 'test-images/glass-wine.jpg',
     source: 'https://commons.wikimedia.org/wiki/File:Glass_wine_white_background.jpg',
   },
+  {
+    // CC0. Human hair (wavy studio portrait). Thin-structure case: hair strands
+    // must survive the refinement's cleanup stage.
+    url: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7c/Studio_portrait_of_a_young_Venezuelan_woman_with_wavy_hair_and_dangling_earrings_in_1948.jpg/960px-Studio_portrait_of_a_young_Venezuelan_woman_with_wavy_hair_and_dangling_earrings_in_1948.jpg',
+    out: 'test-images/portrait-hair.jpg',
+    source: 'https://commons.wikimedia.org/wiki/File:Studio_portrait_of_a_young_Venezuelan_woman_with_wavy_hair_and_dangling_earrings_in_1948.jpg',
+  },
+  {
+    // CC0. Anglo-Saxon gold necklace (British Museum). Thin chain links: a
+    // jewellery-chain-like structure that erode/dilate cleanup would destroy.
+    url: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/65/Anglo-Saxon_necklace_%28Desborough%29.jpg/960px-Anglo-Saxon_necklace_%28Desborough%29.jpg',
+    out: 'test-images/jewelry-chain.jpg',
+    source: 'https://commons.wikimedia.org/wiki/File:Anglo-Saxon_necklace_(Desborough).jpg',
+  },
 ];
 
 for (const img of IMAGES) {
@@ -40,7 +54,7 @@ for (const img of IMAGES) {
 
 writeFileSync(
   resolve(ROOT, 'test-images/SOURCES.md'),
-  `# Test image sources (Phase 1)\n\n` +
+  `# Test image sources (Phase 1 + progressive refinement)\n\n` +
     IMAGES.map((i) => `- \`${i.out}\` — ${i.source.replace('https://', '')} (source URL preserved)`).join('\n') +
     '\n',
 );

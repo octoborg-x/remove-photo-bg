@@ -492,6 +492,9 @@ self.onmessage = async (e) => {
         width: msg.width,
         height: msg.height,
         inputSize: MODEL_SIZE,
+        // Echo the run id so the page can drop a late result that belongs to a
+        // superseded run (a newer upload started before this one finished).
+        runId: msg.runId,
       });
       post({ kind: 'inference-time', ms: result.timeMs, runId: msg.runId });
       return;

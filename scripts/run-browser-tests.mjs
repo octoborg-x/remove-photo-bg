@@ -231,6 +231,80 @@ try {
     await page.close();
   }
 
+  // ——— Scenario 0b: the showcase shows one example, switchable from the rail ———
+  {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+
+    const readState = () =>
+      page.evaluate(() => {
+        const gallery = document.querySelector('[data-showcase]');
+        const panels = [...gallery.querySelectorAll('[role="tabpanel"]')];
+        const tabs = [...gallery.querySelectorAll('[role="tab"]')];
+        const visible = panels.filter((p) => !p.hidden);
+        const active = tabs.find((t) => t.getAttribute('aria-selected') === 'true');
+        const railBox = gallery.querySelector('.showcaseRail').getBoundingClientRect();
+        const stageBox = gallery.querySelector('.compareStage').getBoundingClientRect();
+        return {
+          panelCount: panels.length,
+          tabCount: tabs.length,
+          visibleCount: visible.length,
+          visibleId: visible[0]?.id ?? null,
+          selectedId: active?.getAttribute('aria-controls') ?? null,
+          activeTabId: active?.id ?? null,
+          activeTabTabIndex: active?.tabIndex ?? null,
+          railRightOfStage: railBox.left >= stageBox.right - 1,
+        };
+      });
+
+    const initial = await readState();
+    record(
+      'the showcase shows exactly one example at a time',
+      initial.panelCount === 3 && initial.tabCount === 3 && initial.visibleCount === 1,
+      `visible ${initial.visibleCount}/${initial.panelCount}`,
+    );
+    record(
+      'the first example is selected by default',
+      initial.visibleId === 'showcase-panel-1' && initial.selectedId === 'showcase-panel-1',
+      `${initial.visibleId} / ${initial.selectedId}`,
+    );
+    record('the thumbnail rail sits to the right of the stage', initial.railRightOfStage);
+
+    // Click the third thumbnail.
+    await page.click('#showcase-tab-3');
+    const afterClick = await readState();
+    record(
+      'clicking a thumbnail switches the visible example',
+      afterClick.visibleId === 'showcase-panel-3' && afterClick.visibleCount === 1 && afterClick.activeTabId === 'showcase-tab-3',
+      `${afterClick.visibleId}`,
+    );
+
+    // Keyboard: focus the active tab and arrow up to the previous example.
+    await page.focus('#showcase-tab-3');
+    await page.keyboard.press('ArrowUp');
+    const afterKey = await readState();
+    record(
+      'arrow keys move the selection between examples (roving tabindex)',
+      afterKey.visibleId === 'showcase-panel-2' &&
+        afterKey.activeTabId === 'showcase-tab-2' &&
+        afterKey.activeTabTabIndex === 0,
+      `${afterKey.visibleId} tabindex ${afterKey.activeTabTabIndex}`,
+    );
+
+    // The slider on the newly revealed example still works.
+    const pos = await page.evaluate(() => {
+      const panel = document.getElementById('showcase-panel-2');
+      const range = panel.querySelector('.compareRange');
+      range.value = '80';
+      range.dispatchEvent(new Event('input', { bubbles: true }));
+      return panel.style.getPropertyValue('--pos');
+    });
+    record('the comparison slider works on the revealed example', pos === '80%', pos);
+
+    await page.close();
+  }
+
   // ——— Scenario 1: JPEG upload → inference → both exports ———
   {
     const page = await browser.newPage();

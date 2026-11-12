@@ -431,63 +431,105 @@
           </p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">Photos you can drop in</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              PNG, JPEG, and WebP images up to <strong>20 MB</strong> and <strong>4096 pixels</strong> on the
-              longest side. Files are read as-is — the app never trusts the file name, and a mislabelled or
-              corrupt image is caught and explained instead of silently failing.
-            </p>
+        <div class="supportCarousel" data-carousel aria-roledescription="carousel" aria-label="What SmartCutAI supports">
+          <div class="supportStage">
+            <button
+              class="supportArrow supportArrowPrev"
+              type="button"
+              data-carousel-prev
+              aria-label="Previous capability"
+            >
+              <span aria-hidden="true">&#8249;</span>
+            </button>
+
+          <div class="supportViewport">
+            <div class="supportTrack">
+              <article class="supportCard" data-slide data-title="Photos you can drop in">
+                <span class="supportCardIndex" aria-hidden="true">01</span>
+                <h3 class="text-base font-bold text-slate-900 mb-2">Photos you can drop in</h3>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                  PNG, JPEG, and WebP images up to <strong>20 MB</strong> and <strong>4096 pixels</strong> on the
+                  longest side. Files are read as-is — the app never trusts the file name, and a mislabelled or
+                  corrupt image is caught and explained instead of silently failing.
+                </p>
+              </article>
+
+              <article class="supportCard" data-slide data-title="Images it handles well" hidden>
+                <span class="supportCardIndex" aria-hidden="true">02</span>
+                <h3 class="text-base font-bold text-slate-900 mb-2">Images it handles well</h3>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                  Product shots, portraits, clothing, accessories, hair and fur, glass and transparent items, and
+                  busy or flat backgrounds. Very wide or very tall images (like banners and logos) are padded with a
+                  faithful copy of their edges, so the subject is not stretched out of shape. When the AI keeps the
+                  whole frame, the app falls back to a classic edge-based cut-out so you still get a clean result.
+                </p>
+              </article>
+
+              <article class="supportCard" data-slide data-title="Where it runs" hidden>
+                <span class="supportCardIndex" aria-hidden="true">03</span>
+                <h3 class="text-base font-bold text-slate-900 mb-2">Where it runs</h3>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                  Any modern browser. It uses the GPU automatically when a real, capable graphics chip is available
+                  (WebGPU), and otherwise runs on the CPU with multi-threaded WebAssembly. Software-only "fake GPUs"
+                  and known-slow mobile chips are detected and steered to the CPU, which is faster and more accurate
+                  there. You can override the choice in the Studio's advanced options.
+                </p>
+              </article>
+
+              <article class="supportCard" data-slide data-title="What you get back" hidden>
+                <span class="supportCardIndex" aria-hidden="true">04</span>
+                <h3 class="text-base font-bold text-slate-900 mb-2">What you get back</h3>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                  A transparent <strong>PNG</strong> by default, a studio-white <strong>JPG</strong> for marketplaces,
+                  or a compact <strong>WebP</strong> that keeps transparency. You can also place the cut-out on a solid
+                  colour, on pure white, or leave it transparent — and tune the mask's edge with a threshold and a
+                  feather slider before you download.
+                </p>
+              </article>
+
+              <article class="supportCard" data-slide data-title="Speed and the one-time download" hidden>
+                <span class="supportCardIndex" aria-hidden="true">05</span>
+                <h3 class="text-base font-bold text-slate-900 mb-2">Speed and the one-time download</h3>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                  The model is about <strong>58 MB</strong> and downloads once, then stays cached on your device.
+                  Inference is typically a few seconds per photo on the CPU and faster on a GPU. On a metered mobile
+                  link the app asks before that first download. Large photos are composited in bounded strips off the
+                  main thread, so the page stays responsive.
+                </p>
+              </article>
+
+              <article class="supportCard" data-slide data-title="Privacy and what is never done" hidden>
+                <span class="supportCardIndex" aria-hidden="true">06</span>
+                <h3 class="text-base font-bold text-slate-900 mb-2">Privacy and what is never done</h3>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                  Your photo never leaves your device — there is no upload path in the app at all. No account, no
+                  watermark, no per-image limit, and no third-party scripts or fonts loaded. Everything runs in your
+                  browser, and you can verify it in your browser's Network tab or by going fully offline.
+                </p>
+              </article>
+            </div>
           </div>
 
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">Images it handles well</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              Product shots, portraits, clothing, accessories, hair and fur, glass and transparent items, and
-              busy or flat backgrounds. Very wide or very tall images (like banners and logos) are padded with a
-              faithful copy of their edges, so the subject is not stretched out of shape. When the AI keeps the
-              whole frame, the app falls back to a classic edge-based cut-out so you still get a clean result.
-            </p>
+            <button
+              class="supportArrow supportArrowNext"
+              type="button"
+              data-carousel-next
+              aria-label="Next capability"
+            >
+              <span aria-hidden="true">&#8250;</span>
+            </button>
           </div>
 
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">Where it runs</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              Any modern browser. It uses the GPU automatically when a real, capable graphics chip is available
-              (WebGPU), and otherwise runs on the CPU with multi-threaded WebAssembly. Software-only "fake GPUs"
-              and known-slow mobile chips are detected and steered to the CPU, which is faster and more accurate
-              there. You can override the choice in the Studio's advanced options.
-            </p>
-          </div>
-
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">What you get back</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              A transparent <strong>PNG</strong> by default, a studio-white <strong>JPG</strong> for marketplaces,
-              or a compact <strong>WebP</strong> that keeps transparency. You can also place the cut-out on a solid
-              colour, on pure white, or leave it transparent — and tune the mask's edge with a threshold and a
-              feather slider before you download.
-            </p>
-          </div>
-
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">Speed and the one-time download</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              The model is about <strong>58 MB</strong> and downloads once, then stays cached on your device.
-              Inference is typically a few seconds per photo on the CPU and faster on a GPU. On a metered mobile
-              link the app asks before that first download. Large photos are composited in bounded strips off the
-              main thread, so the page stays responsive.
-            </p>
-          </div>
-
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">Privacy and what is never done</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              Your photo never leaves your device — there is no upload path in the app at all. No account, no
-              watermark, no per-image limit, and no third-party scripts or fonts loaded. Everything runs in your
-              browser, and you can verify it in your browser's Network tab or by going fully offline.
-            </p>
+          <div class="supportFooter">
+            <p class="supportStatus" data-carousel-status role="status" aria-live="polite">Photos you can drop in — 1 of 6</p>
+            <div class="supportDots">
+              <button class="supportDot is-active" type="button" data-dot aria-current="true" aria-label="Show capability 1: Photos you can drop in"></button>
+              <button class="supportDot" type="button" data-dot aria-label="Show capability 2: Images it handles well"></button>
+              <button class="supportDot" type="button" data-dot aria-label="Show capability 3: Where it runs"></button>
+              <button class="supportDot" type="button" data-dot aria-label="Show capability 4: What you get back"></button>
+              <button class="supportDot" type="button" data-dot aria-label="Show capability 5: Speed and the one-time download"></button>
+              <button class="supportDot" type="button" data-dot aria-label="Show capability 6: Privacy and what is never done"></button>
+            </div>
           </div>
         </div>
       </section>

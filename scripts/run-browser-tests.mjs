@@ -311,6 +311,87 @@ try {
     await page.close();
   }
 
+  // ——— Scenario 0c: the Plain-Language Reference pages one card at a time ———
+  {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+
+    const readCarousel = () =>
+      page.evaluate(() => {
+        const carousel = document.querySelector('[data-carousel]');
+        const slides = [...carousel.querySelectorAll('[data-slide]')];
+        const dots = [...carousel.querySelectorAll('[data-dot]')];
+        const visible = slides.filter((s) => !s.hidden);
+        const activeDot = dots.find((d) => d.getAttribute('aria-current') === 'true');
+        return {
+          slideCount: slides.length,
+          dotCount: dots.length,
+          visibleCount: visible.length,
+          visibleTitle: visible[0]?.dataset.title ?? null,
+          activeDotIndex: activeDot ? dots.indexOf(activeDot) : -1,
+          status: carousel.querySelector('[data-carousel-status]')?.textContent ?? '',
+        };
+      });
+
+    const initial = await readCarousel();
+    record(
+      'the reference carousel shows exactly one card at a time',
+      initial.slideCount === 6 && initial.dotCount === 6 && initial.visibleCount === 1,
+      `visible ${initial.visibleCount}/${initial.slideCount}`,
+    );
+    record(
+      'the first card is selected by default',
+      initial.visibleTitle === 'Photos you can drop in' && initial.activeDotIndex === 0,
+      `${initial.visibleTitle} dot ${initial.activeDotIndex}`,
+    );
+
+    // The module script is deferred, so retry the click until it lands.
+    let afterNext = initial;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await page.click('[data-carousel-next]');
+      afterNext = await readCarousel();
+      if (afterNext.visibleTitle === 'Images it handles well') break;
+      await sleep(150);
+    }
+    record(
+      'the next arrow advances to the following card',
+      afterNext.visibleTitle === 'Images it handles well' && afterNext.activeDotIndex === 1,
+      `${afterNext.visibleTitle} dot ${afterNext.activeDotIndex}`,
+    );
+    record(
+      'the live status tracks the selected card',
+      /Images it handles well/.test(afterNext.status) && /2 of 6/.test(afterNext.status),
+      afterNext.status,
+    );
+
+    await page.click('[data-carousel-prev]');
+    const afterPrev = await readCarousel();
+    record(
+      'the previous arrow steps back to the earlier card',
+      afterPrev.visibleTitle === 'Photos you can drop in' && afterPrev.activeDotIndex === 0,
+      `${afterPrev.visibleTitle} dot ${afterPrev.activeDotIndex}`,
+    );
+
+    await page.click('[data-carousel-prev]');
+    const afterWrap = await readCarousel();
+    record(
+      'the carousel wraps from the first card to the last',
+      afterWrap.visibleTitle === 'Privacy and what is never done' && afterWrap.activeDotIndex === 5,
+      `${afterWrap.visibleTitle} dot ${afterWrap.activeDotIndex}`,
+    );
+
+    await page.click('[data-dot]:nth-of-type(4)');
+    const afterDot = await readCarousel();
+    record(
+      'a dot jumps straight to its card',
+      afterDot.visibleTitle === 'What you get back' && afterDot.activeDotIndex === 3,
+      `${afterDot.visibleTitle} dot ${afterDot.activeDotIndex}`,
+    );
+
+    await page.close();
+  }
+
   // ——— Scenario 1: JPEG upload → inference → both exports ———
   {
     const page = await browser.newPage();

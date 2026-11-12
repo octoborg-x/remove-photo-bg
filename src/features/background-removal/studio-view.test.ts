@@ -54,6 +54,36 @@ describe('reduceStudio tab transitions', () => {
     expect(tabEnabled(s, 'result')).toBe(true);
   });
 
+  it('the preview event shows a usable result while refinement continues', () => {
+    const s = run([{ type: 'select-image' }, { type: 'run-start' }, { type: 'preview' }]);
+    expect(s.tab).toBe('result');
+    expect(s.hasResult).toBe(true);
+    expect(s.refining).toBe(true);
+    // Still a running job: the console keeps its in-flight treatment, and the
+    // result is already exportable.
+    expect(s.running).toBe(true);
+    expect(tabEnabled(s, 'result')).toBe(true);
+  });
+
+  it('a final result settles the refining flag', () => {
+    const s = run([
+      { type: 'run-start' },
+      { type: 'preview' },
+      { type: 'result' },
+    ]);
+    expect(s.refining).toBe(false);
+    expect(s.running).toBe(false);
+    expect(s.percent).toBe(100);
+  });
+
+  it('a refinement error after a preview keeps the preview usable', () => {
+    const s = run([{ type: 'run-start' }, { type: 'preview' }, { type: 'error' }]);
+    expect(s.tab).toBe('result');
+    expect(s.hasResult).toBe(true);
+    expect(s.refining).toBe(false);
+    expect(s.running).toBe(false);
+  });
+
   it('the compare tab is enabled only once a result exists', () => {
     const before = run([{ type: 'select-image' }, { type: 'run-start' }]);
     expect(tabEnabled(before, 'compare')).toBe(false);

@@ -88,7 +88,7 @@ const modelReady = await page
   .then(() => true)
   .catch(async () => {
     const st = await page.evaluate(() => ({
-      stage: document.getElementById('stage')?.textContent,
+      stage: document.getElementById('processingLabel')?.textContent,
       log: document.getElementById('log')?.textContent,
       ready: window.smokeModelReady,
       provider: window.smokeProvider,

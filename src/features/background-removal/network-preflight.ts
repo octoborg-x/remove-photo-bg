@@ -112,6 +112,51 @@ export function isUnmeteredConnection(connection: ConnectionClass): boolean {
   return connection !== 'cellular' && connection !== 'metered';
 }
 
+/** True when the link may cost the user data (cellular or data-saver). */
+export function isMeteredConnection(connection: ConnectionClass): boolean {
+  return !isUnmeteredConnection(connection);
+}
+
+export type ConnectionChangeAction = 'none' | 'start' | 'pause';
+
+/**
+ * What a change of connection class should do to the model download, decided
+ * purely so the live "change" handler is trivial and unit-testable.
+ *
+ *   - `'pause'`: a download was in flight and the link just became metered, so
+ *     stop it rather than spend the user's data plan unasked.
+ *   - `'start'`: nothing is downloading and an unmetered link just appeared, so
+ *     warm the cache in the background (the periodic loop's job).
+ *   - `'none'`: anything else — an already-unmetered link, a metered link with no
+ *     download running, or a switch that does not cross the metered boundary.
+ *
+ * `active` is true while a model download is in flight. A switch between two
+ * metered links (cellular → data-saver) is still a pause: both are metered.
+ */
+export function connectionChangeAction(
+  from: ConnectionClass,
+  to: ConnectionClass,
+  active: boolean,
+): ConnectionChangeAction {
+  if (active) return isMeteredConnection(to) ? 'pause' : 'none';
+  return isMeteredConnection(from) && isUnmeteredConnection(to) ? 'start' : 'none';
+}
+
+/**
+ * The notice shown when a download is paused because the connection became
+ * metered. States that the transfer stopped, and how to continue, so the
+ * interruption does not read as a failure.
+ */
+export function meteredSwitchNotice(sizeBytes: number, label?: string): string {
+  const size = sizeBytes > 0 ? formatBytes(sizeBytes) : 'a large file';
+  const named = label ? ` (${label})` : '';
+  return (
+    `You switched to mobile data, so the model download${named} was paused to save your plan. ` +
+    `It is about ${size} and is kept on this device once downloaded. ` +
+    'Tap Download Model to continue on mobile data, or reconnect to Wi-Fi to finish automatically.'
+  );
+}
+
 /**
  * The periodic model auto-fetch decision. The page fetches the model in the
  * background on a timer so a first visit warms the on-device cache without the

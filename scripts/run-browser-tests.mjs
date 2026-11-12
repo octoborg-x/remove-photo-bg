@@ -271,9 +271,15 @@ try {
     );
     record('the thumbnail rail sits to the right of the stage', initial.railRightOfStage);
 
-    // Click the third thumbnail.
-    await page.click('#showcase-tab-3');
-    const afterClick = await readState();
+    // Click the third thumbnail. The module script is deferred, so the rail may
+    // not have listeners yet on a busy runner — retry until the click lands.
+    let afterClick = initial;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await page.click('#showcase-tab-3');
+      afterClick = await readState();
+      if (afterClick.visibleId === 'showcase-panel-3') break;
+      await sleep(150);
+    }
     record(
       'clicking a thumbnail switches the visible example',
       afterClick.visibleId === 'showcase-panel-3' && afterClick.visibleCount === 1 && afterClick.activeTabId === 'showcase-tab-3',

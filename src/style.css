@@ -228,44 +228,6 @@
     white-space: nowrap;
   }
 
-  /* ——— Animated progress ring ——— */
-  .ring {
-    display: inline-flex;
-    width: 22px;
-    height: 22px;
-    flex: none;
-  }
-  .ring[hidden] {
-    display: none;
-  }
-  .ring svg {
-    width: 22px;
-    height: 22px;
-  }
-  .ring .ringTrack {
-    fill: none;
-    stroke: var(--color-slate-200);
-    stroke-width: 3.5;
-  }
-  .ring .ringValue {
-    fill: none;
-    stroke: var(--color-blue-600);
-    stroke-width: 3.5;
-    stroke-linecap: round;
-    stroke-dasharray: 94.25;
-    stroke-dashoffset: 94.25;
-    transform: rotate(-90deg);
-    transform-origin: 50% 50%;
-    transition: stroke-dashoffset 0.2s ease;
-  }
-  .ring.indeterminate svg {
-    animation: ringSpin 1s linear infinite;
-  }
-  .ring.indeterminate .ringValue {
-    stroke-dasharray: 24 94.25;
-    stroke-dashoffset: 0;
-  }
-
   /* ——— Comparison slider (landing showcase + studio compare tab) ——— */
   .compareStage {
     position: relative;
@@ -450,108 +412,16 @@
     cursor: not-allowed;
   }
 
-  /* ——— Status dots: pipeline stages (left) + log categories (right) ———
-     The console is now a compact strip: the pipeline is a row of labelled dots
-     and each log category has its own dot that flashes when a line lands. */
-  .consoleDotsRow {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-  }
-  .stepList {
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    flex-wrap: wrap;
-  }
-  .stepList li {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.3rem;
-    color: var(--color-slate-500);
-    font-size: 0.6rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-  }
-  .stepList li .dot {
-    width: 0.6rem;
-    height: 0.6rem;
-    border-radius: 50%;
-    background: var(--color-slate-300);
-    flex: none;
-    transition: background 0.2s ease, box-shadow 0.2s ease;
-  }
-  .stepList li[data-state='active'] {
-    color: var(--color-slate-900);
-  }
-  .stepList li[data-state='active'] .dot {
-    background: var(--color-blue-500);
-    box-shadow: 0 0 8px color-mix(in oklab, var(--color-blue-500) 60%, transparent);
-    animation: dotPulse 1.2s ease-in-out infinite;
-  }
-  .stepList li[data-state='done'] .dot {
-    background: var(--color-emerald-500);
-  }
-  .stepList li .stepDetail {
-    color: var(--color-slate-400);
-    font-weight: 500;
-    font-size: 0.55rem;
-    text-transform: none;
-  }
-
-  /* One chevron per log category: dim until the category has lines, then tinted
-     and flipping to point up when its block is open. */
-  .logDots {
-    display: flex;
-    align-items: center;
-    gap: 0.1rem;
-    margin-left: auto;
-  }
-  .logDots .logDot {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.35rem;
-    height: 1.35rem;
-    border: 0;
-    padding: 0;
-    border-radius: 0.4rem;
-    background: transparent;
-    color: var(--color-slate-300);
-    cursor: pointer;
-    transition: color 0.2s ease, background 0.2s ease;
-  }
-  .logDots .logDot:hover {
-    background: var(--color-slate-100);
-  }
-  .logDots .logDot[data-active='true'] {
-    color: var(--color-blue-500);
-  }
-  .logChevron,
+  /* A chevron at the end of each collapsible thread header; it flips to point
+     up while the block is open. */
   .consoleChevron {
     display: inline-flex;
     flex: none;
     transition: transform 0.2s ease;
   }
-  .logChevron svg {
-    width: 0.85rem;
-    height: 0.85rem;
-  }
   .consoleChevron svg {
     width: 0.95rem;
     height: 0.95rem;
-  }
-  .logDots .logDot[aria-expanded='true'] .logChevron {
-    transform: rotate(180deg);
-  }
-  .logDots .logDot.flash {
-    animation: logDotFlash 0.7s ease-out;
   }
 
   /* ——— Toasts ——— */
@@ -1202,14 +1072,13 @@
     white-space: nowrap;
     color: var(--color-slate-500);
     background: transparent;
-    border: 1px solid transparent;
+    border: 0;
     cursor: pointer;
-    transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+    transition: color 0.2s ease, background 0.2s ease;
   }
   .editorTab[aria-selected='true'] {
     color: var(--color-blue-700);
     background: var(--color-blue-50);
-    border-color: var(--color-blue-100);
   }
   .editorTab:disabled {
     opacity: 0.4;
@@ -1429,6 +1298,10 @@
   .consoleStatus.working {
     animation: workingText 1.6s ease-in-out infinite;
   }
+  /* Error state: the console-bar status reads in the error colour theme. */
+  .consoleStatus.is-error {
+    color: var(--color-red-900);
+  }
   .consoleScroll {
     flex: 1;
     min-height: 0;
@@ -1436,7 +1309,9 @@
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
-    padding: 0.8rem 0.9rem;
+    /* No horizontal padding here: the thread rows carry their own so their
+       backgrounds span the full console width. */
+    padding: 0.8rem 0;
     scrollbar-width: thin;
     scrollbar-color: var(--color-slate-300) transparent;
   }
@@ -1446,23 +1321,6 @@
   .consoleScroll::-webkit-scrollbar-thumb {
     background: var(--color-slate-300);
     border-radius: 4px;
-  }
-  .consoleStage {
-    margin: 0;
-    font-size: 0.72rem;
-    font-weight: 500;
-    color: var(--color-slate-700);
-    background: var(--color-slate-100);
-    border: 1px solid var(--color-slate-200);
-    border-radius: 0.6rem;
-    padding: 0.5rem 0.7rem;
-    line-height: 1.4;
-  }
-  /* Error state: the stage line reads in the error colour theme. */
-  .consoleStage.is-error {
-    color: var(--color-red-900);
-    background: var(--color-red-50);
-    border-color: var(--color-red-200);
   }
   /* Borderless collapsible blocks. The summary is a quiet header row with a
      chevron; the body is indented as the "children" of that thread, with the
@@ -1476,7 +1334,7 @@
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.3rem 0.15rem;
+    padding: 0.3rem 1.05rem;
     cursor: pointer;
     list-style: none;
     font-size: 0.72rem;
@@ -1493,9 +1351,6 @@
   .consoleGroup[open] > .consoleGroupSummary .consoleChevron {
     transform: rotate(180deg);
   }
-  .consoleGroup[data-active='true'] .consoleChevron {
-    color: var(--color-blue-500);
-  }
   .consoleGroupName {
     flex: 1;
   }
@@ -1504,7 +1359,25 @@
     font-weight: 600;
     color: var(--color-slate-500);
   }
-  /* Thread children: indented to the right of the header chevron. */
+  /* While a run is in flight the thread labels read in grey, with a white light
+     sweeping across them (background-clip: text) so the console shows it is
+     working. The animation is opt-in via [data-running] on the console card. */
+  .consoleCard[data-running='true'] .consoleGroupName,
+  .consoleCard[data-running='true'] .consoleGroupCount {
+    color: var(--color-slate-400);
+    background-image: linear-gradient(
+      100deg,
+      transparent 35%,
+      var(--color-white) 50%,
+      transparent 65%
+    );
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: threadSweep 2.4s linear infinite;
+  }
+  /* Thread children: indented under the label. */
   .consoleGroupBody {
     margin-left: 1.4rem;
     padding: 0.35rem 0 0.5rem;
@@ -1520,6 +1393,7 @@
   .logBody {
     max-height: 12rem;
     overflow-y: auto;
+    padding-right: 0.6rem;
     scrollbar-width: thin;
     scrollbar-color: var(--color-slate-300) transparent;
   }
@@ -1642,29 +1516,21 @@
     transform: rotate(360deg);
   }
 }
-@keyframes dotPulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-blue-500) 55%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-blue-500) 0%, transparent);
-  }
-}
-@keyframes logDotFlash {
-  0% {
-    transform: scale(1.9);
-    background: var(--color-cyan-400, #22d3ee);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
 @keyframes workingText {
   0%, 100% {
     color: var(--color-slate-500);
   }
   50% {
     color: var(--color-blue-600);
+  }
+}
+/* A white highlight sweeping left→right across the thread labels. */
+@keyframes threadSweep {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -130% 0;
   }
 }
 @keyframes toastIn {
@@ -1742,10 +1608,14 @@
   .heroTaglineTrack {
     animation: none;
   }
-  .stepList li[data-state='active'] .dot,
-  .consoleStatus.working,
-  .logDots .logDot.flash {
+  .consoleStatus.working {
     animation: none;
+  }
+  .consoleCard[data-running='true'] .consoleGroupName,
+  .consoleCard[data-running='true'] .consoleGroupCount {
+    animation: none;
+    -webkit-text-fill-color: var(--color-slate-400);
+    color: var(--color-slate-400);
   }
   html.theme-transition * {
     transition: none;

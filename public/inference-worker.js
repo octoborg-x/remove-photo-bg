@@ -133,6 +133,20 @@ function humanBytes(n) {
   return (n / 1048576).toFixed(1) + ' MB';
 }
 
+// The in-flight model download's AbortController, so the main thread can stop a
+// transfer the moment the connection becomes metered (see the 'cancel-model'
+// message). Null whenever nothing is downloading. `downloadAbortReason` is set
+// just before abort() so the fetch failure is reported as a deliberate cancel
+// rather than a network error.
+let downloadController = null;
+let downloadAbortReason = null;
+
+function cancelError(reason) {
+  const err = new Error(reason);
+  err.name = 'CancelError';
+  return err;
+}
+
 // One retry on a stall: a proxy that wedged one connection usually serves a
 // fresh request fine, and a second attempt is worth 30 s when the alternative is
 // telling the user the app does not work.
@@ -155,6 +169,8 @@ async function downloadModel(url, onProgress) {
 
 async function downloadAttempt(url, onProgress) {
   const controller = new AbortController();
+  downloadController = controller;
+  downloadAbortReason = null;
   let stallReason = null;
   let timer = null;
   const armStallTimer = () => {
@@ -202,12 +218,17 @@ async function downloadAttempt(url, onProgress) {
     assertModelSize(received, url);
     return out.buffer;
   } catch (err) {
+    // A deliberate cancel (metered switch) takes precedence over the stall
+    // heuristic: the fetch rejected with an AbortError, but the reason we stopped
+    // is the connection change, not a stalled origin.
+    if (downloadAbortReason) throw cancelError(downloadAbortReason);
     if (!stallReason) throw err;
     const stall = new Error(stallReason);
     stall.name = 'StallError';
     throw stall;
   } finally {
     clearTimeout(timer);
+    if (downloadController === controller) downloadController = null;
   }
 }
 
@@ -387,7 +408,9 @@ self.onmessage = async (e) => {
       // only dropped when the URL actually changes — a provider switch re-sends
       // the SAME url, and rebuilding the session on another execution provider
       // only needs those bytes in memory, so re-fetching them is pure waste
-      // (the service worker would serve them from cache anyway).
+      // (the service worker would serve them from cache anyway). A cancelled
+      // download leaves `modelBytes` null (it is only assigned once the whole
+      // file has arrived), so resuming re-fetches from the start.
       await session?.release?.();
       session = null;
       if (msg.modelUrl !== modelUrl) modelBytes = null;
@@ -473,6 +496,18 @@ self.onmessage = async (e) => {
       post({ kind: 'inference-time', ms: result.timeMs, runId: msg.runId });
       return;
     }
+    if (msg.kind === 'cancel-model') {
+      // Stop an in-flight model download (the main thread sends this when the
+      // connection becomes metered). The fetch rejects with an AbortError, which
+      // downloadAttempt rethrows as a CancelError, and the set-model try/catch
+      // below posts it back as a non-fatal error. Bytes are left in memory for a
+      // provider switch, but a cancelled transfer has none yet.
+      if (downloadController) {
+        downloadAbortReason = msg.reason || 'Model download cancelled.';
+        downloadController.abort();
+      }
+      return;
+    }
     if (msg.kind === 'dispose') {
       await session?.release?.();
       session = null;
@@ -484,6 +519,9 @@ self.onmessage = async (e) => {
       message: err instanceof Error ? err.message : String(err),
       runId: msg.kind === 'run' ? msg.runId : undefined,
       fatal: msg.kind === 'set-model',
+      // A deliberate cancel (metered switch) is not a failure: the main thread
+      // re-arms the download prompt instead of showing an error recovery.
+      cancelled: err instanceof Error && err.name === 'CancelError',
     });
   }
 };

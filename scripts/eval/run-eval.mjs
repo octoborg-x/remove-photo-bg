@@ -152,7 +152,7 @@ let loadedModel = null;
     .catch(() => false);
   if (!ready) {
     const st = await p.evaluate(() => ({
-      stage: document.getElementById('stage')?.textContent,
+      stage: document.getElementById('processingLabel')?.textContent,
       log: document.getElementById('log')?.textContent,
     }));
     console.error('Model did not become ready:', JSON.stringify(st, null, 2));
@@ -208,7 +208,7 @@ for (const cat of manifest.categories) {
     await p.click('#dropZone');
     (await chooserPromise).accept([file]);
     await p.waitForFunction(
-      () => /^(Done|Error|No output)/.test(document.getElementById('stage')?.textContent ?? ''),
+      () => /^(Done|Error|No output)/.test(document.getElementById('processingLabel')?.textContent ?? ''),
       { timeout: 900000, polling: 300 },
     );
 
@@ -225,7 +225,7 @@ for (const cat of manifest.categories) {
       }
       done = await p
         .waitForFunction(
-          () => /^(Done|Error|No output)/.test(document.getElementById('stage')?.textContent ?? ''),
+          () => /^(Done|Error|No output)/.test(document.getElementById('processingLabel')?.textContent ?? ''),
           { timeout: 900000, polling: 300 },
         )
         .then(() => true)
@@ -234,7 +234,7 @@ for (const cat of manifest.categories) {
       state = await p.evaluate(() => {
         const img = document.querySelector('#outputBox img');
         return {
-          stage: document.getElementById('stage')?.textContent ?? '',
+          stage: document.getElementById('processingLabel')?.textContent ?? '',
           log: document.getElementById('log')?.textContent ?? '',
           dataUrl: img ? img.getAttribute('src') : null,
         };

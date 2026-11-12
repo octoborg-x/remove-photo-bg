@@ -6,6 +6,9 @@ import {
   downloadConfirmationText,
   shouldAutoFetchModel,
   isUnmeteredConnection,
+  isMeteredConnection,
+  connectionChangeAction,
+  meteredSwitchNotice,
 } from './network-preflight';
 
 describe('classifyConnection', () => {
@@ -144,6 +147,54 @@ describe('isUnmeteredConnection', () => {
     expect(isUnmeteredConnection('unknown')).toBe(true);
     expect(isUnmeteredConnection('cellular')).toBe(false);
     expect(isUnmeteredConnection('metered')).toBe(false);
+  });
+});
+
+describe('isMeteredConnection', () => {
+  it('is the complement of isUnmeteredConnection', () => {
+    expect(isMeteredConnection('cellular')).toBe(true);
+    expect(isMeteredConnection('metered')).toBe(true);
+    expect(isMeteredConnection('wifi')).toBe(false);
+    expect(isMeteredConnection('unknown')).toBe(false);
+  });
+});
+
+describe('connectionChangeAction', () => {
+  it('pauses an in-flight download the moment the link becomes metered', () => {
+    expect(connectionChangeAction('wifi', 'cellular', true)).toBe('pause');
+    expect(connectionChangeAction('wifi', 'metered', true)).toBe('pause');
+    // A switch between two metered links is still a pause.
+    expect(connectionChangeAction('cellular', 'metered', true)).toBe('pause');
+  });
+
+  it('leaves an in-flight download alone while the link stays unmetered', () => {
+    expect(connectionChangeAction('wifi', 'wifi', true)).toBe('none');
+    expect(connectionChangeAction('unknown', 'wifi', true)).toBe('none');
+  });
+
+  it('starts the download when an unmetered link appears and nothing is running', () => {
+    expect(connectionChangeAction('cellular', 'wifi', false)).toBe('start');
+    expect(connectionChangeAction('metered', 'unknown', false)).toBe('start');
+  });
+
+  it('does nothing when a metered link persists, or an unmetered link was already up', () => {
+    expect(connectionChangeAction('cellular', 'cellular', false)).toBe('none');
+    expect(connectionChangeAction('wifi', 'wifi', false)).toBe('none');
+    expect(connectionChangeAction('wifi', 'cellular', false)).toBe('none');
+  });
+});
+
+describe('meteredSwitchNotice', () => {
+  it('states the size, that it paused, and how to resume', () => {
+    const text = meteredSwitchNotice(60 * 1024 * 1024, 'QMix Cut-512');
+    expect(text).toContain('mobile data');
+    expect(text).toMatch(/paused/i);
+    expect(text).toContain('60.0 MB');
+    expect(text).toMatch(/continue/i);
+  });
+
+  it('handles an unknown size without printing "0 B"', () => {
+    expect(meteredSwitchNotice(0)).toContain('large file');
   });
 });
 

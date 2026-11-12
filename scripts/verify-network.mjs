@@ -62,7 +62,7 @@ await page.evaluate(() => {
 await new Promise((r) => setTimeout(r, 20000)); // watch during processing
 
 const state = await page.evaluate(() => ({
-  stage: document.getElementById('stage')?.textContent,
+  stage: document.getElementById('processingLabel')?.textContent,
   provider: window.smokeProvider,
 }));
 

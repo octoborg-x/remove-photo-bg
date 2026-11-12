@@ -1255,6 +1255,75 @@ try {
     clearInterval(scanTimer);
     await page.close();
   }
+
+  // ——— Scenario 11: progressive refinement (Stage 1 preview → refined final) ———
+  // The 512px model's soft mask is refined on the already-decoded original by an
+  // image-guided filter. The export must keep the original dimensions, the
+  // refinement must report its stage timings, and ?refine=off must reproduce the
+  // unrefined Stage-1 result exactly (the A/B baseline).
+  {
+    const page = await browser.newPage();
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+    await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
+    await chooseFile(page, resolve(ROOT, 'test-images/glass-wine.jpg'));
+    await page.waitForFunction(() => document.querySelector('#outputBox img') !== null, { timeout: 600000 });
+    // Wait for the refined final result to replace the interim preview.
+    await page.evaluate(() => window.waitForJobSettled());
+    const refined = await page.evaluate(async () => {
+      const dl = document.getElementById('downloadImage');
+      const im = new Image();
+      im.src = dl.href;
+      await im.decode();
+      const notice = document.getElementById('refineNotice');
+      return {
+        download: dl.getAttribute('download'),
+        w: im.naturalWidth,
+        h: im.naturalHeight,
+        stages: window.smokeRefineStages ?? null,
+        noticeHidden: notice ? notice.hidden : true,
+      };
+    });
+    record(
+      'refined export keeps the original dimensions (960x1280)',
+      refined.w === 960 && refined.h === 1280,
+      refined.download,
+    );
+    record(
+      'refinement reports its stage timings (upscale/filter/cleanup)',
+      refined.stages !== null &&
+        typeof refined.stages.upscaleMs === 'number' &&
+        typeof refined.stages.refineMs === 'number' &&
+        typeof refined.stages.cleanupMs === 'number',
+      refined.stages ? `total ${Math.round(refined.stages.totalMs)}ms` : 'null',
+    );
+    record('the refining banner is hidden once the final result is ready', refined.noticeHidden === true);
+    await page.close();
+
+    // A/B baseline: ?refine=off bypasses Stages 3-4 (no stage timings, same size).
+    const base = await browser.newPage();
+    const offUrl = new URL(pageUrl.toString());
+    offUrl.searchParams.set('refine', 'off');
+    await base.goto(offUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(base);
+    await base.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
+    await chooseFile(base, resolve(ROOT, 'test-images/glass-wine.jpg'));
+    await base.waitForFunction(() => document.querySelector('#outputBox img') !== null, { timeout: 600000 });
+    await base.evaluate(() => window.waitForJobSettled());
+    const off = await base.evaluate(async () => {
+      const dl = document.getElementById('downloadImage');
+      const im = new Image();
+      im.src = dl.href;
+      await im.decode();
+      return { w: im.naturalWidth, h: im.naturalHeight, stages: window.smokeRefineStages ?? null };
+    });
+    record(
+      '?refine=off bypasses refinement (no stage timings) and still exports at full size',
+      off.stages === null && off.w === 960 && off.h === 1280,
+      `stages=${off.stages} ${off.w}x${off.h}`,
+    );
+    await base.close();
+  }
 } finally {
   await browser.close();
   if (server && !keepServer) {

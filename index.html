@@ -822,6 +822,13 @@
 
                 <!-- Output Image Box with Checkerboard Background -->
                 <div id="outputBox" class="outputBox min-h-[320px] flex items-center justify-center p-6 checkerboard-pattern"></div>
+
+                <!-- Refinement banner: shown over the already-usable preview while
+                     the edge-refinement stage sharpens it (no fabricated %). -->
+                <div id="refineNotice" class="refineNotice" role="status" hidden>
+                  <span class="refineSpinner" aria-hidden="true"></span>
+                  <span>Refining edges…</span>
+                </div>
               </div>
 
               <!-- Background: one system colour picker (native input + screen eyedropper) -->

@@ -1137,6 +1137,41 @@
   #outputFrame #outputBox {
     min-height: 0 !important;
   }
+  /* A small, indeterminate banner over the already-usable preview while the edge
+     refinement sharpens it. No percentage is shown (the stage has none). */
+  .refineNotice {
+    position: absolute;
+    left: 50%;
+    bottom: 0.85rem;
+    transform: translateX(-50%);
+    z-index: 15;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 9999px;
+    background: rgb(15 23 42 / 0.82);
+    color: var(--color-slate-100);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
+  .refineNotice[hidden] {
+    display: none;
+  }
+  .refineSpinner {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 9999px;
+    border: 2px solid rgb(148 163 184 / 0.45);
+    border-top-color: var(--color-slate-100);
+    animation: refineSpin 0.8s linear infinite;
+  }
+  @keyframes refineSpin {
+    to { transform: rotate(360deg); }
+  }
   .procWallpaper {
     min-height: 0;
     height: 100%;

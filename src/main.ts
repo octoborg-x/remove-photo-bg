@@ -22,6 +22,12 @@ import {
 } from './features/background-removal/mask-postprocess';
 import { composeResult } from './features/background-removal/composite';
 import { recoverForegroundMask } from './features/background-removal/mask-recovery';
+import { cropMaskFloat, alphaToBytes, lumaFromRgba } from './features/background-removal/mask-resize';
+import { RefinementRunner } from './features/background-removal/refinement-client';
+import {
+  refinementConfigFromParams,
+  type FastRefinementConfig,
+} from './features/background-removal/refinement-config';
 import {
   canvasToDataUrl,
   canEncode,
@@ -120,6 +126,7 @@ declare const __BUILD_ID__: string;
 const logGroupsEl = document.getElementById('logGroups')!;
 const outputBox = document.getElementById('outputBox')!;
 const outputSection = document.getElementById('outputSection')!;
+const refineNoticeEl = document.getElementById('refineNotice')!;
 const modelNameEl = document.getElementById('modelName')!;
 const modelSizeEl = document.getElementById('modelSize')!;
 const providerToggle = document.getElementById('providerToggle')! as HTMLSelectElement;
@@ -205,6 +212,9 @@ function renderStudioView(): void {
   // While a run is in flight, the console thread labels animate (grey text with
   // a white light sweeping across it).
   consoleCardEl.dataset.running = String(studioView.running);
+  // The refinement banner sits over the already-usable preview while the edge
+  // stage runs, and disappears the instant the refined result is swapped in.
+  refineNoticeEl.hidden = !studioView.refining;
 }
 
 function setStudioTab(tab: StudioTab, force = false): void {
@@ -233,6 +243,11 @@ function studioRunStart(): void {
 
 function studioProgress(percent: number | null): void {
   studioView = reduceStudio(studioView, { type: 'progress', percent });
+  applyStudioView();
+}
+
+function studioPreview(): void {
+  studioView = reduceStudio(studioView, { type: 'preview' });
   applyStudioView();
 }
 
@@ -1122,6 +1137,10 @@ async function loadImageFromFile(file: File): Promise<void> {
   if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
   currentObjectUrl = url;
   showInputImage(img);
+  // A new photo invalidates the previous job: bump the job id and cancel any
+  // refinement still running for the old one, so its late result cannot paint
+  // over this new job's preview.
+  invalidateActiveJob();
   // A new photo invalidates the previous result and any error panel.
   clearOutput();
   studioSelectImage();
@@ -1150,6 +1169,8 @@ async function loadImageFromUrl(url: string): Promise<void> {
   ctx.drawImage(img, 0, 0);
   currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   currentImage = img;
+  // A new photo invalidates the previous job (same guard as loadImageFromFile).
+  invalidateActiveJob();
   showInputImage(img);
   log(`Loaded image from URL: ${url} (${canvas.width}x${canvas.height})`);
 }
@@ -1317,21 +1338,69 @@ async function initWorker(): Promise<void> {
   };
 }
 
-// A worker `result-ready` message: scale the mask to the photo, run the flood-fill
-// recovery, apply the user's threshold/feather, then composite off the main thread
-// (composite.ts). The compositing is async, so the worker handler returns and the
-// UI settles in `finishResult`.
+// Progressive-refinement state. `activeJobId` identifies the current job; every
+// async step checks it before touching the UI, so a stale job (a superseded
+// upload, or a refinement reply that arrives after a newer run started) can never
+// overwrite a newer job's preview. It is bumped on every new upload.
+let activeJobId = 0;
+// The run id of the inference currently in flight, so `result-ready` can reject a
+// superseded run's late result. Set when the run is posted (runOneInference).
+let currentRunId = -1;
+const refineConfig: FastRefinementConfig = refinementConfigFromParams(urlParams);
+const refinementRunner = new RefinementRunner();
+// Per-run stage timings, captured for the smoke harness (window.smokeRefineStages).
+let smokeRefineStages: Record<string, unknown> | null = null;
+
+// A job is "settled" once it has produced its final preview or failed; the
+// Stage-1 preview is only an interim step. The smoke harness waits on this so it
+// exports the refined result rather than the interim preview.
+const jobSettleWaiters: Array<() => void> = [];
+let lastJobSettled = true;
+function markJobSettled(): void {
+  lastJobSettled = true;
+  for (const w of jobSettleWaiters.splice(0)) w();
+}
+function waitForJobSettled(): Promise<void> {
+  if (lastJobSettled) return Promise.resolve();
+  return new Promise((resolve) => jobSettleWaiters.push(resolve));
+}
+
+// Starts a new job: bump the id (so any in-flight async work for the previous
+// job is ignored when it settles) and cancel any refinement still running. A
+// superseded job never settles the waiters, so a stale run cannot end a newer
+// run's wait early.
+function invalidateActiveJob(): void {
+  activeJobId += 1;
+  refinementRunner.cancel();
+  markJobSettled();
+}
+
+// A worker `result-ready` message. Progressive refinement splits this into two
+// visible beats:
+//   Stage 1 (here): reconstruct the soft mask at the original resolution, run the
+//     flood-fill recovery, apply the user's threshold/feather, and composite an
+//     *initial* preview that is shown immediately and is exportable.
+//   Stages 2-4 (refineAndFinalize): refine the soft mask (guided filter + cleanup)
+//     off the main thread and atomically swap in the sharper result.
+// The refinement is never a prerequisite: a failure or cancellation leaves the
+// initial preview on screen.
 function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-ready' }>): void {
+  // A late result from a superseded run must not paint over a newer job.
+  if (msg.runId !== undefined && msg.runId !== currentRunId) {
+    log('Ignoring a superseded run\'s result.');
+    return;
+  }
   if (!currentImageData) {
     log('WARNING: got a result with no loaded image; ignoring');
     return;
   }
   const image = currentImageData;
-  // The inference is done; the only work left is compositing the cut-out, which
-  // has no measurable percentage of its own.
+  const jobId = activeJobId;
+  // The inference is done; the remaining work is mask reconstruction/refinement
+  // and compositing, which have no measurable percentage of their own.
   beginProcPhase('finalize', phaseExpectedMs('finalize', 0));
   refreshProcPercent();
-  setConsoleStatus('Creating your image…', true);
+  setConsoleStatus('Building your preview…', true);
   // The worker reports the model's actual input size so a per-model input change
   // (e.g. a 384 variant) never mis-scales the mask. The mask covers the
   // letterboxed content rect inside that square (the same geometry the
@@ -1351,17 +1420,99 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   }
   // Apply the user's mask threshold/feather at full destination resolution (the
   // values are percentages/pixels of the *output* mask).
-  const finalMask = applyMaskAdjust(recoveredMask, image.width, image.height, maskAdjust);
+  const stage1Mask = applyMaskAdjust(recoveredMask, image.width, image.height, maskAdjust);
   const size = `${image.width}x${image.height}`;
-  composeResult(image, finalMask)
-    .then(({ canvas, preview }) => finishResult(canvas, preview, size))
-    .catch((err) => error(`Could not compose the cut-out: ${err instanceof Error ? err.message : String(err)}`));
+
+  // Keep the cropped float mask + the recovered 8-bit mask: the float mask is
+  // the input to refinement (Stages 2-4), the 8-bit mask is the fallback when
+  // refinement is disabled or fails.
+  const croppedFloat = cropMaskFloat(msg.mask, inputSize, rect);
+  const guide = lumaFromRgba(image.data);
+
+  const refineEnabled = refineConfig.enabled;
+  composeResult(image, stage1Mask)
+    .then(({ canvas, preview }) => {
+      if (jobId !== activeJobId) return;
+      // Paint the Stage-1 preview immediately (finishResult shows the Result tab
+      // and enables export). With refinement enabled this is the interim beat;
+      // disabled, it is the settled result.
+      finishResult(canvas, preview, size, refineEnabled ? 'preview' : 'final');
+      if (!refineEnabled) return;
+      return refineAndFinalize(jobId, image, croppedFloat, rect, guide, size);
+    })
+    .catch((err) => {
+      if (jobId !== activeJobId) return;
+      endProcPhase();
+      markJobSettled();
+      error(`Could not compose the cut-out: ${err instanceof Error ? err.message : String(err)}`);
+    });
+}
+
+// Stages 2-4: refine the soft mask and, on success, swap in the sharper result
+// atomically. Any failure or cancellation keeps the initial preview.
+async function refineAndFinalize(
+  jobId: number,
+  image: ImageData,
+  croppedFloat: Float32Array,
+  rect: { width: number; height: number },
+  guide: Float32Array,
+  size: string,
+): Promise<void> {
+  setConsoleStatus('Refining edges…', true);
+  const t0 = performance.now();
+  try {
+    const outcome = await refinementRunner.refine({
+      jobId,
+      guide,
+      mask: croppedFloat,
+      maskWidth: rect.width,
+      maskHeight: rect.height,
+      width: image.width,
+      height: image.height,
+      config: refineConfig,
+    });
+    if (jobId !== activeJobId) return; // superseded: drop silently
+    if ('cancelled' in outcome) return; // a newer job owns the UI now
+    // The refinement returns a soft float alpha; apply the user's
+    // threshold/feather, then composite. The flood-fill recovery guard was
+    // already applied to the Stage-1 mask and the refined alpha is derived from
+    // the same soft mask, so it is not re-run here.
+    const refinedMask = applyMaskAdjust(alphaToBytes(outcome.alpha), image.width, image.height, maskAdjust);
+    const { canvas, preview } = await composeResult(image, refinedMask);
+    if (jobId !== activeJobId) return;
+    finishResult(canvas, preview, size, 'final');
+    const { timings } = outcome;
+    smokeRefineStages = { ...timings, finalizeMs: performance.now() - t0 };
+    log(
+      `Refined edges: mask ${timings.workWidth}x${timings.workHeight} in ` +
+        `${timings.totalMs.toFixed(0)} ms (upscale ${timings.upscaleMs.toFixed(0)}, ` +
+        `filter ${timings.refineMs.toFixed(0)}, cleanup ${timings.cleanupMs.toFixed(0)}).`,
+    );
+  } catch (err) {
+    if (jobId !== activeJobId) return;
+    // Refinement is an enhancement: keep the initial preview and report the
+    // failure in the log, without an error recovery panel (the result is usable).
+    endProcPhase();
+    log(
+      `WARNING: edge refinement failed (${err instanceof Error ? err.message : String(err)}); showing the initial preview.`,
+    );
+    setConsoleStatus('Done — download your image below.', false);
+    studioResult();
+    markJobSettled();
+  }
 }
 
 // Paints a freshly composited result: the compare view, the preview, the download
 // link and the step list, then reports how much of the frame stayed opaque so a
 // blank or a fully-kept result is called out rather than shown silently.
-function finishResult(canvas: HTMLCanvasElement, preview: HTMLCanvasElement, size: string): void {
+// `phase` is 'preview' for the interim Stage-1 cut-out (which stays on the Result
+// tab but keeps the job marked as running) or 'final' for the settled result.
+function finishResult(
+  canvas: HTMLCanvasElement,
+  preview: HTMLCanvasElement,
+  size: string,
+  phase: 'preview' | 'final' = 'final',
+): void {
   lastResultCanvas = canvas;
   lastPreviewCanvas = preview;
 
@@ -1378,9 +1529,18 @@ function finishResult(canvas: HTMLCanvasElement, preview: HTMLCanvasElement, siz
   applyFormatUi();
 
   outputSection.hidden = false;
-  setConsoleStatus('Done — download your image below.', false);
-  endProcPhase();
-  studioResult();
+  // The export dimensions are the original dimensions; refinement never
+  // downscales the export.
+  if (phase === 'final') {
+    setConsoleStatus('Done — download your image below.', false);
+    endProcPhase();
+    studioResult();
+    markJobSettled();
+  } else {
+    // The Stage-1 preview is already exportable; only the label differs.
+    setConsoleStatus('Preview ready — refining edges…', true);
+    studioPreview();
+  }
   // Record the settings this cut-out was produced with; changing them later
   // reveals the re-process button.
   resultSettingsKey = engineSettingsKey();
@@ -1679,6 +1839,8 @@ function runOneInference(): Promise<number> {
   }
   const tensor = imageDataToTensor(imageData);
   const runId = nextRunId++;
+  currentRunId = runId;
+  smokeRefineStages = null;
   return new Promise<number>((resolve, reject) => {
     pendingRuns.set(runId, { resolve, reject });
     // Transfer the tensor buffer instead of structured-cloning it (12.6 MB/run).
@@ -1760,6 +1922,10 @@ declare global {
     smokeModelId: string;
     /** True while the model download is stopped because the link became metered. */
     smokeModelPaused: boolean;
+    /** Per-run refinement stage timings (upscale/filter/cleanup/total), or null. */
+    smokeRefineStages: Record<string, unknown> | null;
+    /** Resolves once the current job has produced its final (refined) preview. */
+    waitForJobSettled: () => Promise<void>;
     crossOriginIsolated: boolean;
   }
 }
@@ -1815,6 +1981,7 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
   beginProcPhase('inference', estimateInferenceMs(timings));
   refreshProcPercent();
   timings.length = 0;
+  lastJobSettled = false;
   for (let i = 0; i < runs; i++) {
     try {
       await runOneInference();
@@ -1826,6 +1993,10 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
       return null;
     }
   }
+  // The inference resolves when the mask is back; the cut-out (and its edge
+  // refinement, when enabled) is composited afterwards. Wait for the final
+  // preview so an automated run reports the refined result, not the interim one.
+  await waitForJobSettled();
   finishedRun();
   const result: RunDone = {
     timings: [...timings],
@@ -1842,6 +2013,9 @@ window.runSmoke = runSmoke;
 window.smokeModelReady = false;
 window.smokeModelId = '';
 window.smokeModelPaused = false;
+// A getter so the harness always reads the current run's stage timings.
+Object.defineProperty(window, 'smokeRefineStages', { get: () => smokeRefineStages });
+window.waitForJobSettled = waitForJobSettled;
 
 // ——— Progress state ———
 // The stage line, the progress ring, and the processing panel all read from the

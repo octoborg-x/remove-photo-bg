@@ -1298,6 +1298,10 @@
   .consoleStatus.working {
     animation: workingText 1.6s ease-in-out infinite;
   }
+  /* Error state: the console-bar status reads in the error colour theme. */
+  .consoleStatus.is-error {
+    color: var(--color-red-900);
+  }
   .consoleScroll {
     flex: 1;
     min-height: 0;
@@ -1305,8 +1309,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
-    /* No horizontal padding here: the status element and the thread rows carry
-       their own so their backgrounds span the full console width. */
+    /* No horizontal padding here: the thread rows carry their own so their
+       backgrounds span the full console width. */
     padding: 0.8rem 0;
     scrollbar-width: thin;
     scrollbar-color: var(--color-slate-300) transparent;
@@ -1317,25 +1321,6 @@
   .consoleScroll::-webkit-scrollbar-thumb {
     background: var(--color-slate-300);
     border-radius: 4px;
-  }
-  .consoleStage {
-    margin: 0;
-    font-size: 0.72rem;
-    font-weight: 500;
-    color: var(--color-slate-700);
-    background: var(--color-slate-100);
-    /* Full-width band: the background runs edge to edge, so only the top and
-       bottom edges carry a rule and the block has no side radius. */
-    border-top: 1px solid var(--color-slate-200);
-    border-bottom: 1px solid var(--color-slate-200);
-    padding: 0.5rem 0.9rem;
-    line-height: 1.4;
-  }
-  /* Error state: the stage line reads in the error colour theme. */
-  .consoleStage.is-error {
-    color: var(--color-red-900);
-    background: var(--color-red-50);
-    border-color: var(--color-red-200);
   }
   /* Borderless collapsible blocks. The summary is a quiet header row with a
      chevron; the body is indented as the "children" of that thread, with the

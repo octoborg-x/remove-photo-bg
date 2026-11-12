@@ -56,6 +56,9 @@ import {
   downloadConfirmationText,
   shouldAutoFetchModel,
   currentConnectionClass,
+  connectionChangeAction,
+  meteredSwitchNotice,
+  type ConnectionClass,
 } from './features/background-removal/network-preflight';
 import {
   detectWebGpu,
@@ -113,7 +116,6 @@ import type {
 // Replaced at build/serve time by the build-stamp plugin in vite.config.ts.
 declare const __BUILD_ID__: string;
 
-const stageEl = document.getElementById('stage')!;
 const logGroupsEl = document.getElementById('logGroups')!;
 const outputBox = document.getElementById('outputBox')!;
 const outputSection = document.getElementById('outputSection')!;
@@ -880,8 +882,10 @@ function appendConsoleLine(line: string): void {
     entry.group.hidden = false;
     entry.group.dataset.active = 'true';
     entry.count.textContent = String(lines.length);
-    // An error is worth surfacing without a click.
-    if (classified.level === 'error') entry.group.open = true;
+    // The thread that just received a line is the active one, so keep it expanded
+    // and scrolled to its newest line — the user sees the live log without having
+    // to click the category open.
+    entry.group.open = true;
     entry.body.scrollTop = entry.body.scrollHeight;
   }
 }
@@ -896,15 +900,28 @@ privacyToggle.addEventListener('click', () => {
   privacyToggle.setAttribute('aria-label', show ? 'Hide privacy statement' : 'Show privacy statement');
 });
 
+// The live status line is the single label in the console head. There used to be
+// a second, duplicate stage band inside the scroll area; the two said the same
+// thing, so only the console-bar one remains and every stage, progress reading,
+// and error is written here.
+function setConsoleStatus(text: string, working: boolean): void {
+  processingLabel.textContent = text;
+  processingLabel.classList.toggle('working', working);
+  processingLabel.classList.remove('is-error');
+}
+
 function setStage(s: string): void {
-  stageEl.textContent = s;
-  stageEl.classList.remove('is-error');
+  // A stage line shows the animated "working" treatment while a model load or a
+  // run is in flight, so the ticker that keeps the elapsed time climbing does not
+  // have to manage that class itself.
+  setConsoleStatus(s, modelLoadInFlight || studioView.running);
 }
 
 function showError(msg: string): void {
   log(`ERROR: ${msg}`);
-  setStage(`Error: ${msg}`);
-  stageEl.classList.add('is-error');
+  processingLabel.textContent = `Error: ${msg}`;
+  processingLabel.classList.remove('working');
+  processingLabel.classList.add('is-error');
   // Also surface the failure as a floating error notification (top-right), so it
   // is seen even when the studio console is scrolled out of view.
   showToast(msg.split('\n')[0], { kind: 'error', title: 'Something went wrong' });
@@ -913,7 +930,6 @@ function showError(msg: string): void {
 function error(msg: string, kind: ErrorKind = 'generic'): void {
   const described = describeError(msg);
   showError(described);
-  setProcessingLabel('Could not finish', false);
   if (kind === 'upload') {
     // A rejected file is a normal input mistake, not a broken app: explain it on
     // the stage line and let the user pick another photo. No recovery panel.
@@ -1018,12 +1034,6 @@ function hideRecovery(): void {
 // ——— Processing panel ———
 // The live status label for the current process, plus the model identity and the
 // raw log, so the phases are distinguishable at a glance.
-// Sets the live status label on the console head. It is always visible, so there
-// is nothing to show/hide.
-function setProcessingLabel(label: string, working: boolean): void {
-  processingLabel.textContent = label;
-  processingLabel.classList.toggle('working', working);
-}
 
 const OOM_PATTERN = /bad_alloc|out of memory|outofmemory|allocation failed|allocation error/i;
 const DOWNLOAD_PATTERN =
@@ -1163,6 +1173,35 @@ function settleModel(error: string | null): void {
   }
 }
 
+// A model download the worker stopped because the connection became metered. It
+// is a pause, not a failure: reject the waiters so a run in flight settles, then
+// re-arm the confirmation prompt so the user can resume on mobile data (or wait
+// for Wi-Fi, which the periodic loop handles).
+function handleModelCancel(): void {
+  modelLoadInFlight = false;
+  window.smokeModelPaused = true;
+  for (const w of modelWaiters.splice(0)) w.reject(new MeteredPauseError());
+  setSelectorsDisabled(false);
+  endProcPhase();
+  log('Model download paused: the connection switched to mobile data.');
+  showMeteredPausePrompt();
+}
+
+// Distinguishes a deliberate metered pause from a real failure, so the run that
+// was awaiting the model returns quietly instead of showing the error panel.
+class MeteredPauseError extends Error {
+  constructor() {
+    super('Model download paused for a metered connection.');
+    this.name = 'MeteredPauseError';
+  }
+}
+
+function pauseModelForMetered(reason: string): void {
+  if (!modelLoadInFlight) return;
+  log(reason);
+  worker?.postMessage({ kind: 'cancel-model', reason });
+}
+
 // The primary action is the upload itself: choosing a photo starts the run
 // automatically, so there is no second button to press. A fatal model error is
 // the one case where a photo must not silently start a run — the recovery panel
@@ -1217,7 +1256,7 @@ async function initWorker(): Promise<void> {
       updateLoadProgress(msg);
     } else if (msg.kind === 'load-time') {
       const loadedModelId = msg.modelId ?? selectedModel?.id ?? 'unknown';
-      setStage(`Model ready — provider ${msg.provider}`);
+      log(`Model ready — provider ${msg.provider}`);
       loadTimeMs = msg.ms;
       log(`Model: ${loadedModelId}`);
       log(`Model load time: ${loadTimeMs.toFixed(1)} ms`);
@@ -1228,7 +1267,7 @@ async function initWorker(): Promise<void> {
       announcedLog.push(msg.provider);
       // Model loading is done.
       hideRecovery();
-      setProcessingLabel(
+      setConsoleStatus(
         currentImageData ? 'Removing the background…' : 'Model ready — choose a photo',
         false,
       );
@@ -1255,6 +1294,13 @@ async function initWorker(): Promise<void> {
     } else if (msg.kind === 'result-ready') {
       handleResultReady(msg);
     } else if (msg.kind === 'error') {
+      if (msg.cancelled) {
+        // A deliberate stop (the connection became metered). Not a failure: the
+        // page re-arms the download confirmation instead of an error recovery,
+        // and a run that was waiting on the model just pauses.
+        handleModelCancel();
+        return;
+      }
       // Errors tied to a run are delivered through that run's promise, so the
       // caller reports them once. Anything else is surfaced here.
       if (msg.runId !== undefined) failPendingRuns(new Error(msg.message));
@@ -1284,7 +1330,7 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   // has no measurable percentage of its own.
   beginProcPhase('finalize', phaseExpectedMs('finalize', 0));
   refreshProcPercent();
-  setProcessingLabel('Creating your image…', true);
+  setConsoleStatus('Creating your image…', true);
   // The worker reports the model's actual input size so a per-model input change
   // (e.g. a 384 variant) never mis-scales the mask. The mask covers the
   // letterboxed content rect inside that square (the same geometry the
@@ -1331,14 +1377,13 @@ function finishResult(canvas: HTMLCanvasElement, preview: HTMLCanvasElement, siz
   applyFormatUi();
 
   outputSection.hidden = false;
-  setProcessingLabel('Done — your image is ready', false);
+  setConsoleStatus('Done — download your image below.', false);
   endProcPhase();
   studioResult();
   // Record the settings this cut-out was produced with; changing them later
   // reveals the re-process button.
   resultSettingsKey = engineSettingsKey();
   updateReprocessButton();
-  setStage('Done — download your image below.');
 
   const pct = ((opaquePx / (canvas.width * canvas.height)) * 100).toFixed(1);
   log(`Rendered cut-out (${size}) as ${exportFormatInfo(exportFormat).label} on a ${describeChoice(background)} background, ${pct}% opaque.`);
@@ -1385,13 +1430,13 @@ function loadSelectedModel(): void {
   modelReady = false;
   modelError = null;
   window.smokeModelReady = false;
+  window.smokeModelPaused = false;
   window.smokeModelId = selectedModel.id;
   window.smokeProvider = selectedProvider;
   workerResponded = false;
   resetProgressClock();
   hideRecovery();
-  setProcessingLabel(`Downloading ${selectedModel.label}…`, true);
-  setStage(`Loading model ${selectedModel.id}…`);
+  setConsoleStatus(`Loading model ${selectedModel.id}…`, true);
   log(`Loading model: ${selectedModel.id} (${selectedModel.url})`);
   const force = providerForce(selectedProvider);
   if (forcedProvider) log(`Provider forced to: ${forcedProvider} (from ?provider=)`);
@@ -1411,12 +1456,11 @@ function loadSelectedModel(): void {
   // line on "Starting…" with nothing in the log.
   setTimeout(() => {
     if (workerResponded || modelReady || modelError) return;
-    setStage('No response from the background-removal engine');
+    setConsoleStatus('No response from the background-removal engine', false);
     log(
       `WARNING: the inference worker has not responded in ${WORKER_START_TIMEOUT_MS / 1000}s. ` +
         'Its script or the ONNX Runtime files may have failed to load; check the browser console.',
     );
-    setProcessingLabel('Could not start', false);
     setSelectorsDisabled(false);
     showRecovery(
       'worker',
@@ -1628,7 +1672,7 @@ function failPendingRuns(err: Error): void {
 function runOneInference(): Promise<number> {
   if (!currentImageData || !worker) return Promise.reject(new Error('No image loaded'));
   const imageData = currentImageData;
-  setProcessingLabel('Removing background…', true);
+  setConsoleStatus('Removing background…', true);
   if (window.smokeProvider === 'webgpu' && timings.length === 0) {
     log('First GPU run compiles shaders; this can take a minute or two.');
   }
@@ -1713,6 +1757,8 @@ declare global {
     smokeProvider: string;
     /** Manifest id of the currently loaded model, e.g. 'model_512_int8_fp16'. */
     smokeModelId: string;
+    /** True while the model download is stopped because the link became metered. */
+    smokeModelPaused: boolean;
     crossOriginIsolated: boolean;
   }
 }
@@ -1755,7 +1801,12 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
   } catch (e) {
     endProcPhase();
     studioError();
-    error(e instanceof Error ? e.message : String(e), 'download');
+    // A metered pause is not a failure: the worker stopped on purpose, the
+    // confirmation prompt is already up, and the user can resume it. Only a real
+    // download error shows the recovery panel.
+    if (!(e instanceof MeteredPauseError)) {
+      error(e instanceof Error ? e.message : String(e), 'download');
+    }
     return null;
   }
   // The session is built; the only remaining work is the inference itself, whose
@@ -1789,6 +1840,7 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
 window.runSmoke = runSmoke;
 window.smokeModelReady = false;
 window.smokeModelId = '';
+window.smokeModelPaused = false;
 
 // ——— Progress state ———
 // The stage line, the progress ring, and the processing panel all read from the
@@ -1860,16 +1912,15 @@ function updateLoadProgress(msg: {
 }): void {
   if (!lastProgress) progressClockOffset = performance.now() - msg.elapsedMs;
   lastProgress = msg;
-  setStage(describeProgress(msg));
+  // The single status line shows the detailed checkpoint (bytes + elapsed) and
+  // animates while the load runs.
+  setConsoleStatus(describeProgress(msg), true);
 
   const phase = phaseForStage(msg.stage);
   const pct = Math.max(0, Math.min(100, Math.round(msg.percent)));
   if (phase === 'download') {
-    // Only the download has a real, measurable percentage.
-    if (msg.stage !== 'downloaded') {
-      setProcessingLabel(`Downloading ${selectedModel?.label ?? 'model'} — ${pct}%`, true);
-    }
-    // The panel maps the download's real percentage into its band of the run.
+    // Only the download has a real, measurable percentage; the panel maps it into
+    // its band of the run.
     studioProgress(currentProcPercent(pct));
     procStageLabelEl.textContent = 'Downloading model';
   } else {
@@ -1878,7 +1929,6 @@ function updateLoadProgress(msg: {
     // A cached model reports its download stage during the run; once it is past
     // that, move the panel from the download band into the prepare band.
     if (activeProcPhase === 'download') beginProcPhase('prepare', phaseExpectedMs('prepare', 0));
-    setProcessingLabel(PHASE_LABELS[phase] + '…', true);
     studioProgress(currentProcPercent());
     procStageLabelEl.textContent = PHASE_LABELS[phase];
   }
@@ -2019,6 +2069,10 @@ async function boot(): Promise<void> {
   // connection (or the download failed), the model still downloads in the
   // background as soon as Wi-Fi is available.
   startModelFetchLoop();
+  // React immediately to a mid-session switch: pause an in-flight download the
+  // moment the link becomes metered (the periodic loop already handles the
+  // reverse, Wi-Fi returning).
+  watchConnectionChanges();
 }
 
 // The default model is downloaded once and then served from this device, so a
@@ -2029,6 +2083,32 @@ function autoLoadModel(): void {
   // completes.
   if (workerFailed) return;
   loadSelectedModel();
+}
+
+// ——— Live connection guard ———
+// The Network Information API fires "change" on every rtt/downlink update, so the
+// last class is remembered and the pure decision (connectionChangeAction) only
+// acts on a real crossing of the metered boundary.
+let lastConnectionClass: ConnectionClass | null = null;
+
+function watchConnectionChanges(): void {
+  const conn = (
+    navigator as Navigator & {
+      connection?: { addEventListener?: (type: string, listener: () => void) => void };
+    }
+  ).connection;
+  lastConnectionClass = currentConnectionClass();
+  if (!conn || typeof conn.addEventListener !== 'function') return;
+  conn.addEventListener('change', () => {
+    const next = currentConnectionClass();
+    const action = connectionChangeAction(lastConnectionClass ?? next, next, modelLoadInFlight);
+    lastConnectionClass = next;
+    if (action === 'pause') {
+      // The download was running on Wi-Fi and the link just became metered: stop
+      // it rather than spend the user's data plan unasked.
+      pauseModelForMetered('Connection switched to mobile data; pausing the model download.');
+    }
+  });
 }
 
 // Besides the one-shot load at boot, the page checks on a timer whether the
@@ -2110,6 +2190,17 @@ function showNetWarn(): void {
   netWarnConfirm.focus();
 }
 
+// The prompt shown after the connection switched to metered mid-download. The
+// copy is different from the cold-visit one: it explains that the transfer was
+// stopped, not that it never began.
+function showMeteredPausePrompt(): void {
+  if (!selectedModel) return;
+  netWarnText.textContent = meteredSwitchNotice(selectedModel.size);
+  netWarnEl.hidden = false;
+  setStage('Paused — mobile data detected');
+  netWarnConfirm.focus();
+}
+
 function confirmDownload(): void {
   sessionStorage.setItem('remove-bg:download-confirmed', '1');
   netWarnEl.hidden = true;
@@ -2121,7 +2212,6 @@ netWarnConfirm.addEventListener('click', confirmDownload);
 netWarnDismiss.addEventListener('click', () => {
   netWarnEl.hidden = true;
   setStage('Paused — choose a photo to download the model and remove its background.');
-  setProcessingLabel('Download paused — your connection may be metered', false);
   // A dismissal is not a dead end: choosing a photo starts the download and the
   // run automatically.
 });

@@ -73,7 +73,15 @@ export type WorkerProgressMessage =
       /** The model's square input size, so the main thread can upscale the mask correctly. */
       inputSize?: number;
     }
-  | { kind: 'error'; message: string; runId?: number; fatal?: boolean };
+  | {
+      kind: 'error';
+      message: string;
+      runId?: number;
+      fatal?: boolean;
+      /** True when the worker stopped deliberately (e.g. a metered-link cancel),
+       *  so the page treats it as a pause rather than a failure. */
+      cancelled?: boolean;
+    };
 
 // Main -> worker
 export type MainToWorkerMessage =
@@ -95,4 +103,5 @@ export type MainToWorkerMessage =
       width: number;
       height: number;
     }
+  | { kind: 'cancel-model'; reason?: string }
   | { kind: 'dispose' };

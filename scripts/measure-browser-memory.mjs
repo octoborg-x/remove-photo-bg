@@ -86,7 +86,7 @@ await chooser.accept([`test-images/${IMAGE}`]);
 // The upload auto-starts the run; wait for it to finish.
 const t0 = Date.now();
 await page.waitForFunction(
-  () => /Done|Error/.test(document.getElementById('stage').textContent ?? ''),
+  () => /Done|Error/.test(document.getElementById('processingLabel').textContent ?? ''),
   { timeout: 280000, polling: 500 },
 );
 const elapsed = Date.now() - t0;
@@ -94,7 +94,7 @@ clearInterval(timer);
 
 const afterRun = treeRssKb(pid).total;
 const last = await page.evaluate(() => ({
-  stage: document.getElementById('stage').textContent,
+  stage: document.getElementById('processingLabel').textContent,
   log: document.getElementById('log').textContent,
   // WASM linear memory is visible via the ORT runtime's wasm env when present.
   provider: window.smokeProvider,

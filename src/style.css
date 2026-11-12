@@ -290,6 +290,88 @@
     accent-color: var(--color-blue-600);
   }
 
+  /* ——— Showcase gallery: one comparison at a time + a vertical thumb rail ———
+     The examples are all in the DOM; only the selected panel is visible, so the
+     rail is a vertical tablist and the stage can never overflow the card. The
+     rail sits on the right on wide screens and becomes a scrollable row below
+     the stage on narrow ones. */
+  .showcaseGallery {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1.25rem;
+    align-items: start;
+    /* The samples are portrait, so a full-width stage would tower off-screen;
+       keep the whole gallery a comfortable, centered size instead. */
+    max-width: 44rem;
+    margin-inline: auto;
+  }
+  .showcaseMain {
+    min-width: 0;
+  }
+  .showcasePanel[hidden] {
+    display: none;
+  }
+  .showcaseRail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .showcaseThumb {
+    position: relative;
+    width: 5.75rem;
+    padding: 0;
+    border: 2px solid var(--color-slate-200);
+    border-radius: 0.9rem;
+    overflow: hidden;
+    background: var(--color-white);
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .showcaseThumb img {
+    display: block;
+    width: 100%;
+    height: 4rem;
+    object-fit: cover;
+  }
+  .showcaseThumbLabel {
+    display: block;
+    padding: 0.3rem 0.35rem;
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 1.15;
+    text-align: center;
+    color: var(--color-slate-500);
+  }
+  .showcaseThumb:hover {
+    border-color: var(--color-slate-300);
+  }
+  .showcaseThumb:focus-visible {
+    outline: 2px solid var(--color-blue-600);
+    outline-offset: 2px;
+  }
+  .showcaseThumb.is-active {
+    border-color: var(--color-blue-600);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-blue-600) 35%, transparent);
+  }
+  .showcaseThumb.is-active .showcaseThumbLabel {
+    color: var(--color-blue-600);
+  }
+
+  @media (max-width: 767px) {
+    .showcaseGallery {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .showcaseRail {
+      flex-direction: row;
+      overflow-x: auto;
+      padding-bottom: 0.25rem;
+    }
+    .showcaseThumb {
+      flex: 0 0 auto;
+      width: 6rem;
+    }
+  }
+
   /* ——— Background picker (one system picker + screen eyedropper) ——— */
   .bgPicker {
     display: flex;

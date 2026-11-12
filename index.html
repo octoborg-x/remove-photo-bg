@@ -224,85 +224,151 @@
             Before &amp; After Neural Matting
           </h2>
           <p class="text-sm sm:text-base text-slate-600 mt-3">
-            Drag the interactive slider on each sample to inspect the precision of on-device segmentation against difficult silhouettes.
+            Pick a sample from the thumbnails, then drag the interactive slider to inspect the precision of on-device segmentation against difficult silhouettes.
           </p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
-          <!-- Item 1: Clean Silhouette Scent Bottle -->
-          <figure class="compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm hover:shadow-md transition-shadow" data-compare data-pos="50">
-            <div class="flex items-center justify-between mb-3 px-1">
-              <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Everyday Product</span>
-              <span class="text-[11px] text-slate-400 font-medium">Clean silhouette</span>
-            </div>
-            <div class="compareStage">
-              <img class="compareImg compareBefore" src="./demo/product-scent-bottle-before.webp" alt="Original photo of a scent bottle on a plain background" />
-              <img class="compareImg compareAfter" src="./demo/product-scent-bottle-after.webp" alt="The same photo with the background removed" />
-              <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-            </div>
-            <input
-              class="compareRange mt-4"
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value="50"
-              aria-label="Reveal the cut-out for the scent bottle: left is the original, right is the background removed"
-            />
-            <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-              Sharp edge boundaries with zero jagged fringes.
-            </figcaption>
-          </figure>
+        <div class="showcaseGallery" data-showcase>
+          <!-- Main viewer: one before/after example at a time -->
+          <div class="showcaseMain">
+            <!-- Item 1: Clean Silhouette Scent Bottle -->
+            <figure
+              id="showcase-panel-1"
+              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-1"
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Everyday Product</span>
+                <span class="text-[11px] text-slate-400 font-medium">Clean silhouette</span>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/product-scent-bottle-before.webp" alt="Original photo of a scent bottle on a plain background" />
+                <img class="compareImg compareAfter" src="./demo/product-scent-bottle-after.webp" alt="The same photo with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the scent bottle: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Sharp edge boundaries with zero jagged fringes.
+              </figcaption>
+            </figure>
 
-          <!-- Item 2: Hair & Fur Dog -->
-          <figure class="compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm hover:shadow-md transition-shadow" data-compare data-pos="50">
-            <div class="flex items-center justify-between mb-3 px-1">
-              <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Hair &amp; Fur</span>
-              <span class="text-[11px] text-slate-400 font-medium">Fine strands</span>
-            </div>
-            <div class="compareStage">
-              <img class="compareImg compareBefore" src="./demo/animal-buddy-dog-before.webp" alt="Original photo of a dog against a plain background" />
-              <img class="compareImg compareAfter" src="./demo/animal-buddy-dog-after.webp" alt="The same photo with the background removed" />
-              <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-            </div>
-            <input
-              class="compareRange mt-4"
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value="50"
-              aria-label="Reveal the cut-out for the dog photo: left is the original, right is the background removed"
-            />
-            <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-              Individual hair strands preserved without harsh clipping.
-            </figcaption>
-          </figure>
+            <!-- Item 2: Hair & Fur Dog -->
+            <figure
+              id="showcase-panel-2"
+              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-2"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Hair &amp; Fur</span>
+                <span class="text-[11px] text-slate-400 font-medium">Fine strands</span>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/animal-buddy-dog-before.webp" alt="Original photo of a dog against a plain background" />
+                <img class="compareImg compareAfter" src="./demo/animal-buddy-dog-after.webp" alt="The same photo with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the dog photo: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Individual hair strands preserved without harsh clipping.
+              </figcaption>
+            </figure>
 
-          <!-- Item 3: Glass & Translucent -->
-          <figure class="compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm hover:shadow-md transition-shadow" data-compare data-pos="50">
-            <div class="flex items-center justify-between mb-3 px-1">
-              <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Glass &amp; Crystal</span>
-              <span class="text-[11px] text-slate-400 font-medium">Translucent optics</span>
-            </div>
-            <div class="compareStage">
-              <img class="compareImg compareBefore" src="./demo/glass-wine-before.webp" alt="Original photo of a wine glass on a white background" />
-              <img class="compareImg compareAfter" src="./demo/glass-wine-after.webp" alt="The same photo with the background removed" />
-              <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-            </div>
-            <input
-              class="compareRange mt-4"
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value="50"
-              aria-label="Reveal the cut-out for the wine glass: left is the original, right is the background removed"
-            />
-            <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-              Subtle translucency and delicate stem reflections retained.
-            </figcaption>
-          </figure>
+            <!-- Item 3: Glass & Translucent -->
+            <figure
+              id="showcase-panel-3"
+              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-3"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Glass &amp; Crystal</span>
+                <span class="text-[11px] text-slate-400 font-medium">Translucent optics</span>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/glass-wine-before.webp" alt="Original photo of a wine glass on a white background" />
+                <img class="compareImg compareAfter" src="./demo/glass-wine-after.webp" alt="The same photo with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the wine glass: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Subtle translucency and delicate stem reflections retained.
+              </figcaption>
+            </figure>
+          </div>
+
+          <!-- Vertical thumbnail rail: one tab per example -->
+          <div class="showcaseRail" role="tablist" aria-orientation="vertical" aria-label="Before and after examples">
+            <button
+              id="showcase-tab-1"
+              class="showcaseThumb is-active"
+              type="button"
+              role="tab"
+              aria-controls="showcase-panel-1"
+              aria-selected="true"
+              tabindex="0"
+            >
+              <img src="./demo/product-scent-bottle-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Everyday Product</span>
+            </button>
+            <button
+              id="showcase-tab-2"
+              class="showcaseThumb"
+              type="button"
+              role="tab"
+              aria-controls="showcase-panel-2"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              <img src="./demo/animal-buddy-dog-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Hair &amp; Fur</span>
+            </button>
+            <button
+              id="showcase-tab-3"
+              class="showcaseThumb"
+              type="button"
+              role="tab"
+              aria-controls="showcase-panel-3"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              <img src="./demo/glass-wine-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Glass &amp; Crystal</span>
+            </button>
+          </div>
         </div>
       </section>
 

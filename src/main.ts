@@ -72,6 +72,7 @@ import {
   resolveModelParam,
 } from './features/background-removal/model-manifest';
 import { initCompareSliders } from './features/compare-slider';
+import { initShowcaseGallery } from './features/showcase-gallery';
 import {
   isThemePreference,
   nextTheme,
@@ -1975,6 +1976,7 @@ log('Detecting GPU…');
 // The landing page's before/after comparisons are pure DOM and independent of
 // the model, so wire them immediately rather than waiting on boot().
 initCompareSliders();
+initShowcaseGallery();
 
 // Header: full lockup, full-height bar and the labelled Studio button at the top
 // of the page. Scrolling down collapses it (shorter bar, the brand crossfades to

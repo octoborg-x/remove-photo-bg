@@ -372,6 +372,136 @@
     }
   }
 
+  /* ——— Support carousel: one capability card at a time ———
+     A single track holds every card; only the active one is on screen and the
+     track slides between them (a soft transform transition), so the section is
+     always one card tall instead of stacking six. The viewport clips the track;
+     nav arrows and a dot rail page it. Off-screen cards are `inert`. */
+  .supportCarousel {
+    max-width: 40rem;
+    margin-inline: auto;
+  }
+  .supportViewport {
+    overflow: hidden;
+    border-radius: 1.5rem;
+  }
+  .supportTrack {
+    display: flex;
+    align-items: stretch;
+    transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+  .supportSlide {
+    flex: 0 0 100%;
+    min-width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.85rem;
+    padding: 2.25rem 1.75rem;
+    background: var(--color-white);
+    border: 1px solid var(--color-slate-200);
+    border-radius: 1.5rem;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+    /* Cards slide in from the direction of travel; only the active one is
+       opaque, the neighbours fade so the transition reads as a slide, not a cut. */
+    opacity: 0;
+    transition: opacity 0.45s ease;
+  }
+  .supportSlide.is-active {
+    opacity: 1;
+  }
+  .supportIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 1rem;
+    color: var(--color-blue-600);
+    background: var(--color-blue-50);
+  }
+  .supportIcon svg {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  .supportSlideTitle {
+    font-size: 1.0625rem;
+    font-weight: 800;
+    color: var(--color-slate-900);
+  }
+  .supportSlideBody {
+    max-width: 34rem;
+    font-size: 0.8125rem;
+    line-height: 1.7;
+    color: var(--color-slate-500);
+  }
+  .supportControls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    margin-top: 1.5rem;
+  }
+  .supportNav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 9999px;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-white);
+    color: var(--color-slate-600);
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  }
+  .supportNav svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  .supportNav:hover {
+    color: var(--color-blue-600);
+    border-color: var(--color-blue-600);
+    transform: translateY(-1px);
+  }
+  .supportNav:active {
+    transform: translateY(0) scale(0.95);
+  }
+  .supportNav:focus-visible {
+    outline: 2px solid var(--color-blue-600);
+    outline-offset: 2px;
+  }
+  .supportDots {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .supportDot {
+    width: 0.5rem;
+    height: 0.5rem;
+    padding: 0;
+    border: none;
+    border-radius: 9999px;
+    background: var(--color-slate-300);
+    cursor: pointer;
+    transition: width 0.3s ease, background 0.3s ease;
+  }
+  .supportDot:hover {
+    background: var(--color-slate-400);
+  }
+  .supportDot:focus-visible {
+    outline: 2px solid var(--color-blue-600);
+    outline-offset: 2px;
+  }
+  /* The active dot stretches into a pill — a small, animated position cue. */
+  .supportDot.is-active {
+    width: 1.5rem;
+    background: var(--color-blue-600);
+  }
+
   /* ——— Background picker (one system picker + screen eyedropper) ——— */
   .bgPicker {
     display: flex;
@@ -1735,6 +1865,11 @@
     color: var(--color-slate-400);
   }
   html.theme-transition * {
+    transition: none;
+  }
+  .supportTrack,
+  .supportSlide,
+  .supportDot {
     transition: none;
   }
 }

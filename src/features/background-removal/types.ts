@@ -72,6 +72,9 @@ export type WorkerProgressMessage =
       height: number; // original image height
       /** The model's square input size, so the main thread can upscale the mask correctly. */
       inputSize?: number;
+      /** The run this mask belongs to, so the page can drop a superseded run's
+       *  late result instead of letting it overwrite a newer job. */
+      runId?: number;
     }
   | {
       kind: 'error';

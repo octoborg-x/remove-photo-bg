@@ -29,14 +29,19 @@ const modelIdx = process.argv.indexOf('--model');
 const wantedModel = modelIdx >= 0 ? process.argv[modelIdx + 1] : null;
 const providerIdx = process.argv.indexOf('--provider');
 const wantedProvider = providerIdx >= 0 ? process.argv[providerIdx + 1] : null;
+// --refine off runs the A/B baseline: the app's Stage-1-only path, no edge
+// refinement (same override a tester would use via ?refine=off).
+const refineIdx = process.argv.indexOf('--refine');
+const wantedRefine = refineIdx >= 0 ? process.argv[refineIdx + 1] : null;
 
-// ?model=/?provider= drive the app's own overrides (same path a tester would
-// use); unknown values are ignored by the app, so the smoke run would then test
-// whatever the default is. Fail loudly instead so a typo is never "green".
+// ?model=/?provider=/?refine= drive the app's own overrides (same path a tester
+// would use); unknown values are ignored by the app, so the smoke run would then
+// test whatever the default is. Fail loudly instead so a typo is never "green".
 function injectOverrides(url) {
   const u = new URL(url);
   if (wantedModel) u.searchParams.set('model', wantedModel);
   if (wantedProvider) u.searchParams.set('provider', wantedProvider);
+  if (wantedRefine) u.searchParams.set('refine', wantedRefine);
   return u.toString();
 }
 
@@ -142,6 +147,9 @@ const runResult = await page.evaluate(
 
 results.run = runResult;
 results.provider = await page.evaluate(() => window.smokeProvider);
+// Per-run refinement stage timings (upscale/filter/cleanup/total). Null when the
+// run used the A/B baseline (?refine=off) or refinement failed.
+results.refineStages = await page.evaluate(() => window.smokeRefineStages ?? null);
 
 // Grab the output PNG data URL + the pre log.
 results.outputPngDataUrl = await page.evaluate(() => {
@@ -186,6 +194,7 @@ writeFileSync(
       provider: results.provider,
       model: results.run?.modelId ?? readyInfo.model,
       run: results.run,
+      refineStages: results.refineStages,
       measuresIndex,
       pageLog: results.log,
     },

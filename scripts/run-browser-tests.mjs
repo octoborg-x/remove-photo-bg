@@ -311,6 +311,91 @@ try {
     await page.close();
   }
 
+  // ——— Scenario 0c: the Plain-Language Reference carousel ———
+  {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+
+    const readState = () =>
+      page.evaluate(() => {
+        const carousel = document.querySelector('[data-support-carousel]');
+        const slides = [...carousel.querySelectorAll('[data-support-slide]')];
+        const dots = [...carousel.querySelectorAll('[data-support-dot]')];
+        const track = carousel.querySelector('[data-support-track]');
+        const active = slides.findIndex((s) => s.classList.contains('is-active'));
+        const activeDot = dots.findIndex((d) => d.classList.contains('is-active'));
+        const visible = slides.filter((s) => !s.hasAttribute('inert'));
+        const match = /translateX\((-?[\d.]+)%\)/.exec(track.style.transform);
+        return {
+          slideCount: slides.length,
+          dotCount: dots.length,
+          visibleCount: visible.length,
+          active,
+          activeDot,
+          translatePct: match ? parseFloat(match[1]) : NaN,
+          trackTransition: getComputedStyle(track).transitionDuration,
+          activeDotWidth: getComputedStyle(dots[active] ?? dots[0]).width,
+        };
+      });
+
+    const initial = await readState();
+    record(
+      'the reference carousel shows one capability at a time',
+      initial.slideCount === 6 && initial.dotCount === 6 && initial.visibleCount === 1 && initial.active === 0,
+      `visible ${initial.visibleCount}/${initial.slideCount} active ${initial.active}`,
+    );
+    record(
+      'the carousel track slides with an animated transform',
+      initial.translatePct === 0 && parseFloat(initial.trackTransition) > 0,
+      `${initial.translatePct}% / ${initial.trackTransition}`,
+    );
+
+    // The deferred module may not have listeners yet on a busy runner: retry.
+    let afterNext = initial;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await page.click('[data-support-next]');
+      afterNext = await readState();
+      if (afterNext.active === 1) break;
+      await sleep(150);
+    }
+    record(
+      'the next arrow advances to the second capability',
+      afterNext.active === 1 && afterNext.activeDot === 1 && afterNext.visibleCount === 1,
+      `active ${afterNext.active} dot ${afterNext.activeDot}`,
+    );
+    // The dot widens over a 0.3s transition; let it settle before measuring.
+    await sleep(400);
+    const settled = await readState();
+    record(
+      'advancing slides the track and grows the active dot',
+      settled.translatePct === -100 && parseFloat(settled.activeDotWidth) > 8,
+      `${settled.translatePct}% dot ${settled.activeDotWidth}`,
+    );
+
+    await page.click('[data-support-prev]');
+    const afterPrev = await readState();
+    record('the previous arrow returns to the first capability', afterPrev.active === 0, `active ${afterPrev.active}`);
+
+    // Wrapping: one step back from the first slide lands on the last.
+    await page.click('[data-support-prev]');
+    const afterWrap = await readState();
+    record('stepping back from the first capability wraps to the last', afterWrap.active === 5, `active ${afterWrap.active}`);
+
+    // Keyboard: right arrow on the carousel advances.
+    await page.focus('[data-support-next]');
+    await page.keyboard.press('ArrowRight');
+    const afterKey = await readState();
+    record('arrow keys move the carousel', afterKey.active === 0, `active ${afterKey.active}`);
+
+    // Dots jump straight to a slide.
+    await page.click('[data-support-dot]:nth-child(4)');
+    const afterDot = await readState();
+    record('a dot jumps straight to its capability', afterDot.active === 3, `active ${afterDot.active}`);
+
+    await page.close();
+  }
+
   // ——— Scenario 1: JPEG upload → inference → both exports ———
   {
     const page = await browser.newPage();

@@ -79,6 +79,7 @@ import {
 } from './features/background-removal/model-manifest';
 import { initCompareSliders } from './features/compare-slider';
 import { initShowcaseGallery } from './features/showcase-gallery';
+import { initSupportCarousel } from './features/support-carousel';
 import {
   isThemePreference,
   nextTheme,
@@ -2151,6 +2152,7 @@ log('Detecting GPU…');
 // the model, so wire them immediately rather than waiting on boot().
 initCompareSliders();
 initShowcaseGallery();
+initSupportCarousel();
 
 // Header: full lockup, full-height bar and the labelled Studio button at the top
 // of the page. Scrolling down collapses it (shorter bar, the brand crossfades to

@@ -431,63 +431,138 @@
           </p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">Photos you can drop in</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              PNG, JPEG, and WebP images up to <strong>20 MB</strong> and <strong>4096 pixels</strong> on the
-              longest side. Files are read as-is — the app never trusts the file name, and a mislabelled or
-              corrupt image is caught and explained instead of silently failing.
-            </p>
+        <div class="supportCarousel" data-support-carousel>
+          <div class="supportViewport" data-support-viewport>
+            <div class="supportTrack" id="supportTrack" data-support-track>
+              <article class="supportSlide is-active" id="supportSlide-1" role="tabpanel" aria-labelledby="supportDot-1" data-support-slide>
+                <span class="supportIcon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="3" />
+                    <circle cx="8.5" cy="9" r="1.6" />
+                    <path d="m21 15-4.5-4.5L6 21" />
+                  </svg>
+                </span>
+                <h3 class="supportSlideTitle">Photos you can drop in</h3>
+                <p class="supportSlideBody">
+                  PNG, JPEG, and WebP images up to <strong>20 MB</strong> and <strong>4096 pixels</strong> on the
+                  longest side. Files are read as-is — the app never trusts the file name, and a mislabelled or
+                  corrupt image is caught and explained instead of silently failing.
+                </p>
+              </article>
+
+              <article class="supportSlide" id="supportSlide-2" role="tabpanel" aria-labelledby="supportDot-2" aria-hidden="true" inert data-support-slide>
+                <span class="supportIcon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2m0-12-2 2M8 16l-2 2" />
+                    <circle cx="12" cy="12" r="3.5" />
+                  </svg>
+                </span>
+                <h3 class="supportSlideTitle">Images it handles well</h3>
+                <p class="supportSlideBody">
+                  Product shots, portraits, clothing, accessories, hair and fur, glass and transparent items, and
+                  busy or flat backgrounds. Very wide or very tall images (like banners and logos) are padded with a
+                  faithful copy of their edges, so the subject is not stretched out of shape. When the AI keeps the
+                  whole frame, the app falls back to a classic edge-based cut-out so you still get a clean result.
+                </p>
+              </article>
+
+              <article class="supportSlide" id="supportSlide-3" role="tabpanel" aria-labelledby="supportDot-3" aria-hidden="true" inert data-support-slide>
+                <span class="supportIcon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="13" rx="2.5" />
+                    <path d="M8 21h8m-4-4v4" />
+                  </svg>
+                </span>
+                <h3 class="supportSlideTitle">Where it runs</h3>
+                <p class="supportSlideBody">
+                  Any modern browser. It uses the GPU automatically when a real, capable graphics chip is available
+                  (WebGPU), and otherwise runs on the CPU with multi-threaded WebAssembly. Software-only "fake GPUs"
+                  and known-slow mobile chips are detected and steered to the CPU, which is faster and more accurate
+                  there. You can override the choice in the Studio's advanced options.
+                </p>
+              </article>
+
+              <article class="supportSlide" id="supportSlide-4" role="tabpanel" aria-labelledby="supportDot-4" aria-hidden="true" inert data-support-slide>
+                <span class="supportIcon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3v12m0 0 4-4m-4 4-4-4" />
+                    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                  </svg>
+                </span>
+                <h3 class="supportSlideTitle">What you get back</h3>
+                <p class="supportSlideBody">
+                  A transparent <strong>PNG</strong> by default, a studio-white <strong>JPG</strong> for marketplaces,
+                  or a compact <strong>WebP</strong> that keeps transparency. You can also place the cut-out on a solid
+                  colour, on pure white, or leave it transparent — and tune the mask's edge with a threshold and a
+                  feather slider before you download.
+                </p>
+              </article>
+
+              <article class="supportSlide" id="supportSlide-5" role="tabpanel" aria-labelledby="supportDot-5" aria-hidden="true" inert data-support-slide>
+                <span class="supportIcon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
+                  </svg>
+                </span>
+                <h3 class="supportSlideTitle">Speed and the one-time download</h3>
+                <p class="supportSlideBody">
+                  The model is about <strong>58 MB</strong> and downloads once, then stays cached on your device.
+                  Inference is typically a few seconds per photo on the CPU and faster on a GPU. On a metered mobile
+                  link the app asks before that first download. Large photos are composited in bounded strips off the
+                  main thread, so the page stays responsive.
+                </p>
+              </article>
+
+              <article class="supportSlide" id="supportSlide-6" role="tabpanel" aria-labelledby="supportDot-6" aria-hidden="true" inert data-support-slide>
+                <span class="supportIcon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3l7 3v5.5c0 4.3-3 8.1-7 9.5-4-1.4-7-5.2-7-9.5V6l7-3Z" />
+                    <path d="m9 12 2 2 4-4" />
+                  </svg>
+                </span>
+                <h3 class="supportSlideTitle">Privacy and what is never done</h3>
+                <p class="supportSlideBody">
+                  Your photo never leaves your device — there is no upload path in the app at all. No account, no
+                  watermark, no per-image limit, and no third-party scripts or fonts loaded. Everything runs in your
+                  browser, and you can verify it in your browser's Network tab or by going fully offline.
+                </p>
+              </article>
+            </div>
           </div>
 
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">Images it handles well</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              Product shots, portraits, clothing, accessories, hair and fur, glass and transparent items, and
-              busy or flat backgrounds. Very wide or very tall images (like banners and logos) are padded with a
-              faithful copy of their edges, so the subject is not stretched out of shape. When the AI keeps the
-              whole frame, the app falls back to a classic edge-based cut-out so you still get a clean result.
-            </p>
-          </div>
+          <div class="supportControls">
+            <button
+              class="supportNav"
+              type="button"
+              data-support-prev
+              aria-label="Show the previous capability"
+              aria-controls="supportTrack"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
 
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">Where it runs</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              Any modern browser. It uses the GPU automatically when a real, capable graphics chip is available
-              (WebGPU), and otherwise runs on the CPU with multi-threaded WebAssembly. Software-only "fake GPUs"
-              and known-slow mobile chips are detected and steered to the CPU, which is faster and more accurate
-              there. You can override the choice in the Studio's advanced options.
-            </p>
-          </div>
+            <div class="supportDots" role="tablist" aria-label="Capability reference">
+              <button class="supportDot is-active" id="supportDot-1" type="button" role="tab" data-support-dot aria-controls="supportSlide-1" aria-selected="true" tabindex="0" aria-label="Show capability 1 of 6"></button>
+              <button class="supportDot" id="supportDot-2" type="button" role="tab" data-support-dot aria-controls="supportSlide-2" aria-selected="false" tabindex="-1" aria-label="Show capability 2 of 6"></button>
+              <button class="supportDot" id="supportDot-3" type="button" role="tab" data-support-dot aria-controls="supportSlide-3" aria-selected="false" tabindex="-1" aria-label="Show capability 3 of 6"></button>
+              <button class="supportDot" id="supportDot-4" type="button" role="tab" data-support-dot aria-controls="supportSlide-4" aria-selected="false" tabindex="-1" aria-label="Show capability 4 of 6"></button>
+              <button class="supportDot" id="supportDot-5" type="button" role="tab" data-support-dot aria-controls="supportSlide-5" aria-selected="false" tabindex="-1" aria-label="Show capability 5 of 6"></button>
+              <button class="supportDot" id="supportDot-6" type="button" role="tab" data-support-dot aria-controls="supportSlide-6" aria-selected="false" tabindex="-1" aria-label="Show capability 6 of 6"></button>
+            </div>
 
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">What you get back</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              A transparent <strong>PNG</strong> by default, a studio-white <strong>JPG</strong> for marketplaces,
-              or a compact <strong>WebP</strong> that keeps transparency. You can also place the cut-out on a solid
-              colour, on pure white, or leave it transparent — and tune the mask's edge with a threshold and a
-              feather slider before you download.
-            </p>
-          </div>
-
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">Speed and the one-time download</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              The model is about <strong>58 MB</strong> and downloads once, then stays cached on your device.
-              Inference is typically a few seconds per photo on the CPU and faster on a GPU. On a metered mobile
-              link the app asks before that first download. Large photos are composited in bounded strips off the
-              main thread, so the page stays responsive.
-            </p>
-          </div>
-
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <h3 class="text-base font-bold text-slate-900 mb-2">Privacy and what is never done</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              Your photo never leaves your device — there is no upload path in the app at all. No account, no
-              watermark, no per-image limit, and no third-party scripts or fonts loaded. Everything runs in your
-              browser, and you can verify it in your browser's Network tab or by going fully offline.
-            </p>
+            <button
+              class="supportNav"
+              type="button"
+              data-support-next
+              aria-label="Show the next capability"
+              aria-controls="supportTrack"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
           </div>
         </div>
       </section>

@@ -506,12 +506,11 @@ try {
       const bodyIndented = group
         ? parseFloat(getComputedStyle(group.querySelector('.consoleGroupBody')).marginLeft) > 8
         : false;
-      // The status band spans the full console width (no side padding on the
-      // scroll container that would inset its background).
-      const stage = document.getElementById('stage');
-      const stageW = stage?.getBoundingClientRect().width ?? 0;
-      const cardW = consoleEl?.getBoundingClientRect().width ?? 0;
-      const stageFullWidth = stageW > 0 && Math.abs(stageW - cardW) < 6;
+      // There is exactly one status line: the console-bar label. The old
+      // duplicate stage band inside the scroll area (#stage / .consoleStage) is
+      // gone, and the label lives in the console head.
+      const labelInHead = !!document.getElementById('processingLabel')?.closest('.consoleHead');
+      const noStageBand = !document.getElementById('stage') && !document.querySelector('.consoleStage');
       return {
         inStudio,
         label,
@@ -526,7 +525,8 @@ try {
         chevronIsLast,
         groupBorderless,
         bodyIndented,
-        stageFullWidth,
+        labelInHead,
+        noStageBand,
       };
     });
     record(
@@ -564,9 +564,22 @@ try {
       `chevronLast ${panelState.chevronIsLast} borderless ${panelState.groupBorderless} indented ${panelState.bodyIndented}`,
     );
     record(
-      'the status band spans the full console width',
-      panelState.stageFullWidth === true,
-      `stageFullWidth ${panelState.stageFullWidth}`,
+      'the status line is the single console-bar label (no duplicate stage band)',
+      panelState.labelInHead === true && panelState.noStageBand === true,
+      `labelInHead ${panelState.labelInHead} noStageBand ${panelState.noStageBand}`,
+    );
+
+    // The active thread (the last category to receive a line) is expanded, so the
+    // live log is visible without a click.
+    const activeThreadOpen = await page.evaluate(() => {
+      const groups = Array.from(document.querySelectorAll('#logGroups .logGroup')).filter((g) => !g.hidden);
+      const last = groups[groups.length - 1];
+      return last ? last.open === true && last.dataset.active === 'true' : null;
+    });
+    record(
+      'the active console thread is expanded',
+      activeThreadOpen === true,
+      `activeThreadOpen ${activeThreadOpen}`,
     );
 
     // While a run is in flight, the console thread labels animate: grey text with
@@ -726,7 +739,7 @@ try {
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     await chooseFile(page, resolve(ROOT, 'smoke-results/phase4-browser/not-an-image.txt'));
     await page.waitForFunction(
-      () => /Unsupported file type/.test(document.getElementById('stage')?.textContent ?? ''),
+      () => /Unsupported file type/.test(document.getElementById('processingLabel')?.textContent ?? ''),
       { timeout: 10000 },
     );
     const hasOutput = await page.evaluate(() => document.querySelector('#outputBox img') !== null);
@@ -742,7 +755,7 @@ try {
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
     await chooseFile(page, resolve(ROOT, 'smoke-results/phase4-browser/corrupt.png'));
     await page.waitForFunction(
-      () => /Failed to decode|ERROR/.test(document.getElementById('stage')?.textContent ?? ''),
+      () => /Failed to decode|ERROR/.test(document.getElementById('processingLabel')?.textContent ?? ''),
       { timeout: 10000 },
     );
     const hasOutput = await page.evaluate(() => document.querySelector('#outputBox img') !== null);
@@ -754,7 +767,7 @@ try {
       const host = document.getElementById('toastHost').getBoundingClientRect();
       const r = t.getBoundingClientRect();
       const body = getComputedStyle(t.querySelector('.toastBody')).color;
-      const stage = document.getElementById('stage');
+      const stage = document.getElementById('processingLabel');
       return {
         onRight: Math.abs(window.innerWidth - host.right) < 40,
         nearTop: host.top < 60,
@@ -788,7 +801,7 @@ try {
     await openStudio(page);
     const sawError = await page
       .waitForFunction(
-        () => /Error:/.test(document.getElementById('stage')?.textContent ?? ''),
+        () => /Error:/.test(document.getElementById('processingLabel')?.textContent ?? ''),
         { timeout: 60000 },
       )
       .then(() => true)
@@ -811,7 +824,7 @@ try {
     await openStudio(page);
     const sawError = await page
       .waitForFunction(
-        () => /manifest/i.test(document.getElementById('stage')?.textContent ?? ''),
+        () => /manifest/i.test(document.getElementById('processingLabel')?.textContent ?? ''),
         { timeout: 60000 },
       )
       .then(() => true)
@@ -1020,6 +1033,146 @@ try {
       'a metered visit waits for the prompt, then the loop downloads once Wi-Fi appears',
       promptShown === true && startedWhileMetered === false && startedAfterWifi === true,
     );
+    await page.close();
+  }
+
+  // ——— Scenario 10: a Wi-Fi download is paused the moment the link goes metered ———
+  // Boots on Wi-Fi with a cold cache so the model download begins, stalls the
+  // model request (CDP Fetch on the service-worker target, which is what actually
+  // fetches the bytes) so the transfer is genuinely mid-flight, then flips the
+  // stubbed connection to cellular. The guard must stop the download and raise a
+  // notice telling the user to take action; confirming resumes it.
+  {
+    const page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      // Mutable connection with a real "change" event, so the page's live guard
+      // fires exactly as it would when a phone drops off Wi-Fi.
+      const listeners = [];
+      window.__conn = {
+        type: 'wifi',
+        addEventListener: (type, fn) => {
+          if (type === 'change') listeners.push(fn);
+        },
+      };
+      window.__fireConn = () => listeners.forEach((fn) => fn());
+      Object.defineProperty(navigator, 'connection', {
+        configurable: true,
+        get: () => window.__conn,
+      });
+      Object.defineProperty(navigator, 'userAgentData', {
+        configurable: true,
+        get: () => ({ mobile: false }),
+      });
+      Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false });
+    });
+
+    // Attach the Fetch domain to the service-worker target (created after load)
+    // and hold the first model request open, so the download stalls mid-flight.
+    let holdNext = true;
+    let heldRequestId = null;
+    let swClient = null;
+    const attached = new Set();
+    const scanAttach = async () => {
+      for (const t of browser.targets()) {
+        if (t.type() !== 'service_worker') continue;
+        if (attached.has(t.url())) continue;
+        attached.add(t.url());
+        try {
+          const c = await t.createCDPSession();
+          await c.send('Fetch.enable', {
+            patterns: [{ urlPattern: '*onnx*', requestStage: 'Request' }],
+          });
+          c.on('Fetch.requestPaused', (e) => {
+            if (/onnx/.test(e.request.url) && holdNext) {
+              holdNext = false;
+              heldRequestId = e.requestId;
+              swClient = c;
+              return; // hold it open: the download is now mid-flight
+            }
+            c.send('Fetch.continueRequest', { requestId: e.requestId }).catch(() => {});
+          });
+        } catch {
+          /* target went away */
+        }
+      }
+    };
+    const scanTimer = setInterval(() => void scanAttach(), 100);
+    await scanAttach();
+
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+    const cdp = await page.createCDPSession();
+    await cdp.send('Storage.clearDataForOrigin', {
+      origin: pageUrl.origin,
+      storageTypes: 'cache_storage',
+    });
+    await page.reload({ waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+
+    // The download must reach the wire (the held request) before we flip links.
+    const downloadStarted = await page
+      .waitForFunction(
+        () => /Downloading model|Loading model/i.test(document.getElementById('processingLabel')?.textContent ?? ''),
+        { timeout: 60000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    // Wait until the SW request is actually held (download mid-flight).
+    const held = await (async () => {
+      for (let i = 0; i < 100; i += 1) {
+        if (heldRequestId) return true;
+        await sleep(100);
+      }
+      return false;
+    })();
+    record(
+      'a Wi-Fi model download reaches the wire before the link changes',
+      downloadStarted && held,
+      `started ${downloadStarted} held ${held}`,
+    );
+
+    // Flip to cellular and fire the change event.
+    await page.evaluate(() => {
+      window.__conn.type = 'cellular';
+      window.__fireConn();
+    });
+
+    const paused = await page
+      .waitForFunction('window.smokeModelPaused === true', { timeout: 30000 })
+      .then(() => true)
+      .catch(() => false);
+    const warnShown = await page.evaluate(
+      () => (document.getElementById('netWarn')?.hidden ?? true) === false,
+    );
+    const warnText = await page.evaluate(
+      () => document.getElementById('netWarnText')?.textContent ?? '',
+    );
+    record(
+      'switching to mobile data stops the download and warns the user',
+      paused && warnShown && /mobile data/i.test(warnText) && /paused/i.test(warnText),
+      `paused ${paused} warn ${warnShown} "${warnText.replace(/\s+/g, ' ').slice(0, 80)}"`,
+    );
+
+    const stillNotReady = await page.evaluate(() => window.smokeModelReady === true);
+    record('the model is not ready while the download is paused', stillNotReady === false);
+
+    // Dismissing the notice must not silently restart the transfer on mobile
+    // data: the guard holds until the user confirms (or Wi-Fi returns).
+    await page.click('#netWarnDismiss');
+    await sleep(2000);
+    const readyAfterDismiss = await page.evaluate(() => window.smokeModelReady === true);
+    record(
+      'dismissing the pause notice does not resume the download on mobile data',
+      readyAfterDismiss === false,
+    );
+
+    // Release the held request so the worker can shut down cleanly.
+    if (swClient && heldRequestId) {
+      await swClient
+        .send('Fetch.failRequest', { requestId: heldRequestId, errorReason: 'Aborted' })
+        .catch(() => {});
+    }
+    clearInterval(scanTimer);
     await page.close();
   }
 } finally {

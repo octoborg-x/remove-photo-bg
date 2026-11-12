@@ -41,7 +41,13 @@ function fakeResponse(size: number) {
 
 type WorkerMessage = { kind: string; stage?: string };
 
-function makeWorker({ hasGpu }: { hasGpu: boolean }) {
+function makeWorker({
+  hasGpu,
+  fetchMock: injectedFetch,
+}: {
+  hasGpu: boolean;
+  fetchMock?: (url: string, opts: { signal: AbortSignal }) => Promise<unknown>;
+}) {
   const posted: WorkerMessage[] = [];
   const fetchedUrls: string[] = [];
   const sessionsCreated: string[] = [];
@@ -67,10 +73,12 @@ function makeWorker({ hasGpu }: { hasGpu: boolean }) {
   };
 
   const navigatorMock = hasGpu ? { gpu: {}, hardwareConcurrency: 4 } : { hardwareConcurrency: 4 };
-  const fetchMock = async (url: string) => {
-    fetchedUrls.push(url);
-    return fakeResponse(MODEL_BYTES);
-  };
+  const fetchMock =
+    injectedFetch ??
+    (async (url: string) => {
+      fetchedUrls.push(url);
+      return fakeResponse(MODEL_BYTES);
+    });
 
   const load = new Function(
     'self',
@@ -79,12 +87,23 @@ function makeWorker({ hasGpu }: { hasGpu: boolean }) {
     'fetch',
     'performance',
     'URL',
+    'AbortController',
     'setTimeout',
     'clearTimeout',
     // Strip the runtime importScripts: `ort` is injected instead.
     WORKER_SRC.replace(/^\s*importScripts\([^)]*\);\s*$/m, ''),
   );
-  load(selfMock, ort, navigatorMock, fetchMock, performance, URL, setTimeout, clearTimeout);
+  load(
+    selfMock,
+    ort,
+    navigatorMock,
+    fetchMock,
+    performance,
+    URL,
+    AbortController,
+    setTimeout,
+    clearTimeout,
+  );
 
   const send = (msg: unknown) => selfMock.onmessage?.({ data: msg });
   const waitForLoad = () =>
@@ -116,6 +135,33 @@ describe('inference worker — model byte reuse across provider switches', () =>
     expect(w.fetchedUrls).toEqual(['/models/model.onnx']); // still a single fetch
     expect(w.posted.some((m) => m.kind === 'loading-progress' && m.stage === 'cache-hit')).toBe(true);
     expect(w.sessionsCreated).toEqual(['webgpu', 'wasm']);
+  });
+
+  it('stops the download on cancel-model and reports it as a non-fatal cancel', async () => {
+    // A fetch that never resolves on its own, so the only way out is the abort.
+    const hangingFetch = (_url: string, opts: { signal: AbortSignal }) =>
+      new Promise((_resolve, reject) => {
+        opts.signal.addEventListener('abort', () => {
+          const err = new Error('The operation was aborted.');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      });
+    const w = makeWorker({ hasGpu: false, fetchMock: hangingFetch });
+
+    w.send({ kind: 'set-model', modelUrl: '/models/model.onnx', inputSize: 512, outputIsProbability: true, modelId: 'm' });
+    await new Promise((r) => setTimeout(r, 20)); // let the download start
+    w.send({ kind: 'cancel-model', reason: 'metered' });
+    await w.waitForLoad();
+
+    const err = w.posted.find((m) => m.kind === 'error') as
+      | (WorkerMessage & { cancelled?: boolean; fatal?: boolean })
+      | undefined;
+    expect(err).toBeDefined();
+    expect(err?.cancelled).toBe(true);
+    expect(err?.fatal).toBe(true);
+    // A cancelled load must not report success.
+    expect(w.posted.some((m) => m.kind === 'load-time')).toBe(false);
   });
 
   it('re-downloads when the model URL actually changes', async () => {

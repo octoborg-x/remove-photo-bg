@@ -16,7 +16,7 @@
     setTimeout(function () {
       var log = document.getElementById('log');
       if (log && !log.textContent) {
-        document.getElementById('stage').textContent =
+        document.getElementById('processingLabel').textContent =
           'App script did not run — open the browser console and check that /src/main.ts is served';
       }
     }, 8000);
@@ -24,7 +24,7 @@
   }
 
   stamp.textContent = 'none';
-  var stage = document.getElementById('stage');
+  var stage = document.getElementById('processingLabel');
   var hint = document.getElementById('buildHint');
   // The hint paragraph ships hidden (it holds a build marker the page does not
   // show); this is the one path that has something to say, so reveal it.

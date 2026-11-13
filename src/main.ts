@@ -104,13 +104,7 @@ import {
   tabEnabled,
   type StudioTab,
 } from './features/background-removal/studio-view';
-import {
-  CONSOLE_CATEGORIES,
-  CONSOLE_CATEGORY_META,
-  appendLogLine,
-  emptyConsoleLogState,
-  type ConsoleCategory,
-} from './features/background-removal/console-log';
+import { classifyLogLine } from './features/background-removal/console-log';
 import {
   pickColorFromScreen,
   supportsScreenPicker,
@@ -124,12 +118,11 @@ import type {
 // Replaced at build/serve time by the build-stamp plugin in vite.config.ts.
 declare const __BUILD_ID__: string;
 
-const logGroupsEl = document.getElementById('logGroups')!;
+const consoleOutputEl = document.getElementById('consoleOutput')!;
+const consoleScrollEl = document.querySelector<HTMLElement>('.consoleScroll')!;
 const outputBox = document.getElementById('outputBox')!;
 const outputSection = document.getElementById('outputSection')!;
 const refineNoticeEl = document.getElementById('refineNotice')!;
-const modelNameEl = document.getElementById('modelName')!;
-const modelSizeEl = document.getElementById('modelSize')!;
 const providerToggle = document.getElementById('providerToggle')! as HTMLSelectElement;
 const downloadImageBtn = document.getElementById('downloadImage')! as HTMLAnchorElement;
 const formatOptionsEl = document.getElementById('formatOptions')!;
@@ -210,8 +203,8 @@ function renderStudioView(): void {
   } else {
     procPctEl.textContent = `${studioView.percent}%`;
   }
-  // While a run is in flight, the console thread labels animate (grey text with
-  // a white light sweeping across it).
+  // While a run is in flight, the console is marked busy so the status label
+  // animates. (The console is a flat terminal — no thread labels to sweep.)
   consoleCardEl.dataset.running = String(studioView.running);
   // The refinement banner sits over the already-usable preview while the edge
   // stage runs, and disappears the instant the refined result is swapped in.
@@ -286,6 +279,8 @@ function openStudio(): void {
   renderStudioView();
   // The workspace has a size again, so a dragged console height can be re-clamped.
   if (consoleHeightPx != null) applyConsoleHeight(consoleHeightPx);
+  // A terminal opens on its newest line.
+  scrollConsoleToBottom();
   (document.activeElement as HTMLElement | null)?.blur();
   studioCloseBtn.focus();
 }
@@ -836,78 +831,32 @@ function log(msg: string): void {
   appendConsoleLine(msg);
 }
 
-// ——— Console: categorised log ———
-// Every log line is filed under a category; each category is a collapsible
-// thread built once and revealed on demand, so the compact console stays quiet
-// until something happens.
-const consoleLogState = emptyConsoleLogState();
-const logGroupEls = new Map<
-  ConsoleCategory,
-  { group: HTMLDetailsElement; body: HTMLDivElement; count: HTMLSpanElement }
->();
-
-// A chevron glyph, pointing down by default. The collapsible blocks rotate it
-// to point up while open (see the CSS), so a single icon reads as up/down.
-const CHEVRON_DOWN_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<polyline points="6 9 12 15 18 9" /></svg>';
-
-function makeChevron(className: string): HTMLSpanElement {
-  const el = document.createElement('span');
-  el.className = className;
-  el.setAttribute('aria-hidden', 'true');
-  el.innerHTML = CHEVRON_DOWN_SVG;
-  return el;
-}
-
-function buildConsoleLog(): void {
-  for (const category of CONSOLE_CATEGORIES) {
-    const meta = CONSOLE_CATEGORY_META[category];
-
-    const group = document.createElement('details');
-    group.className = 'consoleGroup logGroup';
-    group.dataset.category = category;
-    group.hidden = true;
-    const summary = document.createElement('summary');
-    summary.className = 'consoleGroupSummary';
-    const name = document.createElement('span');
-    name.className = 'consoleGroupName';
-    name.textContent = meta.label;
-    const count = document.createElement('span');
-    count.className = 'consoleGroupCount';
-    count.textContent = '0';
-    summary.append(name, count, makeChevron('consoleChevron'));
-    const body = document.createElement('div');
-    body.className = 'consoleGroupBody logBody';
-    group.append(summary, body);
-    logGroupsEl.appendChild(group);
-    logGroupEls.set(category, { group, body, count });
-  }
-}
+// ——— Console: flat terminal output ———
+// Every log line is printed in arrival order as one monospace row, prefixed with
+// a prompt glyph, newest at the bottom. There are no categories, threads, or
+// collapsible groups.
+const CONSOLE_PROMPT = '❯';
 
 function appendConsoleLine(line: string): void {
-  const category = appendLogLine(consoleLogState, scrubConsoleLine(line));
-  const entry = logGroupEls.get(category);
-  if (entry) {
-    const lines = consoleLogState.byCategory[category];
-    const classified = lines[lines.length - 1];
-    const el = document.createElement('span');
-    el.className = classified.level === 'info' ? 'logLine' : `logLine ${classified.level}`;
-    el.textContent = classified.text;
-    entry.body.appendChild(el);
-    entry.group.hidden = false;
-    entry.group.dataset.active = 'true';
-    entry.count.textContent = String(lines.length);
-    // The thread that just received a line is the active one, so keep it expanded
-    // and scrolled to its newest line — the user sees the live log without having
-    // to click the category open.
-    entry.group.open = true;
-    entry.body.scrollTop = entry.body.scrollHeight;
-  }
+  const classified = classifyLogLine(scrubConsoleLine(line));
+  const row = document.createElement('div');
+  row.className = classified.level === 'info' ? 'consoleLine' : `consoleLine ${classified.level}`;
+  const prompt = document.createElement('span');
+  prompt.className = 'consoleLinePrompt';
+  prompt.setAttribute('aria-hidden', 'true');
+  prompt.textContent = CONSOLE_PROMPT;
+  const text = document.createElement('span');
+  text.className = 'consoleLineText';
+  text.textContent = classified.text;
+  row.append(prompt, text);
+  consoleOutputEl.appendChild(row);
+  scrollConsoleToBottom();
 }
 
-buildConsoleLog();
+// A terminal shows its newest line, so every print pins the view to the bottom.
+function scrollConsoleToBottom(): void {
+  consoleScrollEl.scrollTop = consoleScrollEl.scrollHeight;
+}
 
 // The Zero-Upload statement is hidden behind a clickable shield icon.
 privacyToggle.addEventListener('click', () => {
@@ -1653,10 +1602,10 @@ function webGpuSelectable(): boolean {
   return gpuState?.adapterPresent === true && runtimeHasWebGpuBundle;
 }
 
-function renderModelName(): void {
+function announceModel(): void {
   if (!selectedModel) return;
-  modelNameEl.textContent = selectedModel.label;
-  modelSizeEl.textContent = `${(selectedModel.size / 1048576).toFixed(0)} MB download, cached after the first visit`;
+  const sizeMb = (selectedModel.size / 1048576).toFixed(0);
+  log(`Model: ${selectedModel.label} — ${sizeMb} MB download, cached after the first visit`);
 }
 
 function applyProviderUi(): void {
@@ -2222,7 +2171,7 @@ async function boot(): Promise<void> {
   selectedProvider = resolveProvider();
   selectedModel = resolveModel();
 
-  renderModelName();
+  announceModel();
   applyProviderUi();
   log(`Provider default: ${selectedProvider}`);
   log(`Model default: ${selectedModel.id}`);

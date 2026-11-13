@@ -624,18 +624,6 @@
     cursor: not-allowed;
   }
 
-  /* A chevron at the end of each collapsible thread header; it flips to point
-     up while the block is open. */
-  .consoleChevron {
-    display: inline-flex;
-    flex: none;
-    transition: transform 0.2s ease;
-  }
-  .consoleChevron svg {
-    width: 0.95rem;
-    height: 0.95rem;
-  }
-
   /* ——— Toasts ——— */
   .toastHost {
     position: fixed;
@@ -1122,6 +1110,13 @@
     min-width: 0;
     display: flex;
   }
+  /* The console is a full-width terminal: it breaks out of the studio body's
+     horizontal padding so its background spans the whole viewport edge to edge.
+     Only the horizontal margins bleed — a vertical bleed would overflow the grid
+     row and break the drag-resize cap. */
+  .studioConsoleCol {
+    margin-inline: -1rem;
+  }
   .studioCard,
   .consoleCard {
     flex: 1;
@@ -1131,6 +1126,9 @@
     background: var(--color-white);
     border-radius: 0.85rem;
     overflow: hidden;
+  }
+  .consoleCard {
+    border-radius: 0;
   }
   .studioTabs {
     display: flex;
@@ -1438,6 +1436,12 @@
     font-weight: 600;
     box-shadow: 0 12px 30px -12px rgb(0 0 0 / 0.6);
   }
+  /* The wallpaper is dark in both themes, so this text is pinned to a light
+     ink. A theme token (text-slate-100) would invert to near-black in dark mode
+     and vanish against the dark wallpaper. */
+  .procStatusText {
+    color: #e2e8f0;
+  }
   .procStatusDot {
     position: relative;
     width: 0.5rem;
@@ -1553,12 +1557,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-    /* No horizontal padding here: the thread rows carry their own so their
-       backgrounds span the full console width. */
-    padding: 0.8rem 0;
+    padding: 0.6rem 0.9rem 0.9rem;
     scrollbar-width: thin;
     scrollbar-color: var(--color-slate-300) transparent;
   }
@@ -1569,101 +1568,38 @@
     background: var(--color-slate-300);
     border-radius: 4px;
   }
-  /* Borderless collapsible blocks. The summary is a quiet header row with a
-     chevron; the body is indented as the "children" of that thread, with the
-     extra left space the brief asked for. */
-  .consoleGroup {
-    border: 0;
-    border-radius: 0.7rem;
-    overflow: hidden;
-  }
-  .consoleGroupSummary {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.3rem 1.05rem;
-    cursor: pointer;
-    list-style: none;
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: var(--color-slate-700);
-    background: transparent;
-  }
-  .consoleGroupSummary:hover {
-    color: var(--color-slate-900);
-  }
-  .consoleGroupSummary::-webkit-details-marker {
-    display: none;
-  }
-  .consoleGroup[open] > .consoleGroupSummary .consoleChevron {
-    transform: rotate(180deg);
-  }
-  .consoleGroupName {
-    flex: 1;
-  }
-  .consoleGroupCount {
-    font-size: 0.62rem;
-    font-weight: 600;
-    color: var(--color-slate-500);
-  }
-  /* While a run is in flight the thread labels read in grey, with a white light
-     sweeping across them (background-clip: text) so the console shows it is
-     working. The animation is opt-in via [data-running] on the console card. */
-  .consoleCard[data-running='true'] .consoleGroupName,
-  .consoleCard[data-running='true'] .consoleGroupCount {
-    color: var(--color-slate-400);
-    background-image: linear-gradient(
-      100deg,
-      transparent 35%,
-      var(--color-white) 50%,
-      transparent 65%
-    );
-    background-size: 220% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: threadSweep 2.4s linear infinite;
-  }
-  /* Thread children: indented under the label. */
-  .consoleGroupBody {
-    margin-left: 1.4rem;
-    padding: 0.35rem 0 0.5rem;
-  }
-  .logGroups {
+  /* Flat terminal output: one monospace line per event, newest at the bottom.
+     No threads, chevrons, or collapsible groups. */
+  .consoleOutput {
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
-  }
-  .logGroup .consoleGroupSummary {
-    font-weight: 600;
-  }
-  .logBody {
-    max-height: 12rem;
-    overflow-y: auto;
-    padding-right: 0.6rem;
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-slate-300) transparent;
-  }
-  .logBody::-webkit-scrollbar {
-    width: 8px;
-  }
-  .logBody::-webkit-scrollbar-thumb {
-    background: var(--color-slate-300);
-    border-radius: 4px;
-  }
-  .logLine {
-    display: block;
+    gap: 0.1rem;
     font-family: var(--font-mono);
-    font-size: 0.68rem;
-    line-height: 1.5;
+    font-size: 0.7rem;
+    line-height: 1.55;
+  }
+  .consoleLine {
+    display: flex;
+    gap: 0.5rem;
     white-space: pre-wrap;
     word-break: break-word;
     color: var(--color-slate-600);
   }
-  .logLine.warn {
+  .consoleLinePrompt {
+    flex: none;
+    color: var(--color-blue-600);
+    user-select: none;
+  }
+  .consoleLineText {
+    flex: 1;
+    min-width: 0;
+  }
+  .consoleLine.warn,
+  .consoleLine.warn .consoleLinePrompt {
     color: var(--color-amber-800);
   }
-  .logLine.error {
+  .consoleLine.error,
+  .consoleLine.error .consoleLinePrompt {
     color: var(--color-red-900);
   }
 
@@ -1771,15 +1707,6 @@
     color: var(--color-blue-600);
   }
 }
-/* A white highlight sweeping left→right across the thread labels. */
-@keyframes threadSweep {
-  from {
-    background-position: 130% 0;
-  }
-  to {
-    background-position: -130% 0;
-  }
-}
 @keyframes toastIn {
   from {
     opacity: 0;
@@ -1857,12 +1784,6 @@
   }
   .consoleStatus.working {
     animation: none;
-  }
-  .consoleCard[data-running='true'] .consoleGroupName,
-  .consoleCard[data-running='true'] .consoleGroupCount {
-    animation: none;
-    -webkit-text-fill-color: var(--color-slate-400);
-    color: var(--color-slate-400);
   }
   html.theme-transition * {
     transition: none;

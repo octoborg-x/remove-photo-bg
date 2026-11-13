@@ -432,7 +432,7 @@ try {
         radios: radios.map((r) => ({ value: r.value, checked: r.checked, disabled: r.disabled })),
         imgSrc: img?.getAttribute('src') ?? '',
         outputSectionHidden: document.getElementById('outputSection')?.hidden ?? true,
-        log: document.getElementById('logGroups')?.textContent ?? '',
+        log: document.getElementById('consoleOutput')?.textContent ?? '',
       };
     });
     record(
@@ -638,48 +638,48 @@ try {
       `mark ${markWidth.markW.toFixed(1)}px vs brand height ${markWidth.h.toFixed(1)}px`,
     );
 
-    // The console lives in the studio workspace. It has no pipeline-dot row or
-    // category-chevron row: the log is filed under plain collapsible threads,
-    // and the live status is a single label. The Zero-Upload statement is hidden
-    // behind a clickable icon.
+    // The console lives in the studio workspace as a flat terminal: one
+    // monospace line per event, newest at the bottom, with a prompt glyph. There
+    // are no threads, chevrons, or collapsible groups, and no pipeline-dot row.
+    // The Zero-Upload statement is hidden behind a clickable icon.
     const panelState = await page.evaluate(() => {
       const consoleEl = document.querySelector('.consoleCard');
       const inStudio = !!document.getElementById('studio')?.contains(consoleEl);
       const label = document.getElementById('processingLabel')?.textContent ?? '';
-      const groups = Array.from(document.querySelectorAll('#logGroups .logGroup'))
-        .filter((g) => !g.hidden)
-        .map((g) => g.dataset.category);
+      const output = document.getElementById('consoleOutput');
+      const lines = Array.from(output?.querySelectorAll('.consoleLine') ?? []);
+      const lineText = lines.map((l) => l.querySelector('.consoleLineText')?.textContent ?? '');
+      const promptCount = lines.filter((l) => l.querySelector('.consoleLinePrompt')?.textContent).length;
       const privacyHiddenBefore = document.getElementById('privacyStatement')?.hidden ?? false;
       const privacyBtn = document.getElementById('privacyToggle');
-      // The icon must sit beside the "Console" heading, be borderless, and carry
-      // no text label of its own.
       const head = privacyBtn?.closest('.consoleHead');
       const privacyInHead = !!head && /console/i.test(head.textContent ?? '');
       const privacyBorderless = getComputedStyle(privacyBtn).borderTopWidth === '0px';
       const privacyNoLabel = !privacyBtn?.parentElement?.querySelector('.privacyToggleLabel');
       privacyBtn?.click();
       const privacyHiddenAfter = document.getElementById('privacyStatement')?.hidden ?? true;
-      // The two "vertical" components are gone.
+      // The old "vertical" components and the categorised log are gone.
       const noStepList = !document.getElementById('stepList');
       const noLogDots = !document.getElementById('logDots');
-      // Each thread header ends with its chevron (after the label), not before.
-      const group = document.querySelector('#logGroups .logGroup');
-      const summary = group?.querySelector('.consoleGroupSummary');
-      const kids = summary ? Array.from(summary.children) : [];
-      const chevronIsLast = kids.length > 0 && kids[kids.length - 1].classList.contains('consoleChevron');
-      const groupBorderless = group ? getComputedStyle(group).borderTopWidth === '0px' : false;
-      const bodyIndented = group
-        ? parseFloat(getComputedStyle(group.querySelector('.consoleGroupBody')).marginLeft) > 8
-        : false;
-      // There is exactly one status line: the console-bar label. The old
-      // duplicate stage band inside the scroll area (#stage / .consoleStage) is
-      // gone, and the label lives in the console head.
+      const noLogGroups = !document.getElementById('logGroups');
+      const noThreads = document.querySelectorAll('.consoleGroup, .consoleChevron, .logGroup').length === 0;
+      // Exactly one status line: the console-bar label in the head. No duplicate
+      // stage band inside the scroll area.
       const labelInHead = !!document.getElementById('processingLabel')?.closest('.consoleHead');
       const noStageBand = !document.getElementById('stage') && !document.querySelector('.consoleStage');
+      // The console card's background spans the full studio width (no inset).
+      const studioW = document.getElementById('studio')?.getBoundingClientRect().width ?? 0;
+      const cardBox = consoleEl?.getBoundingClientRect() ?? { left: 0, right: 0, width: 0 };
+      const fullWidth = cardBox.width >= studioW - 1;
+      // Every print pins the terminal to its newest line.
+      const scroll = document.querySelector('.consoleScroll');
+      const atBottom = scroll ? scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight <= 2 : false;
       return {
         inStudio,
         label,
-        groups,
+        lineCount: lines.length,
+        lineText,
+        promptCount,
         privacyHiddenBefore,
         privacyHiddenAfter,
         privacyInHead,
@@ -687,11 +687,14 @@ try {
         privacyNoLabel,
         noStepList,
         noLogDots,
-        chevronIsLast,
-        groupBorderless,
-        bodyIndented,
+        noLogGroups,
+        noThreads,
         labelInHead,
         noStageBand,
+        fullWidth,
+        cardLeft: Math.round(cardBox.left),
+        studioW: Math.round(studioW),
+        atBottom,
       };
     });
     record(
@@ -705,9 +708,22 @@ try {
       `noStepList ${panelState.noStepList} noLogDots ${panelState.noLogDots}`,
     );
     record(
-      'log lines are filed under categories',
-      panelState.groups.length > 0,
-      panelState.groups.join(','),
+      'the console prints flat terminal lines, not collapsible threads',
+      panelState.lineCount > 0 &&
+        panelState.noLogGroups === true &&
+        panelState.noThreads === true &&
+        panelState.promptCount === panelState.lineCount,
+      `lines ${panelState.lineCount} noLogGroups ${panelState.noLogGroups} noThreads ${panelState.noThreads} prompts ${panelState.promptCount}`,
+    );
+    record(
+      'the console output is scrolled to its newest line',
+      panelState.atBottom === true,
+      `atBottom ${panelState.atBottom}`,
+    );
+    record(
+      'the console background spans the full studio width',
+      panelState.fullWidth === true,
+      `card left ${panelState.cardLeft} vs studio width ${panelState.studioW}`,
     );
     record(
       'the privacy statement is hidden until its icon is clicked',
@@ -722,56 +738,33 @@ try {
       `inHead ${panelState.privacyInHead} borderless ${panelState.privacyBorderless} noLabel ${panelState.privacyNoLabel}`,
     );
     record(
-      'the thread headers put the chevron after the label, in borderless indented blocks',
-      panelState.chevronIsLast === true &&
-        panelState.groupBorderless === true &&
-        panelState.bodyIndented === true,
-      `chevronLast ${panelState.chevronIsLast} borderless ${panelState.groupBorderless} indented ${panelState.bodyIndented}`,
-    );
-    record(
       'the status line is the single console-bar label (no duplicate stage band)',
       panelState.labelInHead === true && panelState.noStageBand === true,
       `labelInHead ${panelState.labelInHead} noStageBand ${panelState.noStageBand}`,
     );
 
-    // The active thread (the last category to receive a line) is expanded, so the
-    // live log is visible without a click.
-    const activeThreadOpen = await page.evaluate(() => {
-      const groups = Array.from(document.querySelectorAll('#logGroups .logGroup')).filter((g) => !g.hidden);
-      const last = groups[groups.length - 1];
-      return last ? last.open === true && last.dataset.active === 'true' : null;
+    // The Processing-tab status text must stay light in both themes: it sits on
+    // the always-dark wallpaper, so a theme token that inverts would vanish.
+    const procContrast = await page.evaluate(() => {
+      const text = document.querySelector('.procStatusText');
+      const read = (theme) => {
+        document.documentElement.setAttribute('data-theme', theme);
+        const c = getComputedStyle(text).color;
+        const m = c.match(/\d+/g).map(Number);
+        // Relative luminance (sRGB, rough) — must be a light ink (>0.5).
+        const lum = (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255;
+        return lum;
+      };
+      const light = read('light');
+      const dark = read('dark');
+      return { light, dark };
     });
     record(
-      'the active console thread is expanded',
-      activeThreadOpen === true,
-      `activeThreadOpen ${activeThreadOpen}`,
+      'the processing status text stays light on the dark wallpaper in both themes',
+      procContrast.light > 0.5 && procContrast.dark > 0.5,
+      `light ${procContrast.light.toFixed(2)} dark ${procContrast.dark.toFixed(2)}`,
     );
 
-    // While a run is in flight, the console thread labels animate: grey text with
-    // a white light sweeping across it (opt-in via [data-running] on the card).
-    const runningSweep = await page.evaluate(() => {
-      const card = document.querySelector('.consoleCard');
-      const name = document.querySelector('#logGroups .logGroup .consoleGroupName');
-      if (!card || !name) return null;
-      // getComputedStyle returns a live object, so read the values immediately.
-      const read = () => {
-        const s = getComputedStyle(name);
-        return { anim: s.animationName, clip: s.webkitBackgroundClip || s.backgroundClip };
-      };
-      const before = read();
-      card.dataset.running = 'true';
-      const during = read();
-      card.dataset.running = 'false';
-      return { beforeAnim: before.anim, duringAnim: during.anim, clip: during.clip };
-    });
-    record(
-      'while running, thread labels are grey with a white-light sweep',
-      !!runningSweep &&
-        runningSweep.duringAnim === 'threadSweep' &&
-        runningSweep.beforeAnim === 'none' &&
-        /text/.test(runningSweep.clip),
-      runningSweep ? `anim ${runningSweep.beforeAnim}→${runningSweep.duringAnim} clip ${runningSweep.clip}` : 'no thread label',
-    );
 
     // Console show/hide + drag-resize: the toggle button and the in-card close
     // both hide it; the resize handle can only shrink it (never past 35%).

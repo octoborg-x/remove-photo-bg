@@ -785,7 +785,7 @@
                   </div>
                   <div class="procStatus">
                     <span class="procStatusDot" aria-hidden="true"></span>
-                    <span class="text-slate-100">Removing background with on-device AI…</span>
+                    <span class="procStatusText">Removing background with on-device AI…</span>
                   </div>
                 </div>
                 <div class="procProgress">
@@ -1037,32 +1037,9 @@
               </div>
 
               <div class="consoleScroll">
-                <!-- Engine details (was "Technical details"): a collapsible block -->
-                <details class="consoleGroup" data-console-group="engine">
-                  <summary class="consoleGroupSummary">
-                    <span class="consoleGroupName">Engine details</span>
-                    <span class="consoleGroupCount" id="engineHint">on-device</span>
-                    <span class="consoleChevron" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
-                    </span>
-                  </summary>
-                  <div class="consoleGroupBody">
-                    <div class="flex items-center justify-between gap-2">
-                      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Neural model</span>
-                      <strong class="text-xs font-bold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-md" id="modelName">QMix Cut-512</strong>
-                    </div>
-                    <p class="text-xs text-slate-600 mt-2 font-medium" id="modelSize">
-                      BiRefNet Lite · 512×512 · INT8/FP16 Hybrid
-                    </p>
-                    <div class="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500 font-mono">
-                      <span>Runtime</span>
-                      <code id="modelIdText" class="px-2 py-0.5 rounded bg-slate-200 text-slate-700">qmix-cut-512</code>
-                    </div>
-                  </div>
-                </details>
-
-                <!-- Categorised log: one collapsible block per category -->
-                <div id="logGroups" class="logGroups"></div>
+                <!-- Flat terminal output: one line per event, newest at the
+                     bottom. No threads, chevrons, or collapsible groups. -->
+                <div id="consoleOutput" class="consoleOutput" role="log" aria-live="polite"></div>
               </div>
             </div>
           </div>

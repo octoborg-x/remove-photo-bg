@@ -1027,7 +1027,6 @@
                   </span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <span id="processingLabel" class="consoleStatus" role="status" aria-live="polite">Engine ready</span>
                   <button id="consoleClose" type="button" class="consoleCloseBtn" aria-label="Hide console" title="Hide console">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
                       <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
@@ -1040,6 +1039,13 @@
                 <!-- Flat terminal output: one line per event, newest at the
                      bottom. No threads, chevrons, or collapsible groups. -->
                 <div id="consoleOutput" class="consoleOutput" role="log" aria-live="polite"></div>
+              </div>
+              <!-- The live status is the terminal's last line: pinned to the foot
+                   of the console and updated in place, so the current step (e.g.
+                   download progress) is always visible without scrolling. -->
+              <div id="consoleStatusLine" class="consoleLine consoleStatusLine">
+                <span class="consoleLinePrompt" aria-hidden="true">❯</span>
+                <span id="processingLabel" class="consoleLineText consoleStatusText" role="status" aria-live="polite">Engine ready</span>
               </div>
             </div>
           </div>

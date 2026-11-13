@@ -663,9 +663,17 @@ try {
       const noLogDots = !document.getElementById('logDots');
       const noLogGroups = !document.getElementById('logGroups');
       const noThreads = document.querySelectorAll('.consoleGroup, .consoleChevron, .logGroup').length === 0;
-      // Exactly one status line: the console-bar label in the head. No duplicate
-      // stage band inside the scroll area.
-      const labelInHead = !!document.getElementById('processingLabel')?.closest('.consoleHead');
+      // The live status is the terminal's last line: a prompt-prefixed row pinned
+      // to the foot of the console card, below the scroll area (so it is always
+      // visible), and there is no duplicate stage band anywhere.
+      const statusLine = document.getElementById('consoleStatusLine');
+      const statusInCard = statusLine?.closest('.consoleCard') === consoleEl;
+      const statusHasPrompt = !!statusLine?.querySelector('.consoleLinePrompt')?.textContent;
+      const statusTextEl = document.getElementById('processingLabel');
+      const statusIsTextOfLine = !!statusLine?.contains(statusTextEl);
+      const scrollBox = document.querySelector('.consoleScroll')?.getBoundingClientRect();
+      const statusBox = statusLine?.getBoundingClientRect();
+      const statusBelowScroll = !!scrollBox && !!statusBox && statusBox.top >= scrollBox.bottom - 1;
       const noStageBand = !document.getElementById('stage') && !document.querySelector('.consoleStage');
       // The console card's background spans the full studio width (no inset).
       const studioW = document.getElementById('studio')?.getBoundingClientRect().width ?? 0;
@@ -689,7 +697,10 @@ try {
         noLogDots,
         noLogGroups,
         noThreads,
-        labelInHead,
+        statusInCard,
+        statusHasPrompt,
+        statusIsTextOfLine,
+        statusBelowScroll,
         noStageBand,
         fullWidth,
         cardLeft: Math.round(cardBox.left),
@@ -721,6 +732,15 @@ try {
       `atBottom ${panelState.atBottom}`,
     );
     record(
+      'the live status is the terminal last line, pinned below the scroll area',
+      panelState.statusInCard === true &&
+        panelState.statusHasPrompt === true &&
+        panelState.statusIsTextOfLine === true &&
+        panelState.statusBelowScroll === true &&
+        panelState.noStageBand === true,
+      `inCard ${panelState.statusInCard} prompt ${panelState.statusHasPrompt} text ${panelState.statusIsTextOfLine} belowScroll ${panelState.statusBelowScroll} noStageBand ${panelState.noStageBand}`,
+    );
+    record(
       'the console background spans the full studio width',
       panelState.fullWidth === true,
       `card left ${panelState.cardLeft} vs studio width ${panelState.studioW}`,
@@ -736,11 +756,6 @@ try {
         panelState.privacyBorderless === true &&
         panelState.privacyNoLabel === true,
       `inHead ${panelState.privacyInHead} borderless ${panelState.privacyBorderless} noLabel ${panelState.privacyNoLabel}`,
-    );
-    record(
-      'the status line is the single console-bar label (no duplicate stage band)',
-      panelState.labelInHead === true && panelState.noStageBand === true,
-      `labelInHead ${panelState.labelInHead} noStageBand ${panelState.noStageBand}`,
     );
 
     // The Processing-tab status text must stay light in both themes: it sits on

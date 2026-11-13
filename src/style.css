@@ -1540,17 +1540,26 @@
     border-bottom: 1px solid var(--color-slate-100);
     flex: none;
   }
-  .consoleStatus {
+  /* The live status is the terminal's last line — a pinned footer row styled
+     exactly like a log line, so it reads as the newest terminal output while it
+     stays visible (the scroll area above it never hides it). */
+  .consoleStatusLine {
+    flex: none;
+    gap: 0.5rem;
+    padding: 0.5rem 0.9rem 0.7rem;
+    border-top: 1px solid var(--color-slate-100);
+    font-family: var(--font-mono);
+    line-height: 1.55;
+  }
+  .consoleStatusText {
     font-size: 0.7rem;
     font-weight: 600;
-    color: var(--color-slate-500);
-    text-align: right;
   }
-  .consoleStatus.working {
+  .consoleStatusText.working {
     animation: workingText 1.6s ease-in-out infinite;
   }
-  /* Error state: the console-bar status reads in the error colour theme. */
-  .consoleStatus.is-error {
+  /* Error state: the status line reads in the error colour theme. */
+  .consoleStatusText.is-error {
     color: var(--color-red-900);
   }
   .consoleScroll {
@@ -1782,7 +1791,7 @@
   .heroTaglineTrack {
     animation: none;
   }
-  .consoleStatus.working {
+  .consoleStatusText.working {
     animation: none;
   }
   html.theme-transition * {

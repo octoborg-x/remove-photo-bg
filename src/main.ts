@@ -866,10 +866,10 @@ privacyToggle.addEventListener('click', () => {
   privacyToggle.setAttribute('aria-label', show ? 'Hide privacy statement' : 'Show privacy statement');
 });
 
-// The live status line is the single label in the console head. There used to be
-// a second, duplicate stage band inside the scroll area; the two said the same
-// thing, so only the console-bar one remains and every stage, progress reading,
-// and error is written here.
+// The live status is the terminal's last line — a pinned footer row that stays
+// visible while the scroll area above it scrolls. Every stage, progress reading,
+// and error is written here, so the current step (e.g. download progress) is
+// always the newest visible line without a separate status bar in the head.
 function setConsoleStatus(text: string, working: boolean): void {
   processingLabel.textContent = text;
   processingLabel.classList.toggle('working', working);

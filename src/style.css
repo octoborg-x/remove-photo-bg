@@ -1068,6 +1068,9 @@
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
   }
+  .studioBarBtn[hidden] {
+    display: none;
+  }
   .studioBarBtn:hover {
     background: var(--color-slate-200);
     color: var(--color-slate-900);
@@ -1264,6 +1267,130 @@
   }
   #outputFrame #outputBox {
     min-height: 0 !important;
+  }
+  /* ——— Result workspace: engine settings sidebar (left) + preview (right) ———
+     The sidebar collapses to a thin rail via the chevron in its header, and its
+     right edge drag-resizes up to 50% of the workspace (clamp in main.ts). */
+  .resultWorkspace {
+    display: flex;
+    align-items: stretch;
+    gap: 1rem;
+    min-height: 0;
+  }
+  .resultMain {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .settingsSidebar {
+    position: relative;
+    flex: none;
+    width: var(--sidebar-w, 15rem);
+    max-width: 50%;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 1rem;
+    background: var(--color-slate-50);
+    overflow: hidden;
+    transition: width 0.18s ease;
+  }
+  .settingsSidebar[data-collapsed='true'] {
+    width: 3rem;
+    min-width: 3rem;
+  }
+  .settingsSidebarBody {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.9rem;
+  }
+  .settingsSidebar[data-collapsed='true'] .settingsSidebarBody {
+    display: none;
+  }
+  .settingsSidebar[data-collapsed='true'] .sidebarHead {
+    justify-content: center;
+  }
+  .settingsSidebar[data-collapsed='true'] .sidebarHeadTitle {
+    display: none;
+  }
+  .sidebarHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.7rem 0.8rem;
+    border-bottom: 1px solid var(--color-slate-200);
+    flex: none;
+  }
+  .sidebarHeadTitle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .sidebarToggle {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 0.5rem;
+    border: 0;
+    background: transparent;
+    color: var(--color-slate-500);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .sidebarToggle:hover {
+    background: var(--color-slate-200);
+    color: var(--color-slate-900);
+  }
+  .sidebarToggle svg {
+    width: 1rem;
+    height: 1rem;
+    transition: transform 0.18s ease;
+  }
+  /* Point the chevron outward once the rail is collapsed, so it reads "expand". */
+  .settingsSidebar[data-collapsed='true'] .sidebarToggle svg {
+    transform: rotate(180deg);
+  }
+  /* Drag handle on the sidebar's right edge (col-resize). */
+  .sidebarResize {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 0.55rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: col-resize;
+    background: transparent;
+    touch-action: none;
+    z-index: 2;
+  }
+  .sidebarResizeGrip {
+    width: 0.22rem;
+    height: 2.5rem;
+    border-radius: 999px;
+    background: var(--color-slate-300);
+    transition: background 0.15s ease, height 0.15s ease;
+  }
+  .sidebarResize:hover .sidebarResizeGrip,
+  .sidebarResize:focus-visible .sidebarResizeGrip {
+    background: var(--color-blue-500);
+    height: 3.6rem;
+  }
+  .settingsSidebar[data-collapsed='true'] .sidebarResize {
+    display: none;
+  }
+  body.sidebar-resizing,
+  body.sidebar-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
   }
   /* A small, indeterminate banner over the already-usable preview while the edge
      refinement sharpens it. No percentage is shown (the stage has none). */

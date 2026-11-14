@@ -216,162 +216,6 @@
       </section>
 
 
-      <!-- Interactive Before & After Showcase Section -->
-      <section id="showcase" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-        <div class="text-center max-w-2xl mx-auto mb-12">
-          <span class="text-xs font-bold text-blue-600 tracking-wider uppercase mb-2 block">Real Model Outputs</span>
-          <h2 class="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-            Before &amp; After Neural Matting
-          </h2>
-          <p class="text-sm sm:text-base text-slate-600 mt-3">
-            Pick a sample from the thumbnails, then drag the interactive slider to inspect the precision of on-device segmentation against difficult silhouettes.
-          </p>
-        </div>
-
-        <div class="showcaseGallery" data-showcase>
-          <!-- Main viewer: one before/after example at a time -->
-          <div class="showcaseMain">
-            <!-- Item 1: Clean Silhouette Scent Bottle -->
-            <figure
-              id="showcase-panel-1"
-              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
-              data-compare
-              data-pos="50"
-              role="tabpanel"
-              aria-labelledby="showcase-tab-1"
-            >
-              <div class="flex items-center justify-between mb-3 px-1">
-                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Everyday Product</span>
-                <span class="text-[11px] text-slate-400 font-medium">Clean silhouette</span>
-              </div>
-              <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/product-scent-bottle-before.webp" alt="Original photo of a scent bottle on a plain background" />
-                <img class="compareImg compareAfter" src="./demo/product-scent-bottle-after.webp" alt="The same photo with the background removed" />
-                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-              </div>
-              <input
-                class="compareRange mt-4"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value="50"
-                aria-label="Reveal the cut-out for the scent bottle: left is the original, right is the background removed"
-              />
-              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Sharp edge boundaries with zero jagged fringes.
-              </figcaption>
-            </figure>
-
-            <!-- Item 2: Hair & Fur Dog -->
-            <figure
-              id="showcase-panel-2"
-              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
-              data-compare
-              data-pos="50"
-              role="tabpanel"
-              aria-labelledby="showcase-tab-2"
-              hidden
-            >
-              <div class="flex items-center justify-between mb-3 px-1">
-                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Hair &amp; Fur</span>
-                <span class="text-[11px] text-slate-400 font-medium">Fine strands</span>
-              </div>
-              <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/animal-buddy-dog-before.webp" alt="Original photo of a dog against a plain background" />
-                <img class="compareImg compareAfter" src="./demo/animal-buddy-dog-after.webp" alt="The same photo with the background removed" />
-                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-              </div>
-              <input
-                class="compareRange mt-4"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value="50"
-                aria-label="Reveal the cut-out for the dog photo: left is the original, right is the background removed"
-              />
-              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Individual hair strands preserved without harsh clipping.
-              </figcaption>
-            </figure>
-
-            <!-- Item 3: Glass & Translucent -->
-            <figure
-              id="showcase-panel-3"
-              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
-              data-compare
-              data-pos="50"
-              role="tabpanel"
-              aria-labelledby="showcase-tab-3"
-              hidden
-            >
-              <div class="flex items-center justify-between mb-3 px-1">
-                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Glass &amp; Crystal</span>
-                <span class="text-[11px] text-slate-400 font-medium">Translucent optics</span>
-              </div>
-              <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/glass-wine-before.webp" alt="Original photo of a wine glass on a white background" />
-                <img class="compareImg compareAfter" src="./demo/glass-wine-after.webp" alt="The same photo with the background removed" />
-                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-              </div>
-              <input
-                class="compareRange mt-4"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value="50"
-                aria-label="Reveal the cut-out for the wine glass: left is the original, right is the background removed"
-              />
-              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Subtle translucency and delicate stem reflections retained.
-              </figcaption>
-            </figure>
-          </div>
-
-          <!-- Vertical thumbnail rail: one tab per example -->
-          <div class="showcaseRail" role="tablist" aria-orientation="vertical" aria-label="Before and after examples">
-            <button
-              id="showcase-tab-1"
-              class="showcaseThumb is-active"
-              type="button"
-              role="tab"
-              aria-controls="showcase-panel-1"
-              aria-selected="true"
-              tabindex="0"
-            >
-              <img src="./demo/product-scent-bottle-before.webp" alt="" loading="lazy" />
-              <span class="showcaseThumbLabel">Everyday Product</span>
-            </button>
-            <button
-              id="showcase-tab-2"
-              class="showcaseThumb"
-              type="button"
-              role="tab"
-              aria-controls="showcase-panel-2"
-              aria-selected="false"
-              tabindex="-1"
-            >
-              <img src="./demo/animal-buddy-dog-before.webp" alt="" loading="lazy" />
-              <span class="showcaseThumbLabel">Hair &amp; Fur</span>
-            </button>
-            <button
-              id="showcase-tab-3"
-              class="showcaseThumb"
-              type="button"
-              role="tab"
-              aria-controls="showcase-panel-3"
-              aria-selected="false"
-              tabindex="-1"
-            >
-              <img src="./demo/glass-wine-before.webp" alt="" loading="lazy" />
-              <span class="showcaseThumbLabel">Glass &amp; Crystal</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
       <!-- How It Works Flow -->
       <section id="how" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
         <div class="text-center max-w-2xl mx-auto mb-14">
@@ -567,6 +411,162 @@
         </div>
       </section>
 
+      <!-- Interactive Before & After Showcase Section -->
+      <section id="showcase" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
+        <div class="text-center max-w-2xl mx-auto mb-12">
+          <span class="text-xs font-bold text-blue-600 tracking-wider uppercase mb-2 block">Real Model Outputs</span>
+          <h2 class="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+            Before &amp; After Neural Matting
+          </h2>
+          <p class="text-sm sm:text-base text-slate-600 mt-3">
+            Pick a sample from the thumbnails, then drag the interactive slider to inspect the precision of on-device segmentation against difficult silhouettes.
+          </p>
+        </div>
+
+        <div class="showcaseGallery" data-showcase>
+          <!-- Main viewer: one before/after example at a time -->
+          <div class="showcaseMain">
+            <!-- Item 1: Clean Silhouette Scent Bottle -->
+            <figure
+              id="showcase-panel-1"
+              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-1"
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Everyday Product</span>
+                <span class="text-[11px] text-slate-400 font-medium">Clean silhouette</span>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/product-scent-bottle-before.webp" alt="Original photo of a scent bottle on a plain background" />
+                <img class="compareImg compareAfter" src="./demo/product-scent-bottle-after.webp" alt="The same photo with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the scent bottle: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Sharp edge boundaries with zero jagged fringes.
+              </figcaption>
+            </figure>
+
+            <!-- Item 2: Hair & Fur Dog -->
+            <figure
+              id="showcase-panel-2"
+              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-2"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Hair &amp; Fur</span>
+                <span class="text-[11px] text-slate-400 font-medium">Fine strands</span>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/animal-buddy-dog-before.webp" alt="Original photo of a dog against a plain background" />
+                <img class="compareImg compareAfter" src="./demo/animal-buddy-dog-after.webp" alt="The same photo with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the dog photo: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Individual hair strands preserved without harsh clipping.
+              </figcaption>
+            </figure>
+
+            <!-- Item 3: Glass & Translucent -->
+            <figure
+              id="showcase-panel-3"
+              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-3"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Glass &amp; Crystal</span>
+                <span class="text-[11px] text-slate-400 font-medium">Translucent optics</span>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/glass-wine-before.webp" alt="Original photo of a wine glass on a white background" />
+                <img class="compareImg compareAfter" src="./demo/glass-wine-after.webp" alt="The same photo with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the wine glass: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Subtle translucency and delicate stem reflections retained.
+              </figcaption>
+            </figure>
+          </div>
+
+          <!-- Vertical thumbnail rail: one tab per example -->
+          <div class="showcaseRail" role="tablist" aria-orientation="vertical" aria-label="Before and after examples">
+            <button
+              id="showcase-tab-1"
+              class="showcaseThumb is-active"
+              type="button"
+              role="tab"
+              aria-controls="showcase-panel-1"
+              aria-selected="true"
+              tabindex="0"
+            >
+              <img src="./demo/product-scent-bottle-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Everyday Product</span>
+            </button>
+            <button
+              id="showcase-tab-2"
+              class="showcaseThumb"
+              type="button"
+              role="tab"
+              aria-controls="showcase-panel-2"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              <img src="./demo/animal-buddy-dog-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Hair &amp; Fur</span>
+            </button>
+            <button
+              id="showcase-tab-3"
+              class="showcaseThumb"
+              type="button"
+              role="tab"
+              aria-controls="showcase-panel-3"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              <img src="./demo/glass-wine-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Glass &amp; Crystal</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       <!-- Benchmarks & Scientific Rigor -->
       <section id="benchmarks" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
         <div class="theme-inverse rounded-3xl bg-slate-900 text-on-accent p-8 sm:p-12 shadow-2xl relative overflow-hidden">
@@ -678,6 +678,23 @@
                 <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
               </svg>
             </button>
+            <!-- Show/hide the result settings sidebar (like the console toggle).
+                 Only meaningful in the Result tab, so it appears there. -->
+            <button
+              id="sidebarToggle"
+              type="button"
+              class="studioBarBtn"
+              aria-label="Hide settings sidebar"
+              aria-pressed="true"
+              aria-controls="settingsSidebar"
+              title="Show or hide the settings sidebar"
+              hidden
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <line x1="9" y1="4" x2="9" y2="20" />
+              </svg>
+            </button>
             <button id="studioThemeToggle" type="button" class="themeToggle" aria-label="Switch colour theme">
               <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="4" />
@@ -711,7 +728,7 @@
             <div class="studioCard">
               <!-- Editor tab bar -->
               <div class="studioTabs" role="tablist" aria-label="Studio editor">
-                <button id="tabInput" class="editorTab" role="tab" data-tab="input" aria-selected="true" aria-controls="panelInput">Input</button>
+                <button id="tabInput" class="editorTab" role="tab" data-tab="input" aria-selected="true" aria-controls="panelInput">Photo</button>
                 <button id="tabProcessing" class="editorTab" role="tab" data-tab="processing" aria-selected="false" aria-controls="panelProcessing" disabled>Processing</button>
                 <button id="tabResult" class="editorTab" role="tab" data-tab="result" aria-selected="false" aria-controls="panelResult" disabled>Result</button>
                 <button id="tabCompare" class="editorTab" role="tab" data-tab="compare" aria-selected="false" aria-controls="panelCompare" disabled>Compare</button>
@@ -797,37 +814,33 @@
 
             <!-- Result tab: the generated cut-out -->
             <div id="panelResult" class="editorPanel" role="tabpanel" aria-labelledby="tabResult" hidden>
-            <section id="outputSection" class="relative rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-7 shadow-sm transition-all" hidden aria-label="Background-removed output">
-              <!-- Relative Image Container Holding Top-Left Gear -->
-              <div id="outputFrame" class="relative rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-100 shadow-inner group/output">
-                <!-- Gear button on Top-Left Corner of generated image -->
-                <button
-                  id="settingsGearBtn"
-                  type="button"
-                  aria-label="Studio settings and advanced options"
-                  title="Studio settings & advanced tuning"
-                  class="absolute top-3.5 left-3.5 z-20 flex items-center justify-center w-9 h-9 rounded-xl bg-white/95 hover:bg-white text-slate-700 hover:text-slate-900 shadow-md border border-slate-200/90 backdrop-blur-md transition-all hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                >
-                  <svg class="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                  </svg>
-                </button>
-
-                <!-- Compact Floating Advanced Options Popover Menu -->
-                <div
-                  id="advancedMenu"
-                  hidden
-                  class="absolute top-14 left-3.5 z-30 w-[min(20rem,calc(100%-1.75rem))] max-h-[calc(100%-4.5rem)] overflow-y-auto p-5 bg-white/98 backdrop-blur-2xl border border-slate-200 rounded-2xl shadow-2xl transition-all animate-in fade-in zoom-in-95 text-left"
-                >
-                  <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
-                    <div class="flex items-center gap-2">
-                      <span class="w-2 h-2 rounded-full bg-blue-600"></span>
-                      <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Studio Engine Controls</h4>
-                    </div>
-                    <button id="closeSettingsBtn" type="button" class="text-slate-400 hover:text-slate-700 text-sm p-1 rounded-lg">✕</button>
+              <section id="outputSection" class="relative rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-7 shadow-sm transition-all" hidden aria-label="Background-removed output">
+              <!-- Result workspace: the engine settings sidebar on the left, the
+                   cut-out preview on the right. The sidebar collapses (chevron in
+                   its header) and drag-resizes up to 50% of the workspace. -->
+              <div id="resultWorkspace" class="resultWorkspace">
+              <aside id="settingsSidebar" class="settingsSidebar" aria-label="Studio engine settings">
+                <div class="sidebarHead">
+                  <div class="sidebarHeadTitle">
+                    <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                    <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Studio Engine Controls</h4>
                   </div>
+                  <button
+                    id="sidebarCollapse"
+                    type="button"
+                    class="sidebarToggle"
+                    aria-label="Collapse settings sidebar"
+                    aria-pressed="true"
+                    aria-controls="settingsSidebarBody"
+                    title="Collapse the settings sidebar"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="15 6 9 12 15 18" />
+                    </svg>
+                  </button>
+                </div>
 
+                <div id="settingsSidebarBody" class="settingsSidebarBody">
                   <div class="space-y-4 text-xs">
                     <!-- Runtime Provider Select -->
                     <div>
@@ -894,7 +907,22 @@
                     Re-process with these settings
                   </button>
                 </div>
-
+                <!-- Drag the right edge to resize the sidebar (up to 50%). -->
+                <div
+                  id="sidebarResize"
+                  class="sidebarResize"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize settings sidebar"
+                  tabindex="0"
+                  title="Drag to resize the settings sidebar"
+                >
+                  <span class="sidebarResizeGrip" aria-hidden="true"></span>
+                </div>
+              </aside>
+              <div class="resultMain">
+              <!-- Relative Image Container -->
+              <div id="outputFrame" class="relative rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-100 shadow-inner group/output">
                 <!-- Output Image Box with Checkerboard Background -->
                 <div id="outputBox" class="outputBox min-h-[320px] flex items-center justify-center p-6 checkerboard-pattern"></div>
 
@@ -955,6 +983,8 @@
                     <span>Download Image</span>
                   </a>
                 </div>
+              </div>
+              </div>
               </div>
             </section>
             </div>

@@ -180,6 +180,13 @@ const consoleToggleBtn = document.getElementById('consoleToggle')! as HTMLButton
 const consoleCloseBtn = document.getElementById('consoleClose')! as HTMLButtonElement;
 const consoleResizeEl = document.getElementById('consoleResize')!;
 const consoleCardEl = document.querySelector<HTMLElement>('.consoleCard')!;
+// Result-tab settings sidebar (engine controls). Declared here with the other
+// studio refs because renderStudioView() (below) reads the top-bar toggle.
+const settingsSidebarEl = document.getElementById('settingsSidebar') as HTMLElement | null;
+const sidebarToggleBtn = document.getElementById('sidebarToggle') as HTMLButtonElement | null;
+const sidebarCollapseBtn = document.getElementById('sidebarCollapse') as HTMLButtonElement | null;
+const sidebarResizeEl = document.getElementById('sidebarResize');
+const resultWorkspaceEl = document.getElementById('resultWorkspace');
 let studioView = initialStudioView();
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
@@ -209,6 +216,9 @@ function renderStudioView(): void {
   // The refinement banner sits over the already-usable preview while the edge
   // stage runs, and disappears the instant the refined result is swapped in.
   refineNoticeEl.hidden = !studioView.refining;
+  // The settings sidebar only exists in the Result tab, so its top-bar show/hide
+  // button appears exactly when that tab is selected.
+  if (sidebarToggleBtn) sidebarToggleBtn.hidden = studioView.tab !== 'result';
 }
 
 function setStudioTab(tab: StudioTab, force = false): void {
@@ -1731,37 +1741,102 @@ function bindMaskControl(input: HTMLInputElement, valueEl: Element, kind: 'thres
 bindMaskControl(maskThresholdInput, maskThresholdValue, 'threshold');
 bindMaskControl(maskFeatherInput, maskFeatherValue, 'feather');
 
-// Compact advanced options popover menu toggled via gear on top-left of image
-const settingsGearBtn = document.getElementById('settingsGearBtn');
-const advancedMenu = document.getElementById('advancedMenu');
-const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+// ——— Result tab: engine settings sidebar ———
+// The advanced engine controls live in a sidebar in the result workspace. It
+// collapses via the chevron in its header (or the top-bar show/hide button) and
+// drag-resizes up to 50% of the workspace width (the clamp mirrors the
+// console's). `null` means the CSS default track width.
+const SIDEBAR_MAX_FRACTION = 0.5;
+const SIDEBAR_MIN_PX = 200;
+let sidebarWidthPx: number | null = null;
 
-if (settingsGearBtn && advancedMenu) {
-  settingsGearBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const isHidden = advancedMenu.hasAttribute('hidden');
-    if (isHidden) {
-      advancedMenu.removeAttribute('hidden');
-    } else {
-      advancedMenu.setAttribute('hidden', '');
-    }
-  });
-
-  closeSettingsBtn?.addEventListener('click', () => {
-    advancedMenu.setAttribute('hidden', '');
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!advancedMenu.hasAttribute('hidden') && !advancedMenu.contains(e.target as Node) && e.target !== settingsGearBtn) {
-      advancedMenu.setAttribute('hidden', '');
-    }
-  });
+// Keep the top-bar show/hide button in sync with the sidebar's collapsed state.
+function renderSidebarToggle(): void {
+  if (!sidebarToggleBtn) return;
+  const collapsed = settingsSidebarEl?.dataset.collapsed === 'true';
+  sidebarToggleBtn.setAttribute('aria-pressed', String(!collapsed));
+  const label = collapsed ? 'Show settings sidebar' : 'Hide settings sidebar';
+  sidebarToggleBtn.setAttribute('aria-label', label);
+  sidebarToggleBtn.setAttribute('title', label);
 }
+
+function setSidebarCollapsed(collapsed: boolean): void {
+  if (!settingsSidebarEl) return;
+  settingsSidebarEl.dataset.collapsed = collapsed ? 'true' : 'false';
+  sidebarCollapseBtn?.setAttribute('aria-pressed', String(!collapsed));
+  renderSidebarToggle();
+  if (!collapsed) applySidebarWidth(sidebarWidthPx);
+}
+
+// Pins the sidebar to an explicit pixel width (or back to the CSS default), so a
+// drag can grow it. The value is always clamped to the 50% cap.
+function applySidebarWidth(px: number | null): void {
+  if (!settingsSidebarEl || !resultWorkspaceEl) return;
+  const wsW = resultWorkspaceEl.getBoundingClientRect().width;
+  if (!wsW) return;
+  if (px == null) {
+    sidebarWidthPx = null;
+    settingsSidebarEl.style.removeProperty('--sidebar-w');
+    return;
+  }
+  const max = wsW * SIDEBAR_MAX_FRACTION;
+  const width = Math.max(SIDEBAR_MIN_PX, Math.min(px, max));
+  sidebarWidthPx = width;
+  settingsSidebarEl.style.setProperty('--sidebar-w', `${Math.round(width)}px`);
+}
+
+let sidebarResizing = false;
+let sidebarStartX = 0;
+let sidebarStartW = 0;
+
+sidebarResizeEl?.addEventListener('pointerdown', (e) => {
+  const pointer = e as PointerEvent;
+  if (!settingsSidebarEl || settingsSidebarEl.dataset.collapsed === 'true') return;
+  sidebarResizing = true;
+  sidebarStartX = pointer.clientX;
+  sidebarStartW = settingsSidebarEl.getBoundingClientRect().width;
+  (sidebarResizeEl as HTMLElement).setPointerCapture(pointer.pointerId);
+  document.body.classList.add('sidebar-resizing');
+});
+sidebarResizeEl?.addEventListener('pointermove', (e) => {
+  if (!sidebarResizing) return;
+  const pointer = e as PointerEvent;
+  // The sidebar sits on the left and the handle is on its right edge, so
+  // dragging right widens it by the same delta.
+  applySidebarWidth(sidebarStartW + (pointer.clientX - sidebarStartX));
+});
+function endSidebarResize(): void {
+  if (!sidebarResizing) return;
+  sidebarResizing = false;
+  document.body.classList.remove('sidebar-resizing');
+}
+sidebarResizeEl?.addEventListener('pointerup', endSidebarResize);
+sidebarResizeEl?.addEventListener('pointercancel', endSidebarResize);
+sidebarResizeEl?.addEventListener('keydown', (e) => {
+  const key = (e as KeyboardEvent).key;
+  if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
+  e.preventDefault();
+  const current = settingsSidebarEl?.getBoundingClientRect().width ?? 0;
+  applySidebarWidth(current + (key === 'ArrowRight' ? 24 : -24));
+});
+window.addEventListener('resize', () => {
+  if (sidebarWidthPx != null) applySidebarWidth(sidebarWidthPx);
+});
+
+// The top-bar button shows/hides the sidebar; the in-sidebar chevron collapses
+// it. Both drive the same state, so they stay in sync.
+sidebarToggleBtn?.addEventListener('click', () => {
+  const collapsed = settingsSidebarEl?.dataset.collapsed === 'true';
+  setSidebarCollapsed(!collapsed);
+});
+sidebarCollapseBtn?.addEventListener('click', () => {
+  const collapsed = settingsSidebarEl?.dataset.collapsed === 'true';
+  setSidebarCollapsed(!collapsed);
+});
 
 // Re-run inference with the current engine settings, then jump to the Processing
 // tab so the user sees the run they asked for.
 reprocessBtn?.addEventListener('click', () => {
-  advancedMenu?.setAttribute('hidden', '');
   if (!currentImageData) return;
   setStudioTab('processing', true);
   void runSmoke();

@@ -291,25 +291,60 @@ either tail; every measured mask is the opposite — min 0, max 1, bimodal. The
 **WebGPU path itself could not be reproduced in this sandbox**: headless Chromium
 falls back to WASM (no hardware GPU), so a real phone is required.
 
+### The device mask is flat, not squashed — and it is the same on BOTH providers
+
+Two Copy-report captures from the reporting phone (Android, Qualcomm
+Adreno-6xx) tell the same story, and it is NOT the double-sigmoid band:
+
+| Capture | Provider that ran | min | mean | max | tail `<0.01` / `>0.95` |
+|---|---|---|---|---|---|
+| report 1 | WASM (webgpu fell back) | 0.0065 | 0.2324 | 0.6437 | 0.69% / **0.00%** |
+| report 2 | WebGPU | 0.0068 | 0.2385 | 0.6411 | 0.01% / **0.00%** |
+
+The two providers — a GPU kernel and a CPU kernel on the same artifact —
+produce a **near-identical flat mask**, so the failure is not provider-specific
+and not a double sigmoid (a squash would put the mean at ≈0.5–0.73 with a
+non-zero low tail at ≈0.5; here the low tail is intact at 0 and the *high* tail
+is what is missing). The mask has no confident foreground core at all.
+
+Offline reproduction attempts on the shipped artifact **failed to reproduce this
+shape from any input transform** (all left a healthy bimodal mask, `max 1.0`):
+brightness/contrast/saturation sweeps, gamma 0.4–2.8, sRGB↔linear, RGB↔BGR
+swaps, Gaussian blur up to r=16, downscale to 32×32, colour casts, and a
+composite over a mid-grey backdrop. A *degenerate* input (any uniform
+colour, or an all-zero tensor) produces an **empty** mask (mean ≈ 0), not this
+flat ramp — so the phone is feeding a real image, just one this model cannot
+confidently segment at that precision. This points at the real-device
+WebGPU/WASM **fp16 precision** path (§1 lists Adreno-6xx as visually wrong on
+WebGPU), not at the repo's alpha/compositing logic.
+
 ### Conclusion
 
 The alpha/compositing logic in this repo is correct on both providers — no
 double sigmoid, no provider-specific divergence, no model-URL mismatch. The
-reported ghost output is therefore most consistent with a **real-device WebGPU
-driver/precision issue** (the Adreno-6xx class already documented in §1/§4),
-which needs a physical phone to diagnose further. To make that diagnosis
-one-tap, the app now captures the raw-mask statistics into the **Copy report**
-button (§3 step 4) and warns in the Console when a mask is squashed (§9).
+reported ghost output is therefore most consistent with a **real-device
+precision issue** (the Adreno-6xx class already documented in §1/§4), which
+needs a physical phone to diagnose further. To make that diagnosis one-tap, the
+app captures the raw-mask statistics into the **Copy report** button (§3 step 4)
+and warns in the Console whenever a mask is not bimodal (§9).
 
 ### Guards added (so a real squash can never ship silently)
 
 - Runtime: the main thread measures the delivered raw mask's min/mean/max
   immediately after inference (`src/features/diagnostics/raw-mask-stats.ts`,
-  `isSuspectRawMask`) and warns in the Console when the mask is not bimodal
-  (mean in `[0.45, 0.8]` with too few pixels in the tails); the diagnostic
-  report prints a `SUSPECT` verdict. The measurement lives in ONE shared module
-  used by the page (the worker no longer keeps a duplicate copy), so the
-  thresholds cannot drift between paths.
+  `isSuspectRawMask`) and warns in the Console when the mask is not bimodal; the
+  diagnostic report prints a `SUSPECT` verdict. The measurement lives in ONE
+  shared module used by the page (the worker no longer keeps a duplicate copy),
+  so the thresholds cannot drift between paths.
+- The guard tests **bimodality alone** — the share of pixels in the two tails
+  (`<0.01` plus `>0.95`) must be at least `MIN_BIMODAL_TAIL` (0.4). It
+  deliberately has **no mean band**: an earlier version required
+  `mean ∈ [0.45, 0.80]` (the double-sigmoid band) and therefore stayed silent on
+  the actual device capture (mean ≈ 0.23, flat, no core) — the very image it
+  existed to catch. Bimodality catches both shapes. Verified against all 69
+  images in `eval/images/` + `test-images/`: the lowest tail mass of any correct
+  mask is **0.75**, so the 0.4 threshold has a wide margin and no false
+  positives.
 - Unit tests: `raw-mask-stats.test.ts` (the heuristic, incl. a synthetic
   squashed mask and a same-mean bimodal mask), `diagnostic-report.test.ts` (the
   report contract + a privacy guard), `raw-mask-worker.test.ts` (drives a

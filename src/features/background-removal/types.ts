@@ -61,6 +61,24 @@ export type WorkerProgressMessage =
       adapter?: string;
       /** The manifest id the session was built for (e.g. 'model_512_int8_fp16'). */
       modelId?: string;
+      /** Model download time, ms (0 on a cache hit / provider switch). */
+      downloadMs?: number;
+      /** Session build/optimize time, ms. */
+      sessionInitMs?: number;
+      /** True when a WebGPU session actually built (not merely that an adapter exists). */
+      webgpuSessionInitialized?: boolean;
+      /** Why a webgpu attempt fell back to WASM, or null. */
+      fallbackReason?: string | null;
+      /** Structured adapter facts for the copyable diagnostic report. */
+      adapterDetails?: {
+        vendor?: string | null;
+        architecture?: string | null;
+        device?: string | null;
+        description?: string | null;
+        features?: string[];
+        maxStorageBufferBindingSize?: number | null;
+        maxBufferSize?: number | null;
+      } | null;
     }
   | { kind: 'provider-fallback'; from: string; to: string; reason: string }
   | { kind: 'adapter-warning'; message: string }

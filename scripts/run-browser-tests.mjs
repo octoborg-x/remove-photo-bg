@@ -757,6 +757,49 @@ try {
         panelState.privacyNoLabel === true,
       `inHead ${panelState.privacyInHead} borderless ${panelState.privacyBorderless} noLabel ${panelState.privacyNoLabel}`,
     );
+    // Technical details: a collapsible diagnostics surface in the console that is
+    // revealed once a report is available, with a Copy report button whose report
+    // carries real GPU/mask facts and no image or personal data.
+    const reportState = await page.evaluate(() => {
+      const details = document.getElementById('techDetails');
+      const btn = document.getElementById('copyReport');
+      const inConsole = !!details?.closest('.consoleCard');
+      const revealed = !!details && details.hidden === false;
+      const btnLabel = (btn?.textContent ?? '').trim();
+      const report = window.diagnosticReport?.() ?? null;
+      const text = window.deviceReport?.() ?? '';
+      return {
+        hasDetails: !!details,
+        inConsole,
+        revealed,
+        btnLabel,
+        hasReport: !!report,
+        schema: report?.schemaVersion ?? null,
+        hasRawMaskBlock: /RAW MASK STATISTICS/.test(text),
+        hasMean: /Mean:/.test(text),
+        hasGpuSection: /GPU/.test(text),
+        leaksImage: /data:image|base64,/.test(text),
+      };
+    });
+    record(
+      'Technical details is a disclosure in the console, revealed once a report exists',
+      reportState.hasDetails === true && reportState.inConsole === true && reportState.revealed === true,
+      `details ${reportState.hasDetails} inConsole ${reportState.inConsole} revealed ${reportState.revealed}`,
+    );
+    record(
+      'the Copy report button copies a report with real GPU + raw-mask facts',
+      reportState.btnLabel === 'Copy report' &&
+        reportState.hasReport === true &&
+        reportState.hasRawMaskBlock === true &&
+        reportState.hasMean === true &&
+        reportState.hasGpuSection === true,
+      `label "${reportState.btnLabel}" report ${reportState.hasReport} maskBlock ${reportState.hasRawMaskBlock} mean ${reportState.hasMean} gpu ${reportState.hasGpuSection}`,
+    );
+    record(
+      'the diagnostic report carries no image data',
+      reportState.leaksImage === false,
+      `leaksImage ${reportState.leaksImage}`,
+    );
 
     // The Processing-tab status text must stay light in both themes: it sits on
     // the always-dark wallpaper, so a theme token that inverts would vanish.

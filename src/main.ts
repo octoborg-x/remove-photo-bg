@@ -22,6 +22,17 @@ import {
 } from './features/background-removal/mask-postprocess';
 import { composeResult } from './features/background-removal/composite';
 import { recoverForegroundMask } from './features/background-removal/mask-recovery';
+import {
+  rawMaskStats,
+  formatRawMaskStats,
+  isSuspectRawMask,
+  emptyRawMaskStats,
+  type RawMaskStats,
+} from './features/diagnostics/raw-mask-stats';
+import {
+  buildDiagnosticReport,
+  formatDiagnosticReport,
+} from './features/diagnostics/diagnostic-report';
 import { cropMaskFloat, alphaToBytes, lumaFromRgba } from './features/background-removal/mask-resize';
 import { RefinementRunner } from './features/background-removal/refinement-client';
 import {
@@ -178,6 +189,8 @@ const siteHeaderEl = document.getElementById('siteHeader')!;
 const studioGridEl = document.querySelector<HTMLElement>('.studioGrid')!;
 const consoleToggleBtn = document.getElementById('consoleToggle')! as HTMLButtonElement;
 const consoleCloseBtn = document.getElementById('consoleClose')! as HTMLButtonElement;
+const deviceReportBtn = document.getElementById('copyReport')! as HTMLButtonElement;
+const techDetailsEl = document.getElementById('techDetails') as HTMLDetailsElement | null;
 const consoleResizeEl = document.getElementById('consoleResize')!;
 const consoleCardEl = document.querySelector<HTMLElement>('.consoleCard')!;
 // Result-tab settings sidebar (engine controls). Declared here with the other
@@ -603,6 +616,38 @@ const WORKER_START_TIMEOUT_MS = 15000;
 const timings: number[] = [];
 let loadTimeMs = 0;
 
+// ——— Diagnostic report state (Copy report) ———
+// Raw-mask statistics measured from the model's original floating-point output
+// (msg.mask), before any post-processing. Null until the first run.
+let lastRawMaskStats: RawMaskStats | null = null;
+// Structured GPU adapter facts from the worker (WebGPU path only).
+let lastAdapterDetails: {
+  vendor?: string | null;
+  architecture?: string | null;
+  device?: string | null;
+  description?: string | null;
+  features?: readonly string[];
+  maxStorageBufferBindingSize?: number | null;
+  maxBufferSize?: number | null;
+} | null = null;
+// Load/inference timings and execution state for the report. Distinguishing
+// "a GPU adapter exists" from "a WebGPU session built" from "a run actually
+// executed" is the whole point of the execution section.
+let downloadMs: number | null = null;
+let sessionInitMs: number | null = null;
+let webgpuSessionInitialized = false;
+let inferenceRan = false;
+// The provider that ACTUALLY executed the last inference ('none' before any run),
+// which can differ from `selectedProvider` after a GPU→WASM fallback.
+let actualProvider: 'webgpu' | 'wasm' | 'none' = 'none';
+let fallbackReason: string | null = null;
+// Post-processing measurements + outcomes for the report.
+let postprocessingMs: number | null = null;
+let maskRecoveryTriggered = false;
+let refinementSucceeded: boolean | null = null;
+// Processing errors, kept so a report taken after a failure still carries them.
+const diagnosticErrors: string[] = [];
+
 // ——— Model + provider selection ———
 let models: ModelManifestEntry[] = [];
 let selectedModel: ModelManifestEntry | null = null;
@@ -868,6 +913,135 @@ function scrollConsoleToBottom(): void {
   consoleScrollEl.scrollTop = consoleScrollEl.scrollHeight;
 }
 
+// Build the copyable diagnostic report and copy it to the clipboard. This is
+// the one-tap capture a real-device tester uses when a cut-out looks wrong: it
+// carries the actual GPU adapter facts, the execution path (adapter detected vs
+// session built vs inference actually run), the model, the timings AND the raw
+// mask's min/mean/max and tail fractions, so a "washed-out / ghost" result is
+// diagnosable without a debug build. Nothing here leaves the device.
+function diagnosticReport() {
+  const model = selectedModel;
+  const adapter = lastAdapterDetails;
+  // The adapter the provider gate enumerated (independent of which provider ran).
+  const adapterDetected = gpuState?.adapterPresent === true;
+  const adapterUsable = gpuState?.available === true;
+  return buildDiagnosticReport({
+    userAgent: navigator.userAgent,
+    platform: navigator.platform ?? null,
+    hardwareConcurrency: navigator.hardwareConcurrency ?? null,
+    deviceMemoryGb:
+      typeof (navigator as Navigator & { deviceMemory?: number }).deviceMemory === 'number'
+        ? ((navigator as Navigator & { deviceMemory?: number }).deviceMemory as number)
+        : null,
+    crossOriginIsolated: window.crossOriginIsolated === true,
+    webgpuAvailable: gpuState?.adapterPresent === true,
+    webgpuRuntimeBundle: runtimeHasWebGpuBundle,
+    webgpuSessionInitialized,
+    inferenceRan,
+    selectedProvider,
+    actualProvider,
+    fallbackReason,
+    adapterDetected,
+    adapterUsable,
+    adapter: adapter
+      ? {
+          vendor: adapter.vendor,
+          architecture: adapter.architecture,
+          device: adapter.device,
+          description: adapter.description,
+          features: adapter.features,
+          maxStorageBufferBindingSize: adapter.maxStorageBufferBindingSize,
+          maxBufferSize: adapter.maxBufferSize,
+        }
+      : null,
+    model: {
+      id: model?.id ?? null,
+      filename: model?.file?.split('/').pop() ?? null,
+      revision: model?.sha256 ?? null,
+      inputSize: model?.inputSize ?? null,
+      imageWidth: currentImageData?.width ?? null,
+      imageHeight: currentImageData?.height ?? null,
+    },
+    inference: {
+      downloadMs,
+      sessionInitMs,
+      coldMs: timings.length ? timings[0] : null,
+      warmMs: timings.length > 1 ? timings.slice(1) : [],
+      averageMs: timings.length ? timings.reduce((a, b) => a + b, 0) / timings.length : null,
+      postprocessingMs,
+    },
+    rawMask: lastRawMaskStats ?? emptyRawMaskStats(),
+    postprocessing: {
+      maskRecoveryTriggered,
+      refinementEnabled: refineConfig.enabled,
+      refinementSucceeded,
+    },
+    errors: diagnosticErrors,
+  });
+}
+
+function diagnosticReportText(): string {
+  return formatDiagnosticReport(diagnosticReport());
+}
+
+// Reveals the Technical details disclosure once a report is available. Called
+// after a model loads and after a failure, so a report can be copied even when
+// inference never completed.
+function revealTechDetails(): void {
+  if (techDetailsEl) techDetailsEl.hidden = false;
+}
+
+// Records a processing error so a report taken after a failure still carries it
+// (bounded, and deduplicated so a retry storm does not fill the report).
+function recordDiagnosticError(message: string): void {
+  const line = message.split('\n')[0].trim();
+  if (!line || diagnosticErrors.includes(line)) return;
+  diagnosticErrors.push(line);
+  if (diagnosticErrors.length > 8) diagnosticErrors.shift();
+}
+
+// Copies text to the clipboard, falling back to a hidden textarea + execCommand
+// for browsers without the async Clipboard API (or when it is denied). Returns
+// whether the copy succeeded; never throws.
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall through to the legacy path below.
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+async function copyReport(): Promise<void> {
+  const text = diagnosticReportText();
+  // Always log it so the report is visible (and selectable) even when the
+  // clipboard API is unavailable or denied.
+  log(text.replace(/\n/g, ' | '));
+  const copied = await copyToClipboard(text);
+  showToast(copied ? 'Diagnostic report copied to the clipboard.' : 'Diagnostic report written to the Console log.', {
+    kind: 'info',
+    title: 'Diagnostic report',
+  });
+}
+
+deviceReportBtn.addEventListener('click', () => void copyReport());
+
 // The Zero-Upload statement is hidden behind a clickable shield icon.
 privacyToggle.addEventListener('click', () => {
   const show = privacyStatement.hidden;
@@ -895,6 +1069,10 @@ function setStage(s: string): void {
 
 function showError(msg: string): void {
   log(`ERROR: ${msg}`);
+  // Keep the error for the diagnostic report, and reveal the report button so a
+  // user can copy the failure context even when inference never completed.
+  recordDiagnosticError(msg);
+  revealTechDetails();
   processingLabel.textContent = `Error: ${msg}`;
   processingLabel.classList.remove('working');
   processingLabel.classList.add('is-error');
@@ -1244,11 +1422,20 @@ async function initWorker(): Promise<void> {
       log(`Model load time: ${loadTimeMs.toFixed(1)} ms`);
       log(`Execution provider: ${msg.provider}`);
       if (msg.adapter) log(`GPU adapter: ${msg.adapter}`);
+      // Structured diagnostics for the report: keep the adapter facts, the split
+      // download/session timings, whether a WebGPU session actually built, and
+      // why a GPU attempt fell back.
+      lastAdapterDetails = msg.adapterDetails ?? null;
+      downloadMs = msg.downloadMs ?? null;
+      sessionInitMs = msg.sessionInitMs ?? null;
+      webgpuSessionInitialized = msg.webgpuSessionInitialized === true;
+      fallbackReason = msg.fallbackReason ?? null;
       window.smokeProvider = msg.provider;
       window.smokeModelId = loadedModelId;
       announcedLog.push(msg.provider);
       // Model loading is done.
       hideRecovery();
+      revealTechDetails();
       setConsoleStatus(
         currentImageData ? 'Removing the background…' : 'Model ready — choose a photo',
         false,
@@ -1266,9 +1453,18 @@ async function initWorker(): Promise<void> {
       setStage(`Running on CPU (${msg.to}) — this is slow, please wait…`);
       window.smokeProvider = msg.to;
       announcedLog.push(msg.to);
+      // Record the fallback so the report states the actual provider and reason
+      // rather than implying the GPU ran.
+      fallbackReason = msg.reason;
+      if (msg.to === 'wasm' || msg.to === 'webgpu') actualProvider = msg.to;
     } else if (msg.kind === 'inference-time') {
       const pending = pendingRuns.get(msg.runId);
       pendingRuns.delete(msg.runId);
+      // A completed inference means a provider actually executed the model.
+      inferenceRan = true;
+      if (actualProvider === 'none') {
+        actualProvider = window.smokeProvider === 'webgpu' ? 'webgpu' : 'wasm';
+      }
       if (!pending) return;
       timings.push(msg.ms);
       log(`Inference ${timings.length}: ${msg.ms.toFixed(1)} ms`);
@@ -1356,11 +1552,25 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   }
   const image = currentImageData;
   const jobId = activeJobId;
+  // Raw-mask statistics for the diagnostic report, computed here from the
+  // model's ORIGINAL floating-point output (msg.mask), before probability
+  // conversion, cropping, upscaling, recovery, thresholding, feathering, or
+  // refinement — so the report reflects what the model produced, not the
+  // post-processed image. The mask is read-only and never mutated.
+  lastRawMaskStats = rawMaskStats(msg.mask, msg.inputSize ?? MODEL_SIZE, msg.inputSize ?? MODEL_SIZE);
+  log(`Raw mask: ${formatRawMaskStats(lastRawMaskStats)}.`);
+  if (isSuspectRawMask(lastRawMaskStats)) {
+    log(
+      'WARNING: the raw mask is not bimodal — the cut-out may look washed out. ' +
+        'Copy the diagnostic report from Technical details for the details.',
+    );
+  }
   // The inference is done; the remaining work is mask reconstruction/refinement
   // and compositing, which have no measurable percentage of their own.
   beginProcPhase('finalize', phaseExpectedMs('finalize', 0));
   refreshProcPercent();
   setConsoleStatus('Building your preview…', true);
+  const postprocessStart = performance.now();
   // The worker reports the model's actual input size so a per-model input change
   // (e.g. a 384 variant) never mis-scales the mask. The mask covers the
   // letterboxed content rect inside that square (the same geometry the
@@ -1378,6 +1588,7 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   if (recovered) {
     log('Model kept the whole frame; recovered the subject from the background edges.');
   }
+  maskRecoveryTriggered = recovered;
   // Apply the user's mask threshold/feather at full destination resolution (the
   // values are percentages/pixels of the *output* mask).
   const stage1Mask = applyMaskAdjust(recoveredMask, image.width, image.height, maskAdjust);
@@ -1393,12 +1604,15 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   composeResult(image, stage1Mask)
     .then(({ canvas, preview }) => {
       if (jobId !== activeJobId) return;
+      // Time to the first composited preview (mask reconstruction + composite);
+      // refinement time, when enabled, is added by refineAndFinalize.
+      postprocessingMs = performance.now() - postprocessStart;
       // Paint the Stage-1 preview immediately (finishResult shows the Result tab
       // and enables export). With refinement enabled this is the interim beat;
       // disabled, it is the settled result.
       finishResult(canvas, preview, size, refineEnabled ? 'preview' : 'final');
       if (!refineEnabled) return;
-      return refineAndFinalize(jobId, image, croppedFloat, rect, guide, size);
+      return refineAndFinalize(jobId, image, croppedFloat, rect, guide, size, postprocessStart);
     })
     .catch((err) => {
       if (jobId !== activeJobId) return;
@@ -1417,6 +1631,7 @@ async function refineAndFinalize(
   rect: { width: number; height: number },
   guide: Float32Array,
   size: string,
+  postprocessStart: number,
 ): Promise<void> {
   setConsoleStatus('Refining edges…', true);
   const t0 = performance.now();
@@ -1440,6 +1655,9 @@ async function refineAndFinalize(
     const refinedMask = applyMaskAdjust(alphaToBytes(outcome.alpha), image.width, image.height, maskAdjust);
     const { canvas, preview } = await composeResult(image, refinedMask);
     if (jobId !== activeJobId) return;
+    refinementSucceeded = true;
+    // Full post-processing time: mask reconstruction + Stage-1 composite + refine.
+    postprocessingMs = performance.now() - postprocessStart;
     finishResult(canvas, preview, size, 'final');
     const { timings } = outcome;
     smokeRefineStages = { ...timings, finalizeMs: performance.now() - t0 };
@@ -1452,6 +1670,7 @@ async function refineAndFinalize(
     if (jobId !== activeJobId) return;
     // Refinement is an enhancement: keep the initial preview and report the
     // failure in the log, without an error recovery panel (the result is usable).
+    refinementSucceeded = false;
     endProcPhase();
     log(
       `WARNING: edge refinement failed (${err instanceof Error ? err.message : String(err)}); showing the initial preview.`,
@@ -1952,6 +2171,10 @@ declare global {
     /** Resolves once the current job has produced its final (refined) preview. */
     waitForJobSettled: () => Promise<void>;
     crossOriginIsolated: boolean;
+    /** Copyable diagnostic report (GPU adapter, model, timings, raw-mask stats). */
+    deviceReport: () => string;
+    /** The structured diagnostic report object (same data, for scripted tests). */
+    diagnosticReport: () => ReturnType<typeof diagnosticReport>;
   }
 }
 
@@ -2041,6 +2264,8 @@ window.smokeModelPaused = false;
 // A getter so the harness always reads the current run's stage timings.
 Object.defineProperty(window, 'smokeRefineStages', { get: () => smokeRefineStages });
 window.waitForJobSettled = waitForJobSettled;
+window.deviceReport = diagnosticReportText;
+window.diagnosticReport = diagnosticReport;
 
 // ——— Progress state ———
 // The stage line, the progress ring, and the processing panel all read from the

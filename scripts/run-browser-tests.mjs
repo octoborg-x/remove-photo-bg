@@ -757,21 +757,32 @@ try {
         panelState.privacyNoLabel === true,
       `inHead ${panelState.privacyInHead} borderless ${panelState.privacyBorderless} noLabel ${panelState.privacyNoLabel}`,
     );
-    // Technical details: a collapsible diagnostics surface in the console that is
-    // revealed once a report is available, with a Copy report button whose report
-    // carries real GPU/mask facts and no image or personal data.
+    // Copy report: an always-visible button in the console header whose report
+    // carries real GPU/mask facts and no image or personal data. It must be
+    // visible WITHOUT opening any disclosure (a regression once buried it in a
+    // collapsed <details>, so the button existed in the DOM but a user could not
+    // see or click it).
     const reportState = await page.evaluate(() => {
-      const details = document.getElementById('techDetails');
       const btn = document.getElementById('copyReport');
-      const inConsole = !!details?.closest('.consoleCard');
-      const revealed = !!details && details.hidden === false;
+      const inConsoleHead = !!btn?.closest('.consoleHead');
+      const insideClosedDetails = !!btn?.closest('details:not([open])');
+      const rect = btn?.getBoundingClientRect();
+      const style = btn ? getComputedStyle(btn) : null;
+      const visible =
+        !!rect &&
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style?.visibility !== 'hidden' &&
+        style?.display !== 'none' &&
+        style?.opacity !== '0';
       const btnLabel = (btn?.textContent ?? '').trim();
       const report = window.diagnosticReport?.() ?? null;
       const text = window.deviceReport?.() ?? '';
       return {
-        hasDetails: !!details,
-        inConsole,
-        revealed,
+        hasBtn: !!btn,
+        inConsoleHead,
+        insideClosedDetails,
+        visible,
         btnLabel,
         hasReport: !!report,
         schema: report?.schemaVersion ?? null,
@@ -782,18 +793,21 @@ try {
       };
     });
     record(
-      'Technical details is a disclosure in the console, revealed once a report exists',
-      reportState.hasDetails === true && reportState.inConsole === true && reportState.revealed === true,
-      `details ${reportState.hasDetails} inConsole ${reportState.inConsole} revealed ${reportState.revealed}`,
+      'the Copy report button is visible in the console header without opening a disclosure',
+      reportState.hasBtn === true &&
+        reportState.inConsoleHead === true &&
+        reportState.insideClosedDetails === false &&
+        reportState.visible === true &&
+        reportState.btnLabel === 'Copy report',
+      `btn ${reportState.hasBtn} inConsoleHead ${reportState.inConsoleHead} insideClosedDetails ${reportState.insideClosedDetails} visible ${reportState.visible} label "${reportState.btnLabel}"`,
     );
     record(
       'the Copy report button copies a report with real GPU + raw-mask facts',
-      reportState.btnLabel === 'Copy report' &&
-        reportState.hasReport === true &&
+      reportState.hasReport === true &&
         reportState.hasRawMaskBlock === true &&
         reportState.hasMean === true &&
         reportState.hasGpuSection === true,
-      `label "${reportState.btnLabel}" report ${reportState.hasReport} maskBlock ${reportState.hasRawMaskBlock} mean ${reportState.hasMean} gpu ${reportState.hasGpuSection}`,
+      `report ${reportState.hasReport} maskBlock ${reportState.hasRawMaskBlock} mean ${reportState.hasMean} gpu ${reportState.hasGpuSection}`,
     );
     record(
       'the diagnostic report carries no image data',

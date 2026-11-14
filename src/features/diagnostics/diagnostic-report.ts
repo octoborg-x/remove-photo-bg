@@ -1,6 +1,6 @@
 // Versioned, local-only diagnostic report.
 //
-// One tap in the Technical details disclosure copies a readable report a
+// One tap on the Console's Copy report button copies a readable report a
 // real-device tester can paste back into an issue. Everything is gathered in the
 // browser from state the app already has: the GPU adapter the provider gate
 // already enumerated, the worker's load/inference timings, and the raw-mask

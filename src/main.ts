@@ -190,7 +190,6 @@ const studioGridEl = document.querySelector<HTMLElement>('.studioGrid')!;
 const consoleToggleBtn = document.getElementById('consoleToggle')! as HTMLButtonElement;
 const consoleCloseBtn = document.getElementById('consoleClose')! as HTMLButtonElement;
 const deviceReportBtn = document.getElementById('copyReport')! as HTMLButtonElement;
-const techDetailsEl = document.getElementById('techDetails') as HTMLDetailsElement | null;
 const consoleResizeEl = document.getElementById('consoleResize')!;
 const consoleCardEl = document.querySelector<HTMLElement>('.consoleCard')!;
 // Result-tab settings sidebar (engine controls). Declared here with the other
@@ -984,13 +983,6 @@ function diagnosticReportText(): string {
   return formatDiagnosticReport(diagnosticReport());
 }
 
-// Reveals the Technical details disclosure once a report is available. Called
-// after a model loads and after a failure, so a report can be copied even when
-// inference never completed.
-function revealTechDetails(): void {
-  if (techDetailsEl) techDetailsEl.hidden = false;
-}
-
 // Records a processing error so a report taken after a failure still carries it
 // (bounded, and deduplicated so a retry storm does not fill the report).
 function recordDiagnosticError(message: string): void {
@@ -1069,10 +1061,9 @@ function setStage(s: string): void {
 
 function showError(msg: string): void {
   log(`ERROR: ${msg}`);
-  // Keep the error for the diagnostic report, and reveal the report button so a
-  // user can copy the failure context even when inference never completed.
+  // Keep the error for the diagnostic report so a copy taken after a failure
+  // still carries the failure context.
   recordDiagnosticError(msg);
-  revealTechDetails();
   processingLabel.textContent = `Error: ${msg}`;
   processingLabel.classList.remove('working');
   processingLabel.classList.add('is-error');
@@ -1139,7 +1130,7 @@ function showRecovery(kind: ErrorKind, message: string): void {
     case 'worker':
       text =
         'The background-removal engine could not start. Reload the page; if it keeps ' +
-        'failing, open Technical details in the Console for the exact error.';
+        'failing, use Copy report in the Console for the exact error.';
       primaryLabel = 'Reload page';
       primaryRun = () => location.reload();
       break;
@@ -1396,102 +1387,99 @@ async function initWorker(): Promise<void> {
   // worker degrades a webgpu request to WASM with a clear message when the bundle
   // is absent. webGpuSelectable (not webGpuUsable) is used because the user can
   // switch to the GPU after boot, so the worker must already carry the backend.
+  worker = createInferenceWorker();
+}
+
+function createInferenceWorker(): Worker {
   const runtimeQuery = webGpuSelectable() ? '?runtime=webgpu' : '';
-  worker = new Worker('/inference-worker.js' + runtimeQuery, { type: 'classic' });
+  const w = new Worker('/inference-worker.js' + runtimeQuery, { type: 'classic' });
   // Without these a worker that fails to start (404 on the script, a failed
   // importScripts of the ORT runtime) posts nothing at all and the page waits on
   // its initial "Starting…" text forever.
-  worker.onerror = (e) => {
+  w.onerror = (e) => {
     workerFailed = true;
     error(`Inference worker failed to start: ${e.message || 'unknown worker error'}`, 'worker');
     settleModel('worker failed to start');
   };
-  worker.onmessageerror = () => {
+  w.onmessageerror = () => {
     error('Inference worker sent a message that could not be deserialized', 'worker');
   };
-  worker.onmessage = (e: MessageEvent<WorkerProgressMessage>) => {
-    const msg = e.data;
-    workerResponded = true;
-    if (msg.kind === 'loading-progress') {
-      updateLoadProgress(msg);
-    } else if (msg.kind === 'load-time') {
-      const loadedModelId = msg.modelId ?? selectedModel?.id ?? 'unknown';
-      log(`Model ready — provider ${msg.provider}`);
-      loadTimeMs = msg.ms;
-      log(`Model: ${loadedModelId}`);
-      log(`Model load time: ${loadTimeMs.toFixed(1)} ms`);
-      log(`Execution provider: ${msg.provider}`);
-      if (msg.adapter) log(`GPU adapter: ${msg.adapter}`);
-      // Structured diagnostics for the report: keep the adapter facts, the split
-      // download/session timings, whether a WebGPU session actually built, and
-      // why a GPU attempt fell back.
-      lastAdapterDetails = msg.adapterDetails ?? null;
-      downloadMs = msg.downloadMs ?? null;
-      sessionInitMs = msg.sessionInitMs ?? null;
-      webgpuSessionInitialized = msg.webgpuSessionInitialized === true;
-      fallbackReason = msg.fallbackReason ?? null;
-      window.smokeProvider = msg.provider;
-      window.smokeModelId = loadedModelId;
-      announcedLog.push(msg.provider);
-      // Model loading is done.
-      hideRecovery();
-      revealTechDetails();
-      setConsoleStatus(
-        currentImageData ? 'Removing the background…' : 'Model ready — choose a photo',
-        false,
-      );
-      setSelectorsDisabled(false);
-      settleModel(null);
-    } else if (msg.kind === 'adapter-warning') {
-      log(`WARNING: ${msg.message}`);
-    } else if (msg.kind === 'provider-fallback') {
-      log(
-        `Provider fallback: ${msg.from} → ${msg.to} (${msg.reason})\n` +
-          'WARNING: the GPU could not run this model. Inference is now running on the CPU, ' +
-          'which can take several minutes per image.',
-      );
-      setStage(`Running on CPU (${msg.to}) — this is slow, please wait…`);
-      window.smokeProvider = msg.to;
-      announcedLog.push(msg.to);
-      // Record the fallback so the report states the actual provider and reason
-      // rather than implying the GPU ran.
-      fallbackReason = msg.reason;
-      if (msg.to === 'wasm' || msg.to === 'webgpu') actualProvider = msg.to;
-    } else if (msg.kind === 'inference-time') {
-      const pending = pendingRuns.get(msg.runId);
-      pendingRuns.delete(msg.runId);
-      // A completed inference means a provider actually executed the model.
-      inferenceRan = true;
-      if (actualProvider === 'none') {
-        actualProvider = window.smokeProvider === 'webgpu' ? 'webgpu' : 'wasm';
-      }
-      if (!pending) return;
-      timings.push(msg.ms);
-      log(`Inference ${timings.length}: ${msg.ms.toFixed(1)} ms`);
-      pending.resolve(msg.ms);
-    } else if (msg.kind === 'result-ready') {
-      handleResultReady(msg);
-    } else if (msg.kind === 'error') {
-      if (msg.cancelled) {
-        // A deliberate stop (the connection became metered). Not a failure: the
-        // page re-arms the download confirmation instead of an error recovery,
-        // and a run that was waiting on the model just pauses.
-        handleModelCancel();
-        return;
-      }
-      // Errors tied to a run are delivered through that run's promise, so the
-      // caller reports them once. Anything else is surfaced here.
-      if (msg.runId !== undefined) failPendingRuns(new Error(msg.message));
-      else error(msg.message, msg.fatal ? classifyError(msg.message) : 'generic');
-      studioError();
-      if (msg.fatal) {
-        settleModel(msg.message);
-        setSelectorsDisabled(false);
-      }
-      // A run-level failure (e.g. an allocation error) does not kill the
-      // session; the worker retries on CPU, so the app stays usable.
+  w.onmessage = (e: MessageEvent<WorkerProgressMessage>) => handleWorkerMessage(e.data);
+  return w;
+}
+
+function handleWorkerMessage(msg: WorkerProgressMessage): void {
+  workerResponded = true;
+  if (msg.kind === 'loading-progress') {
+    updateLoadProgress(msg);
+  } else if (msg.kind === 'load-time') {
+    const loadedModelId = msg.modelId ?? selectedModel?.id ?? 'unknown';
+    log(`Model ready — provider ${msg.provider}`);
+    loadTimeMs = msg.ms;
+    log(`Model: ${loadedModelId}`);
+    log(`Model load time: ${loadTimeMs.toFixed(1)} ms`);
+    log(`Execution provider: ${msg.provider}`);
+    if (msg.adapter) log(`GPU adapter: ${msg.adapter}`);
+    // Structured diagnostics for the report: keep the adapter facts, the split
+    // download/session timings, whether a WebGPU session actually built, and
+    // why a GPU attempt fell back.
+    lastAdapterDetails = msg.adapterDetails ?? null;
+    downloadMs = msg.downloadMs ?? null;
+    sessionInitMs = msg.sessionInitMs ?? null;
+    webgpuSessionInitialized = msg.webgpuSessionInitialized === true;
+    fallbackReason = msg.fallbackReason ?? null;
+    window.smokeProvider = msg.provider;
+    window.smokeModelId = loadedModelId;
+    announcedLog.push(msg.provider);
+    // Model loading is done.
+    hideRecovery();
+    setConsoleStatus(
+      currentImageData ? 'Removing the background…' : 'Model ready — choose a photo',
+      false,
+    );
+    setSelectorsDisabled(false);
+    settleModel(null);
+  } else if (msg.kind === 'adapter-warning') {
+    log(`WARNING: ${msg.message}`);
+  } else if (msg.kind === 'provider-restart') {
+    // The worker aborted a GPU run and refused to reuse its own (possibly
+    // corrupted) ORT module. Continue on a fresh worker instead of rebuilding
+    // inside the old one.
+    void restartOnFreshWorker(msg);
+  } else if (msg.kind === 'inference-time') {
+    const pending = pendingRuns.get(msg.runId);
+    pendingRuns.delete(msg.runId);
+    // A completed inference means a provider actually executed the model.
+    inferenceRan = true;
+    if (actualProvider === 'none') {
+      actualProvider = window.smokeProvider === 'webgpu' ? 'webgpu' : 'wasm';
     }
-  };
+    if (!pending) return;
+    timings.push(msg.ms);
+    log(`Inference ${timings.length}: ${msg.ms.toFixed(1)} ms`);
+    pending.resolve(msg.ms);
+  } else if (msg.kind === 'result-ready') {
+    handleResultReady(msg);
+  } else if (msg.kind === 'error') {
+    if (msg.cancelled) {
+      // A deliberate stop (the connection became metered). Not a failure: the
+      // page re-arms the download confirmation instead of an error recovery,
+      // and a run that was waiting on the model just pauses.
+      handleModelCancel();
+      return;
+    }
+    // Errors tied to a run are delivered through that run's promise, so the
+    // caller reports them once. Anything else is surfaced here.
+    if (msg.runId !== undefined) failPendingRuns(new Error(msg.message));
+    else error(msg.message, msg.fatal ? classifyError(msg.message) : 'generic');
+    studioError();
+    if (msg.fatal) {
+      settleModel(msg.message);
+      setSelectorsDisabled(false);
+    }
+    // A run-level failure (e.g. an allocation error) is handled by the worker
+    // restarting on a fresh CPU worker, so the app stays usable.
+  }
 }
 
 // Progressive-refinement state. `activeJobId` identifies the current job; every
@@ -1562,7 +1550,7 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   if (isSuspectRawMask(lastRawMaskStats)) {
     log(
       'WARNING: the raw mask is not bimodal — the cut-out may look washed out. ' +
-        'Copy the diagnostic report from Technical details for the details.',
+        'Use Copy report in the Console header for the details.',
     );
   }
   // The inference is done; the remaining work is mask reconstruction/refinement
@@ -1758,6 +1746,16 @@ function providerForce(provider: 'webgpu' | 'wasm'): string | undefined {
   return provider === 'wasm' ? 'wasm' : undefined;
 }
 
+// A GPU run that failed mid-execution forces one retry on a brand-new worker,
+// pinned to the CPU. The override is consumed (cleared) by that worker's load, so
+// the user's provider choice still governs every later load.
+let overrideProvider: 'webgpu' | 'wasm' | null = null;
+
+function providerForceFor(provider: 'webgpu' | 'wasm'): string | undefined {
+  if (overrideProvider) return overrideProvider;
+  return providerForce(provider);
+}
+
 /** Posts a set-model to the worker for the current selection and arms the
  *  no-response watchdog. The model load itself resolves through waitForModel. */
 function loadSelectedModel(): void {
@@ -1778,8 +1776,11 @@ function loadSelectedModel(): void {
   hideRecovery();
   setConsoleStatus(`Loading model ${selectedModel.id}…`, true);
   log(`Loading model: ${selectedModel.id} (${selectedModel.url})`);
-  const force = providerForce(selectedProvider);
-  if (forcedProvider) log(`Provider forced to: ${forcedProvider} (from ?provider=)`);
+  const force = providerForceFor(selectedProvider);
+  if (overrideProvider) {
+    log(`Provider forced to: ${overrideProvider} (retry after a GPU failure)`);
+    overrideProvider = null;
+  } else if (forcedProvider) log(`Provider forced to: ${forcedProvider} (from ?provider=)`);
   else if (force === 'wasm') log('Provider: CPU (WASM)');
   setSelectorsDisabled(true);
   worker.postMessage({
@@ -2072,6 +2073,16 @@ function failPendingRuns(err: Error): void {
   }
 }
 
+// Posts one run message. The tensor buffer is transferred, so it cannot be
+// reused after this call.
+function postRunMessage(runId: number, imageData: ImageData): void {
+  const tensor = imageDataToTensor(imageData);
+  worker!.postMessage(
+    { kind: 'run', runId, tensor, width: imageData.width, height: imageData.height },
+    [tensor.buffer],
+  );
+}
+
 // Runs one inference and resolves with its duration. Rejects if the worker
 // reports an error, so callers never wait forever on a failed run.
 function runOneInference(): Promise<number> {
@@ -2081,18 +2092,66 @@ function runOneInference(): Promise<number> {
   if (window.smokeProvider === 'webgpu' && timings.length === 0) {
     log('First GPU run compiles shaders; this can take a minute or two.');
   }
-  const tensor = imageDataToTensor(imageData);
   const runId = nextRunId++;
   currentRunId = runId;
   smokeRefineStages = null;
   return new Promise<number>((resolve, reject) => {
     pendingRuns.set(runId, { resolve, reject });
     // Transfer the tensor buffer instead of structured-cloning it (12.6 MB/run).
-    worker!.postMessage(
-      { kind: 'run', runId, tensor, width: imageData.width, height: imageData.height },
-      [tensor.buffer],
-    );
+    postRunMessage(runId, imageData);
   });
+}
+
+// A GPU run failed mid-execution. Rather than let the worker rebuild a WASM
+// session inside the same ORT module (which the aborted GPU run may have left
+// corrupted — a numerically wrong, flat mask), discard the whole worker and
+// continue on a fresh one pinned to the CPU. The failed run's pending promise is
+// reused, so the caller (runSmoke) sees one run that eventually succeeds.
+async function restartOnFreshWorker(msg: {
+  from: string;
+  to: string;
+  reason: string;
+  runId: number;
+}): Promise<void> {
+  // A run that already settled (superseded or failed) needs no retry.
+  if (!pendingRuns.has(msg.runId)) return;
+  log(
+    `Provider fallback: ${msg.from} → ${msg.to} (${msg.reason})\n` +
+      'WARNING: the GPU could not run this model. Retrying on a fresh CPU worker, ' +
+      'which can take several minutes per image.',
+  );
+  setStage(`Running on CPU (${msg.to}) — this is slow, please wait…`);
+
+  // Discard the worker and its ORT module entirely; a fresh module cannot inherit
+  // state from the aborted GPU run. The model bytes go with it, but the asset
+  // cache serves them locally on the reload.
+  worker?.terminate();
+  worker = null;
+  workerFailed = false;
+  // The retry must run on the CPU; this override is consumed by the next load.
+  overrideProvider = msg.to === 'webgpu' ? 'webgpu' : 'wasm';
+
+  worker = createInferenceWorker();
+  loadSelectedModel();
+  try {
+    await waitForModel();
+  } catch (e) {
+    failPendingRuns(e instanceof Error ? e : new Error(String(e)));
+    return;
+  }
+  // The fresh load's `load-time` message reports its own (clean) provider facts,
+  // so record the run-time fallback AFTER it, or it would be overwritten with a
+  // bare "no fallback" from the retry's load.
+  window.smokeProvider = msg.to;
+  fallbackReason = msg.reason;
+  if (msg.to === 'wasm' || msg.to === 'webgpu') actualProvider = msg.to;
+  // The run may have settled (superseded or failed) while the worker was
+  // loading; only re-run it if it is still pending, or its caller would hang.
+  if (!pendingRuns.has(msg.runId) || !currentImageData) return;
+  // Re-run the failed inference on the fresh worker, reusing its run id so its
+  // pending promise settles when this run finishes.
+  setConsoleStatus('Removing background…', true);
+  postRunMessage(msg.runId, currentImageData);
 }
 
 function finishedRun(): void {

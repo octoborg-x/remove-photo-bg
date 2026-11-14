@@ -55,8 +55,8 @@ button on the page.
    `window.runSmoke()` from the console and read `window.smokeProvider` /
    `window.smokeModelId` — the automated harness in
    `scripts/run-smoke.mjs` uses the same API.
-   For a support-quality capture in one tap, open **Technical details** in the
-   Console card and press **Copy report**: it copies a `key: value` block with
+   For a support-quality capture in one tap, press **Copy report** in the Console
+   card header: it copies a `key: value` block with
    the provider, GPU adapter, model, timings, and the **raw-mask
    min/mean/max** plus tail fractions and an `ok (bimodal)` / `SUSPECT`
    verdict (see §9). The same text is also available as `window.deviceReport()`,
@@ -321,9 +321,9 @@ button (§3 step 4) and warns in the Console when a mask is squashed (§9).
 
 ## 9. Reading a diagnostic report
 
-Open **Technical details** in the Console (the collapsible disclosure in the
-console card) and press **Copy report** (or call `window.diagnosticReport()` for
-the structured object / `window.deviceReport()` for the text). Key lines:
+Press **Copy report** in the Console card header (or call
+`window.diagnosticReport()` for the structured object /
+`window.deviceReport()` for the text). Key lines:
 
 - `provider:` / `actual provider:` / `gpu adapter:` — which path actually ran.
   `actual provider: wasm` with `webgpu session built: yes` means a WebGPU session

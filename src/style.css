@@ -1650,6 +1650,26 @@
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
   }
+  /* Copy report: a LOCAL diagnostic report (GPU adapter, model, timings,
+     raw-mask statistics) for a real-device bug report — nothing is uploaded.
+     It lives in the console header so it is visible without opening anything. */
+  .copyReportBtn {
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-white);
+    color: var(--color-slate-600);
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.28rem 0.6rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .copyReportBtn:hover {
+    background: var(--color-slate-100);
+    color: var(--color-slate-900);
+    border-color: var(--color-slate-300);
+  }
   .consoleCloseBtn:hover {
     background: var(--color-slate-200);
     color: var(--color-slate-900);

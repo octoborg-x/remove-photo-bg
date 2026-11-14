@@ -757,6 +757,63 @@ try {
         panelState.privacyNoLabel === true,
       `inHead ${panelState.privacyInHead} borderless ${panelState.privacyBorderless} noLabel ${panelState.privacyNoLabel}`,
     );
+    // Copy report: an always-visible button in the console header whose report
+    // carries real GPU/mask facts and no image or personal data. It must be
+    // visible WITHOUT opening any disclosure (a regression once buried it in a
+    // collapsed <details>, so the button existed in the DOM but a user could not
+    // see or click it).
+    const reportState = await page.evaluate(() => {
+      const btn = document.getElementById('copyReport');
+      const inConsoleHead = !!btn?.closest('.consoleHead');
+      const insideClosedDetails = !!btn?.closest('details:not([open])');
+      const rect = btn?.getBoundingClientRect();
+      const style = btn ? getComputedStyle(btn) : null;
+      const visible =
+        !!rect &&
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style?.visibility !== 'hidden' &&
+        style?.display !== 'none' &&
+        style?.opacity !== '0';
+      const btnLabel = (btn?.textContent ?? '').trim();
+      const report = window.diagnosticReport?.() ?? null;
+      const text = window.deviceReport?.() ?? '';
+      return {
+        hasBtn: !!btn,
+        inConsoleHead,
+        insideClosedDetails,
+        visible,
+        btnLabel,
+        hasReport: !!report,
+        schema: report?.schemaVersion ?? null,
+        hasRawMaskBlock: /RAW MASK STATISTICS/.test(text),
+        hasMean: /Mean:/.test(text),
+        hasGpuSection: /GPU/.test(text),
+        leaksImage: /data:image|base64,/.test(text),
+      };
+    });
+    record(
+      'the Copy report button is visible in the console header without opening a disclosure',
+      reportState.hasBtn === true &&
+        reportState.inConsoleHead === true &&
+        reportState.insideClosedDetails === false &&
+        reportState.visible === true &&
+        reportState.btnLabel === 'Copy report',
+      `btn ${reportState.hasBtn} inConsoleHead ${reportState.inConsoleHead} insideClosedDetails ${reportState.insideClosedDetails} visible ${reportState.visible} label "${reportState.btnLabel}"`,
+    );
+    record(
+      'the Copy report button copies a report with real GPU + raw-mask facts',
+      reportState.hasReport === true &&
+        reportState.hasRawMaskBlock === true &&
+        reportState.hasMean === true &&
+        reportState.hasGpuSection === true,
+      `report ${reportState.hasReport} maskBlock ${reportState.hasRawMaskBlock} mean ${reportState.hasMean} gpu ${reportState.hasGpuSection}`,
+    );
+    record(
+      'the diagnostic report carries no image data',
+      reportState.leaksImage === false,
+      `leaksImage ${reportState.leaksImage}`,
+    );
 
     // The Processing-tab status text must stay light in both themes: it sits on
     // the always-dark wallpaper, so a theme token that inverts would vanish.

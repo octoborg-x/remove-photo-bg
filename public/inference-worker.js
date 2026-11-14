@@ -18,13 +18,14 @@
 // demands — verified). Hosts that CAN serve the jsep binary same-origin (local
 // preview, larger static hosts) get a working WebGPU path automatically.
 // With the CPU-only bundle, a `webgpu` request degrades to WASM via the
-// provider-fallback path with a clear message instead of hanging.
+// provider-restart path (the main thread retries on a fresh worker) with a clear
+// message instead of hanging.
 //
 // Message protocol (see src/features/background-removal/types.ts):
 //   in:  {kind:'set-model', modelUrl} | {kind:'run', runId, tensor, width, height} | {kind:'dispose'}
 //   out: {kind:'loading-progress', stage, percent, bytes?, totalBytes?, elapsedMs, detail?}
 //        | {kind:'load-time', ms, provider, adapter}
-//        | {kind:'provider-fallback', from, to, reason}
+//        | {kind:'provider-restart', from, to, reason, runId}
 //        | {kind:'inference-time', ms, runId} | {kind:'result-ready', mask, width, height}
 //        | {kind:'error', message, runId?, fatal?}
 
@@ -50,9 +51,10 @@ if (ort.env.webgpu) {
 // WebGPU is attempted whenever the browser exposes `navigator.gpu` (see
 // src/features/background-removal/provider-gate.ts on the main thread). There
 // is no allowlist: a session that fails to build on the GPU, or a GPU run that
-// allocates/fails, falls back to WASM below with a clear message. The shipped
+// allocates/fails, asks the main thread to retry on a fresh WASM worker (see the
+// provider-restart message) with a clear message. The shipped
 // CPU-only ORT bundle (ort.wasm.min.js) has no WebGPU backend, so on hosts that
-// only serve it the webgpu attempt degrades to WASM with a provider-fallback
+// only serve it the webgpu attempt degrades to WASM with a provider-restart
 // notice instead of hanging — same path a validated-but-unsupported device takes.
 
 let session = null;
@@ -60,6 +62,15 @@ let lastProvider = 'none';
 let modelUrl = null;
 let lastError = null;
 let adapterLabel = '';
+// Structured diagnostics for the copyable report. Download and session-build
+// times are separated so a slow start can be attributed to the network or to
+// shader/optimizer work; `webgpuSessionInitialized` distinguishes "a GPU adapter
+// exists" from "a WebGPU session actually built"; `sessionFallbackReason` records
+// why a webgpu candidate had to fall back to WASM at build time.
+let modelDownloadMs = 0;
+let sessionInitMs = 0;
+let webgpuSessionInitialized = false;
+let sessionFallbackReason = null;
 let MODEL_SIZE = 512;
 // The shipped exports apply sigmoid internally and return probabilities; the
 // older 1024 export returned raw logits.
@@ -274,6 +285,7 @@ async function createSession(providers) {
       if (!modelBytes) {
         reportProgress('cache-check', PCT.CACHE_DONE, { detail: 'checking for a cached model' });
         reportProgress('downloading', PCT.CACHE_DONE, { bytes: 0 });
+        const dl0 = performance.now();
         modelBytes = await downloadModel(modelUrl, (fraction, bytes, total) => {
           const complete = fraction >= 1;
           reportProgress(
@@ -282,17 +294,24 @@ async function createSession(providers) {
             { bytes, totalBytes: total || undefined },
           );
         });
+        modelDownloadMs = performance.now() - dl0;
       } else {
         // A provider retry reuses the bytes already in memory; no re-download.
+        modelDownloadMs = 0;
         reportProgress('cache-hit', PCT.DOWNLOAD_DONE, { detail: 'model already in memory' });
       }
       reportProgress('creating-session', PCT.DOWNLOAD_DONE, { detail: 'provider ' + ep });
+      const build0 = performance.now();
       session = await ort.InferenceSession.create(modelBytes, {
         executionProviders: [ep],
         graphOptimizationLevel: 'all',
       });
+      sessionInitMs = performance.now() - build0;
       lastProvider = ep;
-      if (ep === 'webgpu') adapterLabel = describeAdapter();
+      if (ep === 'webgpu') {
+        adapterLabel = describeAdapter();
+        webgpuSessionInitialized = true;
+      }
       // Keep the downloaded bytes in memory: a provider switch rebuilds the
       // session from them instead of re-fetching the model. They are freed when
       // the model URL actually changes or on dispose.
@@ -302,6 +321,11 @@ async function createSession(providers) {
       session?.release?.();
       session = null;
       lastError = err;
+      // Remember why the FIRST candidate (webgpu) failed so the report can say
+      // "fell back to WASM" with a concrete reason rather than a bare guess.
+      if (!sessionFallbackReason) {
+        sessionFallbackReason = ep + ': ' + (err instanceof Error ? err.message : String(err));
+      }
     }
   }
   throw lastError ?? new Error('No available execution provider (tried: ' + providers.join(', ') + ')');
@@ -332,6 +356,29 @@ function describeAdapter() {
     return (name || 'unknown adapter') + maxBuf + f16;
   } catch {
     return '';
+  }
+}
+
+// Structured adapter facts for the copyable diagnostic report, so the page does
+// not have to re-parse the human-readable `adapterLabel`. All fields are
+// best-effort: a browser that hides `info`/`limits` simply reports nulls.
+function adapterDetails() {
+  try {
+    const adapter = ort.env.webgpu?.adapter;
+    if (!adapter) return null;
+    const info = adapter.info ?? {};
+    const limits = adapter.limits ?? {};
+    return {
+      vendor: info.vendor ?? null,
+      architecture: info.architecture ?? null,
+      device: info.device ?? null,
+      description: info.description ?? null,
+      features: adapter.features ? Array.from(adapter.features) : [],
+      maxStorageBufferBindingSize: limits.maxStorageBufferBindingSize ?? null,
+      maxBufferSize: limits.maxBufferSize ?? null,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -418,6 +465,12 @@ self.onmessage = async (e) => {
       lastError = null;
       currentModelId = msg.modelId || null;
       modelUrl = msg.modelUrl;
+      // Reset the per-load diagnostics so a stale value from a previous model or
+      // provider never leaks into the next report.
+      modelDownloadMs = 0;
+      sessionInitMs = 0;
+      webgpuSessionInitialized = false;
+      sessionFallbackReason = null;
       if (msg.inputSize) MODEL_SIZE = msg.inputSize;
       if (typeof msg.outputIsProbability === 'boolean') {
         outputIsProbability = msg.outputIsProbability;
@@ -460,6 +513,12 @@ self.onmessage = async (e) => {
         provider: ep,
         adapter: adapterLabel,
         modelId: currentModelId,
+        // Structured diagnostics for the copyable report.
+        downloadMs: modelDownloadMs,
+        sessionInitMs,
+        webgpuSessionInitialized,
+        fallbackReason: sessionFallbackReason,
+        adapterDetails: adapterDetails(),
       });
       return;
     }
@@ -470,19 +529,15 @@ self.onmessage = async (e) => {
         result = await runInference(msg.tensor);
       } catch (err) {
         if (lastProvider !== 'webgpu' || !isProviderFailure(err)) throw err;
-        // The GPU could not run this model (allocation failure, lost device, or a
-        // run that never settled). Rebuild on the CPU provider and retry once so
-        // the user still gets a result.
+        // A GPU run that failed mid-execution may leave the shared ORT runtime
+        // (WebGPU and WASM live in one wasm module instance per worker) in a bad
+        // state. Rebuilding a WASM session in THIS worker would inherit that
+        // corruption and can silently return a numerically wrong mask — a flat,
+        // low-confidence cut-out. So do not retry here: ask the main thread to
+        // discard this worker entirely and retry on a fresh one (a clean module).
         const reason = err instanceof Error ? err.message : String(err);
-        post({ kind: 'provider-fallback', from: 'webgpu', to: 'wasm', reason });
-        try {
-          await session?.release?.();
-        } catch {
-          // A released-after-hang session may throw; the rebuild is what matters.
-        }
-        session = null;
-        await createSession(['wasm']);
-        result = await runInference(msg.tensor);
+        post({ kind: 'provider-restart', from: 'webgpu', to: 'wasm', reason, runId: msg.runId });
+        return;
       }
       // result-ready first: the main thread renders the image before the promise
       // for this run settles, so the output is on screen before the summary.

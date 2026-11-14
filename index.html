@@ -1057,30 +1057,9 @@
                   </span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <button id="consoleClose" type="button" class="consoleCloseBtn" aria-label="Hide console" title="Hide console">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                      <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Technical details: the collapsible diagnostics surface. The
-                   Copy report button inside it copies a LOCAL diagnostic report
-                   (GPU adapter, model, timings, raw-mask statistics) for a
-                   real-device bug report. It is revealed once a report is
-                   available (after the model loads, or after a failure), and
-                   never uploads anything. -->
-              <details id="techDetails" class="techDetails" hidden>
-                <summary class="techDetailsSummary">
-                  <span>Technical details</span>
-                  <span class="techDetailsChevron" aria-hidden="true">›</span>
-                </summary>
-                <div class="techDetailsBody">
-                  <p class="techDetailsHint">
-                    Copy a local diagnostic report — GPU adapter, model, timings and
-                    raw-mask statistics. Nothing is uploaded.
-                  </p>
+                  <!-- Copy report: always visible in the console header (not
+                       buried in a disclosure), so a tester can grab the local
+                       diagnostic report in one tap. Never uploads anything. -->
                   <button
                     id="copyReport"
                     type="button"
@@ -1088,8 +1067,13 @@
                     title="Copy a diagnostic report for support"
                     aria-label="Copy diagnostic report"
                   >Copy report</button>
+                  <button id="consoleClose" type="button" class="consoleCloseBtn" aria-label="Hide console" title="Hide console">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                      <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+                    </svg>
+                  </button>
                 </div>
-              </details>
+              </div>
 
               <div class="consoleScroll">
                 <!-- Flat terminal output: one line per event, newest at the

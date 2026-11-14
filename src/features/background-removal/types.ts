@@ -80,7 +80,7 @@ export type WorkerProgressMessage =
         maxBufferSize?: number | null;
       } | null;
     }
-  | { kind: 'provider-fallback'; from: string; to: string; reason: string }
+  | { kind: 'provider-restart'; from: string; to: string; reason: string; runId: number }
   | { kind: 'adapter-warning'; message: string }
   | { kind: 'inference-time'; ms: number; runId: number }
   | {

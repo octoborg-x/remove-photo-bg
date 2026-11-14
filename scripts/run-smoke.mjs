@@ -224,7 +224,7 @@ writeFileSync(
   ),
 );
 // Also save the human-readable diagnostic report, so a smoke run leaves the same
-// evidence a real-device tester would copy from Technical details.
+// evidence a real-device tester would copy with the Console's Copy report button.
 if (results.diagnosticReport) {
   const text = await page.evaluate(() => window.deviceReport?.() ?? '');
   writeFileSync(`${outDir}/diagnostic-report.txt`, text);

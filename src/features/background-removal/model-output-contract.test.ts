@@ -39,10 +39,22 @@ describe('model output contract is probability-only and shared across providers'
   it('has a single inference function shared by every provider (no per-provider mask branch)', () => {
     const defs = WORKER.match(/function runInference\s*\(/g) ?? [];
     expect(defs.length).toBe(1);
-    // Both the direct run and the WebGPU→WASM fallback call the same function, so
-    // the mask normalisation cannot differ between providers.
+    // Exactly one call site: the GPU→CPU retry no longer re-runs inside this
+    // worker (which could inherit a corrupted ORT module). It signals a restart
+    // instead, and the retry runs on a fresh worker through this same function.
     const calls = WORKER.match(/await runInference\(/g) ?? [];
-    expect(calls.length).toBeGreaterThanOrEqual(2);
+    expect(calls.length).toBe(1);
+  });
+
+  it('never rebuilds a WASM session inside the worker after a GPU run fails', () => {
+    // A GPU run that aborts mid-execution can leave the shared ORT module in a
+    // bad state; rebuilding a WASM session in the SAME worker (createSession in
+    // the run handler) would inherit it and silently return a flat mask. The
+    // worker must instead ask the main thread to restart on a fresh worker.
+    expect(WORKER).toMatch(/kind: 'provider-restart'/);
+    // No second session is created anywhere in the run path.
+    const calls = WORKER.match(/await createSession\(/g) ?? [];
+    expect(calls.length).toBe(1); // only the one in the set-model handler
   });
 
   it('does not create a second ONNX session or a second mask normaliser anywhere shipped', () => {

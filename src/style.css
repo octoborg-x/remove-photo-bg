@@ -1650,52 +1650,16 @@
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
   }
-  /* Technical details: the collapsible diagnostics surface in the console. Its
-     Copy report button copies a LOCAL diagnostic report (GPU adapter, model,
-     timings, raw-mask statistics) for a real-device bug report — nothing is
-     uploaded. */
-  .techDetails {
-    flex: none;
-    border-bottom: 1px solid var(--color-slate-100);
-  }
-  .techDetailsSummary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.4rem 0.9rem;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--color-slate-500);
-    cursor: pointer;
-    list-style: none;
-    user-select: none;
-  }
-  .techDetailsSummary::-webkit-details-marker {
-    display: none;
-  }
-  .techDetailsChevron {
-    transition: transform 0.15s ease;
-  }
-  .techDetails[open] .techDetailsChevron {
-    transform: rotate(90deg);
-  }
-  .techDetailsBody {
-    padding: 0 0.9rem 0.7rem;
-  }
-  .techDetailsHint {
-    font-size: 0.68rem;
-    color: var(--color-slate-500);
-    line-height: 1.4;
-    margin-bottom: 0.5rem;
-  }
+  /* Copy report: a LOCAL diagnostic report (GPU adapter, model, timings,
+     raw-mask statistics) for a real-device bug report — nothing is uploaded.
+     It lives in the console header so it is visible without opening anything. */
   .copyReportBtn {
     border: 1px solid var(--color-slate-200);
     background: var(--color-white);
     color: var(--color-slate-600);
     font-size: 0.7rem;
     font-weight: 600;
-    padding: 0.3rem 0.7rem;
+    padding: 0.28rem 0.6rem;
     border-radius: 0.5rem;
     cursor: pointer;
     white-space: nowrap;

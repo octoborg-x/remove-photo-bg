@@ -51,4 +51,26 @@ describe('model output contract is probability-only and shared across providers'
     const providerSigmoid = /if\s*\(\s*(?:lastProvider|provider|ep)\s*===\s*['"]webgpu['"][^)]*\)\s*\{[^}]*Math\.exp/s;
     expect(providerSigmoid.test(WORKER)).toBe(false);
   });
+
+  it('normalises the mask in exactly one place (no per-provider duplicate)', () => {
+    // Exactly one mask-normalisation block: `outputIsProbability ? copy : sigmoid`.
+    const normalisers = WORKER.match(/if \(outputIsProbability\) \{/g) ?? [];
+    expect(normalisers.length).toBe(1);
+    // The single place that writes into the normalised mask.
+    const maskWrites = WORKER.match(/mask\.set\(out\)|mask\[i\] = 1 \/ \(1 \+ Math\.exp/g) ?? [];
+    expect(maskWrites.length).toBe(2); // one copy branch + one sigmoid branch
+  });
+
+  it('loads the SAME model artifact on every provider (no per-provider model URL)', () => {
+    // The worker builds the session from one `modelUrl` for whichever execution
+    // provider it is trying; there is no branch that swaps in a different
+    // artifact per provider (which would risk a logits-output variant on one
+    // path while the other runs probability-only post-processing).
+    const perProviderModelUrl =
+      /if\s*\(\s*(?:ep|lastProvider|provider)\s*===\s*['"]webgpu['"][^)]*\)\s*\{[^}]*modelUrl\s*=/s;
+    expect(perProviderModelUrl.test(WORKER)).toBe(false);
+    // The output contract is a per-model property sent with set-model, not a
+    // per-provider constant.
+    expect(WORKER).toMatch(/outputIsProbability\s*=\s*msg\.outputIsProbability/);
+  });
 });

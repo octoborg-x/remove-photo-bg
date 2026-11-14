@@ -61,6 +61,24 @@ export type WorkerProgressMessage =
       adapter?: string;
       /** The manifest id the session was built for (e.g. 'model_512_int8_fp16'). */
       modelId?: string;
+      /** Model download time, ms (0 on a cache hit / provider switch). */
+      downloadMs?: number;
+      /** Session build/optimize time, ms. */
+      sessionInitMs?: number;
+      /** True when a WebGPU session actually built (not merely that an adapter exists). */
+      webgpuSessionInitialized?: boolean;
+      /** Why a webgpu attempt fell back to WASM, or null. */
+      fallbackReason?: string | null;
+      /** Structured adapter facts for the copyable diagnostic report. */
+      adapterDetails?: {
+        vendor?: string | null;
+        architecture?: string | null;
+        device?: string | null;
+        description?: string | null;
+        features?: string[];
+        maxStorageBufferBindingSize?: number | null;
+        maxBufferSize?: number | null;
+      } | null;
     }
   | { kind: 'provider-fallback'; from: string; to: string; reason: string }
   | { kind: 'adapter-warning'; message: string }
@@ -75,18 +93,6 @@ export type WorkerProgressMessage =
       /** The run this mask belongs to, so the page can drop a superseded run's
        *  late result instead of letting it overwrite a newer job. */
       runId?: number;
-      /** Raw-mask min/mean/max + tail fractions, measured right after inference.
-       *  Folded into the device report so a real-device tester captures the
-       *  evidence for a washed-out cut-out in one tap. */
-      maskStats?: {
-        min: number;
-        mean: number;
-        max: number;
-        lowFraction: number;
-        highFraction: number;
-      };
-      /** True when the raw mask tripped the "squashed mask" heuristic. */
-      maskSuspect?: boolean;
     }
   | {
       kind: 'error';

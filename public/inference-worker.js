@@ -60,36 +60,20 @@ let lastProvider = 'none';
 let modelUrl = null;
 let lastError = null;
 let adapterLabel = '';
+// Structured diagnostics for the copyable report. Download and session-build
+// times are separated so a slow start can be attributed to the network or to
+// shader/optimizer work; `webgpuSessionInitialized` distinguishes "a GPU adapter
+// exists" from "a WebGPU session actually built"; `sessionFallbackReason` records
+// why a webgpu candidate had to fall back to WASM at build time.
+let modelDownloadMs = 0;
+let sessionInitMs = 0;
+let webgpuSessionInitialized = false;
+let sessionFallbackReason = null;
 let MODEL_SIZE = 512;
 // The shipped exports apply sigmoid internally and return probabilities; the
 // older 1024 export returned raw logits.
 let outputIsProbability = true;
 let currentModelId = null;
-
-// Raw-mask sanity statistics. A correctly-segmenting mask is bimodal (pixels
-// near 0 and near 1, spanning [0,1]); a mask squashed toward the middle (e.g. a
-// second sigmoid over an already-probability output, collapsing [0,1] into
-// ≈[0.5,0.73]) composites to a uniform, washed-out "ghost" image. Measured once
-// per run and echoed on `result-ready` so the page can warn and fold the numbers
-// into the copyable device report. See src/features/background-removal/mask-stats.ts.
-function maskStats(mask) {
-  const n = mask.length;
-  if (!n) return { min: 0, mean: 0, max: 0, lowFraction: 0, highFraction: 0 };
-  let min = Infinity;
-  let max = -Infinity;
-  let sum = 0;
-  let low = 0;
-  let high = 0;
-  for (let i = 0; i < n; i++) {
-    const v = mask[i];
-    if (v < min) min = v;
-    if (v > max) max = v;
-    sum += v;
-    if (v < 0.1) low++;
-    else if (v > 0.9) high++;
-  }
-  return { min, mean: sum / n, max, lowFraction: low / n, highFraction: high / n };
-}
 
 function post(msg) {
   self.postMessage(msg);
@@ -299,6 +283,7 @@ async function createSession(providers) {
       if (!modelBytes) {
         reportProgress('cache-check', PCT.CACHE_DONE, { detail: 'checking for a cached model' });
         reportProgress('downloading', PCT.CACHE_DONE, { bytes: 0 });
+        const dl0 = performance.now();
         modelBytes = await downloadModel(modelUrl, (fraction, bytes, total) => {
           const complete = fraction >= 1;
           reportProgress(
@@ -307,17 +292,24 @@ async function createSession(providers) {
             { bytes, totalBytes: total || undefined },
           );
         });
+        modelDownloadMs = performance.now() - dl0;
       } else {
         // A provider retry reuses the bytes already in memory; no re-download.
+        modelDownloadMs = 0;
         reportProgress('cache-hit', PCT.DOWNLOAD_DONE, { detail: 'model already in memory' });
       }
       reportProgress('creating-session', PCT.DOWNLOAD_DONE, { detail: 'provider ' + ep });
+      const build0 = performance.now();
       session = await ort.InferenceSession.create(modelBytes, {
         executionProviders: [ep],
         graphOptimizationLevel: 'all',
       });
+      sessionInitMs = performance.now() - build0;
       lastProvider = ep;
-      if (ep === 'webgpu') adapterLabel = describeAdapter();
+      if (ep === 'webgpu') {
+        adapterLabel = describeAdapter();
+        webgpuSessionInitialized = true;
+      }
       // Keep the downloaded bytes in memory: a provider switch rebuilds the
       // session from them instead of re-fetching the model. They are freed when
       // the model URL actually changes or on dispose.
@@ -327,6 +319,11 @@ async function createSession(providers) {
       session?.release?.();
       session = null;
       lastError = err;
+      // Remember why the FIRST candidate (webgpu) failed so the report can say
+      // "fell back to WASM" with a concrete reason rather than a bare guess.
+      if (!sessionFallbackReason) {
+        sessionFallbackReason = ep + ': ' + (err instanceof Error ? err.message : String(err));
+      }
     }
   }
   throw lastError ?? new Error('No available execution provider (tried: ' + providers.join(', ') + ')');
@@ -357,6 +354,29 @@ function describeAdapter() {
     return (name || 'unknown adapter') + maxBuf + f16;
   } catch {
     return '';
+  }
+}
+
+// Structured adapter facts for the copyable diagnostic report, so the page does
+// not have to re-parse the human-readable `adapterLabel`. All fields are
+// best-effort: a browser that hides `info`/`limits` simply reports nulls.
+function adapterDetails() {
+  try {
+    const adapter = ort.env.webgpu?.adapter;
+    if (!adapter) return null;
+    const info = adapter.info ?? {};
+    const limits = adapter.limits ?? {};
+    return {
+      vendor: info.vendor ?? null,
+      architecture: info.architecture ?? null,
+      device: info.device ?? null,
+      description: info.description ?? null,
+      features: adapter.features ? Array.from(adapter.features) : [],
+      maxStorageBufferBindingSize: limits.maxStorageBufferBindingSize ?? null,
+      maxBufferSize: limits.maxBufferSize ?? null,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -443,6 +463,12 @@ self.onmessage = async (e) => {
       lastError = null;
       currentModelId = msg.modelId || null;
       modelUrl = msg.modelUrl;
+      // Reset the per-load diagnostics so a stale value from a previous model or
+      // provider never leaks into the next report.
+      modelDownloadMs = 0;
+      sessionInitMs = 0;
+      webgpuSessionInitialized = false;
+      sessionFallbackReason = null;
       if (msg.inputSize) MODEL_SIZE = msg.inputSize;
       if (typeof msg.outputIsProbability === 'boolean') {
         outputIsProbability = msg.outputIsProbability;
@@ -485,6 +511,12 @@ self.onmessage = async (e) => {
         provider: ep,
         adapter: adapterLabel,
         modelId: currentModelId,
+        // Structured diagnostics for the copyable report.
+        downloadMs: modelDownloadMs,
+        sessionInitMs,
+        webgpuSessionInitialized,
+        fallbackReason: sessionFallbackReason,
+        adapterDetails: adapterDetails(),
       });
       return;
     }
@@ -509,21 +541,6 @@ self.onmessage = async (e) => {
         await createSession(['wasm']);
         result = await runInference(msg.tensor);
       }
-      // Raw-mask sanity: measure the min/mean/max of the mask right after
-      // inference (before any cropping/resizing). A squashed mask — mean in the
-      // middle band and not bimodal — composites to a washed-out "ghost"; warn
-      // loudly and echo the numbers so the device report carries the evidence.
-      const stats = maskStats(result.mask);
-      const bimodal = stats.lowFraction + stats.highFraction >= 0.4;
-      const suspect = stats.mean >= 0.45 && stats.mean <= 0.8 && !bimodal;
-      if (suspect) {
-        post({
-          kind: 'adapter-warning',
-          message:
-            `the raw mask is not bimodal (min ${stats.min.toFixed(3)} / mean ${stats.mean.toFixed(3)} / ` +
-            `max ${stats.max.toFixed(3)}). The cut-out may look washed out; copy the device report for details.`,
-        });
-      }
       // result-ready first: the main thread renders the image before the promise
       // for this run settles, so the output is on screen before the summary.
       post({
@@ -535,8 +552,6 @@ self.onmessage = async (e) => {
         // Echo the run id so the page can drop a late result that belongs to a
         // superseded run (a newer upload started before this one finished).
         runId: msg.runId,
-        maskStats: stats,
-        maskSuspect: suspect,
       });
       post({ kind: 'inference-time', ms: result.timeMs, runId: msg.runId });
       return;

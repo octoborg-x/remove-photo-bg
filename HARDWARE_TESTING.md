@@ -55,11 +55,12 @@ button on the page.
    `window.runSmoke()` from the console and read `window.smokeProvider` /
    `window.smokeModelId` — the automated harness in
    `scripts/run-smoke.mjs` uses the same API.
-   For a support-quality capture in one tap, press **Copy report** in the
-   Console header: it copies a `key: value` block with the provider, GPU
-   adapter, model, timings, and the **raw-mask min/mean/max** plus a
-   `raw mask check: ok (bimodal)` / `SUSPECT` verdict (see §9). The same text
-   is also written to the console log and available as `window.deviceReport()`.
+   For a support-quality capture in one tap, open **Technical details** in the
+   Console card and press **Copy report**: it copies a `key: value` block with
+   the provider, GPU adapter, model, timings, and the **raw-mask
+   min/mean/max** plus tail fractions and an `ok (bimodal)` / `SUSPECT`
+   verdict (see §9). The same text is also available as `window.deviceReport()`,
+   and the structured form as `window.diagnosticReport()`.
 5. _Optionally_, also capture:
    - page `#stage` text during the first run (shader-compile note prints only
      on the `webgpu` path; append `?provider=webgpu` to force it, or open the
@@ -302,25 +303,35 @@ button (§3 step 4) and warns in the Console when a mask is squashed (§9).
 
 ### Guards added (so a real squash can never ship silently)
 
-- Runtime: the worker measures raw-mask min/mean/max right after inference and
-  posts a `adapter-warning` when the mask is not bimodal (mean in `[0.45, 0.8]`
-  with too few pixels in the tails); the page logs a warning and the device
-  report prints `raw mask check: SUSPECT`.
-- Unit tests: `mask-stats.test.ts` (the heuristic, incl. the measured masks
-  above), `device-report.test.ts` (the report contract), and
-  `model-output-contract.test.ts` (every served model is `outputIsProbability`,
-  the sigmoid appears exactly once and is flag-guarded, and one `runInference`
-  is shared by all providers).
+- Runtime: the main thread measures the delivered raw mask's min/mean/max
+  immediately after inference (`src/features/diagnostics/raw-mask-stats.ts`,
+  `isSuspectRawMask`) and warns in the Console when the mask is not bimodal
+  (mean in `[0.45, 0.8]` with too few pixels in the tails); the diagnostic
+  report prints a `SUSPECT` verdict. The measurement lives in ONE shared module
+  used by the page (the worker no longer keeps a duplicate copy), so the
+  thresholds cannot drift between paths.
+- Unit tests: `raw-mask-stats.test.ts` (the heuristic, incl. a synthetic
+  squashed mask and a same-mean bimodal mask), `diagnostic-report.test.ts` (the
+  report contract + a privacy guard), `raw-mask-worker.test.ts` (drives a
+  synthetic squashed mask through the real worker and asserts the guard flags
+  it), and `model-output-contract.test.ts` (every served model is
+  `outputIsProbability`, the sigmoid appears exactly once and is flag-guarded,
+  the mask is normalised in exactly one place, and one `runInference` is shared
+  by all providers).
 
-## 9. Reading a device report
+## 9. Reading a diagnostic report
 
-Press **Copy report** in the Console header (or call `window.deviceReport()`).
-Key lines:
+Open **Technical details** in the Console (the collapsible disclosure in the
+console card) and press **Copy report** (or call `window.diagnosticReport()` for
+the structured object / `window.deviceReport()` for the text). Key lines:
 
-- `provider:` / `gpu adapter:` — which path actually ran. `(none — CPU path)`
-  means WASM.
-- `raw mask: min … / mean … / max …` and `raw mask check:` — the ghost-image
-  evidence. `ok (bimodal)` with `min 0.000 / max 1.000` is healthy; a
-  `SUSPECT` verdict (mean ≈0.5–0.73, empty tails) means the alpha is squashed.
-- `warm inference:` — the timings used for the Change-2 device comparison (§1).
+- `provider:` / `actual provider:` / `gpu adapter:` — which path actually ran.
+  `actual provider: wasm` with `webgpu session built: yes` means a WebGPU session
+  was created but inference fell back; `(none)` means no run yet.
+- `RAW MASK STATISTICS` block — `Min` / `Mean` / `Max` and the tail fractions.
+  A healthy mask is bimodal: `Min 0.0000` / `Max 1.0000` with large tail
+  fractions. A `SUSPECT` verdict (mean ≈0.5–0.73, near-empty tails) means the
+  alpha is squashed — the ghost-image fingerprint.
+- `Average inference:` — the timings used for the Change-2 device comparison
+  (§1).
 

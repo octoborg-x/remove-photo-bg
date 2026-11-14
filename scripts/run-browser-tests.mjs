@@ -1417,6 +1417,136 @@ try {
     );
     await base.close();
   }
+
+  // ——— Scenario: home page section order ———
+  // The Before & After showcase sits after the "What SmartCutAI Supports"
+  // reference section (a plain DOM-order check; no studio needed).
+  {
+    const page = await browser.newPage();
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    const order = await page.evaluate(() => {
+      const ids = [...document.querySelectorAll('section[id]')].map((s) => s.id);
+      return { support: ids.indexOf('support'), showcase: ids.indexOf('showcase'), how: ids.indexOf('how') };
+    });
+    record(
+      'the Before & After showcase follows the What-Supported section',
+      order.support !== -1 && order.showcase !== -1 && order.showcase > order.support && order.how < order.support,
+      `how ${order.how} support ${order.support} showcase ${order.showcase}`,
+    );
+    await page.close();
+  }
+
+  // ——— Scenario: studio result sidebar (settings) ———
+  // The gear popover is gone; the engine controls live in a left sidebar in the
+  // result tab that collapses via a chevron and drag-resizes up to 50%.
+  {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+    await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
+
+    const markup = await page.evaluate(() => ({
+      hasSidebar: !!document.getElementById('settingsSidebar'),
+      hasToggle: !!document.getElementById('sidebarToggle'),
+      hasCollapse: !!document.getElementById('sidebarCollapse'),
+      hasResize: !!document.getElementById('sidebarResize'),
+      gearGone: !document.getElementById('settingsGearBtn') && !document.getElementById('advancedMenu'),
+      photoTab: document.getElementById('tabInput')?.textContent?.trim(),
+      barToggleHiddenOnPhoto: document.getElementById('sidebarToggle')?.hidden,
+      sidebarLeftOfMain: (() => {
+        const sb = document.getElementById('settingsSidebar')?.getBoundingClientRect();
+        const rm = document.querySelector('.resultMain')?.getBoundingClientRect();
+        return !!sb && !!rm && sb.right <= rm.left + 1;
+      })(),
+    }));
+    record('the studio input tab reads "Photo"', markup.photoTab === 'Photo', markup.photoTab);
+    record(
+      'the result engine controls are a left sidebar (gear popover removed)',
+      markup.hasSidebar && markup.hasToggle && markup.hasCollapse && markup.hasResize && markup.gearGone && markup.sidebarLeftOfMain,
+      `sidebar ${markup.hasSidebar} toggle ${markup.hasToggle} collapse ${markup.hasCollapse} resize ${markup.hasResize} gearGone ${markup.gearGone} leftOfMain ${markup.sidebarLeftOfMain}`,
+    );
+    record(
+      'the settings sidebar show/hide button appears only in the Result tab',
+      markup.barToggleHiddenOnPhoto === true,
+      `hidden on photo tab: ${markup.barToggleHiddenOnPhoto}`,
+    );
+
+    // Make the result tab visible (its panel starts hidden until a run finishes).
+    await page.evaluate(() => {
+      const panel = document.getElementById('panelResult');
+      panel.hidden = false;
+      panel.style.display = 'block';
+      document.getElementById('outputSection').hidden = false;
+      document.getElementById('sidebarToggle').hidden = false;
+    });
+    await sleep(250);
+
+    // The top-bar show/hide button collapses the sidebar and stays in sync.
+    const barToggle = await page.evaluate(async () => {
+      const sb = document.getElementById('settingsSidebar');
+      const toggle = document.getElementById('sidebarToggle');
+      const openW = sb.getBoundingClientRect().width;
+      toggle.click();
+      await new Promise((r) => setTimeout(r, 320));
+      const collapsedW = sb.getBoundingClientRect().width;
+      const pressedCollapsed = toggle.getAttribute('aria-pressed');
+      toggle.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return { openW, collapsedW, pressedCollapsed, expandedW: sb.getBoundingClientRect().width };
+    });
+    record(
+      'the top-bar show/hide button collapses and re-expands the settings sidebar',
+      barToggle.collapsedW < barToggle.openW && barToggle.pressedCollapsed === 'false' && barToggle.expandedW > barToggle.collapsedW,
+      `open ${Math.round(barToggle.openW)} → collapsed ${Math.round(barToggle.collapsedW)} → expanded ${Math.round(barToggle.expandedW)}`,
+    );
+
+    // Collapse + expand via the in-sidebar chevron.
+    const collapse = await page.evaluate(async () => {
+      const sb = document.getElementById('settingsSidebar');
+      const chevron = document.getElementById('sidebarCollapse');
+      const openW = sb.getBoundingClientRect().width;
+      chevron.click();
+      await new Promise((r) => setTimeout(r, 320));
+      const collapsedW = sb.getBoundingClientRect().width;
+      const pressedCollapsed = chevron.getAttribute('aria-pressed');
+      chevron.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return { openW, collapsedW, pressedCollapsed, expandedW: sb.getBoundingClientRect().width };
+    });
+    record(
+      'the settings sidebar collapses and re-expands from its chevron',
+      collapse.collapsedW < collapse.openW && collapse.pressedCollapsed === 'false' && collapse.expandedW > collapse.collapsedW,
+      `open ${Math.round(collapse.openW)} → collapsed ${Math.round(collapse.collapsedW)} → expanded ${Math.round(collapse.expandedW)}`,
+    );
+
+    // Drag the right edge: grows toward the 50% cap, then shrinks but stays usable.
+    const resize = await page.evaluate(async () => {
+      const sb = document.getElementById('settingsSidebar');
+      const ws = document.getElementById('resultWorkspace');
+      const h = document.getElementById('sidebarResize');
+      const r = h.getBoundingClientRect();
+      const x0 = r.left + r.width / 2;
+      const y0 = r.top + r.height / 2;
+      const openW = sb.getBoundingClientRect().width;
+      const cap = ws.getBoundingClientRect().width * 0.5;
+      h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x0, clientY: y0, pointerId: 1 }));
+      h.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x0 + 3000, clientY: y0, pointerId: 1 }));
+      await new Promise((res) => setTimeout(res, 320));
+      const grownW = sb.getBoundingClientRect().width;
+      h.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x0 - 3000, clientY: y0, pointerId: 1 }));
+      await new Promise((res) => setTimeout(res, 320));
+      const shrunkW = sb.getBoundingClientRect().width;
+      h.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x0, clientY: y0, pointerId: 1 }));
+      return { openW, cap, grownW, shrunkW };
+    });
+    record(
+      'the settings sidebar drag-resizes up to 50% of the workspace',
+      resize.grownW <= resize.cap + 1 && resize.grownW >= resize.openW - 1 && resize.shrunkW < resize.grownW && resize.shrunkW > 0,
+      `open ${Math.round(resize.openW)} cap ${Math.round(resize.cap)} grown ${Math.round(resize.grownW)} shrunk ${Math.round(resize.shrunkW)}`,
+    );
+    await page.close();
+  }
 } finally {
   await browser.close();
   if (server && !keepServer) {

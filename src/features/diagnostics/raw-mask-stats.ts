@@ -129,22 +129,38 @@ export function rawMaskStats(
   };
 }
 
-/** A mask whose mean sits in this band is where a squashed mask clusters. */
-export const SUSPECT_MEAN_MIN = 0.45;
-export const SUSPECT_MEAN_MAX = 0.8;
-/** Minimum combined tail mass for a mask to count as bimodal. */
-const MIN_BIMODAL_TAIL = 0.4;
+/**
+ * Minimum combined tail mass for a mask to count as bimodal.
+ *
+ * A correct segmentation is bimodal: its mass sits at 0 (background) and at 1
+ * (subject), so the share of pixels within 0.1 of either extreme stays high —
+ * every image in the 64-image eval set measures ≥0.99, whether it is a
+ * subject-heavy portrait, a tiny product, or a (legitimately) empty result.
+ *
+ * A mask whose mass is piled in the MIDDLE has almost none: both a double
+ * sigmoid over an already-probability output (which squashes [0,1] into
+ * ≈[0.5,0.73]) and the real-device flat mask (measured min 0.007 / mean 0.232 /
+ * max 0.633, 0% >0.95) land far below it. Those composite to a uniform,
+ * washed-out "ghost", so both must be flagged.
+ */
+export const MIN_BIMODAL_TAIL = 0.4;
 
 /**
- * True when the mask looks squashed toward the middle: its mean is in the
- * suspicious band AND it is not bimodal (too few pixels in either tail). A
- * legitimately subject-heavy portrait can average ~0.6 yet still span 0..1, so
- * the mean alone is not enough; the tail test keeps it from being flagged.
+ * True when the mask is not bimodal: too little of it sits near 0 (background)
+ * or near 1 (subject), so the bulk is stuck in the mid-range and the cut-out
+ * composites to a uniform, washed-out "ghost".
+ *
+ * The test is bimodality alone, deliberately with NO mean band. An earlier
+ * version also required `mean ∈ [0.45, 0.80]`, which is the band a double-sigmoid
+ * squash clusters in — but the real-device failure is flat at mean ≈0.23 with no
+ * foreground core at all, so that guard stayed silent on the very image it
+ * existed to catch (HARDWARE_TESTING.md §8). Bimodality catches both shapes and
+ * is provider-independent: a correct mask (including a legitimately subject-heavy
+ * or nearly-empty one) always puts most of its mass at an extreme.
  */
 export function isSuspectRawMask(stats: RawMaskStats): boolean {
-  const midMean = stats.mean >= SUSPECT_MEAN_MIN && stats.mean <= SUSPECT_MEAN_MAX;
   const tail = stats.below_01_fraction + stats.above_095_fraction;
-  return midMean && tail < MIN_BIMODAL_TAIL;
+  return tail < MIN_BIMODAL_TAIL;
 }
 
 /** Compact one-line form for the console. */

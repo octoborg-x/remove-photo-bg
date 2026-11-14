@@ -147,6 +147,21 @@ describe('formatDiagnosticReport', () => {
     expect(text).toContain('Above 0.99: 33.33%');
   });
 
+  it('prints a self-diagnosing verdict: SUSPECT for a flat mask, ok for a bimodal one', () => {
+    const flat = formatDiagnosticReport(
+      buildDiagnosticReport(base({ rawMask: rawMaskStats(new Float32Array(512 * 512).fill(0.3), 512, 512) })),
+    );
+    expect(flat).toContain('Verdict: SUSPECT — not bimodal');
+
+    const ok = formatDiagnosticReport(
+      buildDiagnosticReport(base({ rawMask: rawMaskStats(new Float32Array(512 * 512).fill(1), 512, 512) })),
+    );
+    expect(ok).toContain('Verdict: ok (bimodal');
+
+    const none = formatDiagnosticReport(buildDiagnosticReport(base({ rawMask: rawMaskStats(new Float32Array(0)) })));
+    expect(none).toContain('Verdict: no mask measured');
+  });
+
   it('reads "unknown" for missing data rather than inventing values', () => {
     const text = formatDiagnosticReport(
       buildDiagnosticReport(

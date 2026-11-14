@@ -11,7 +11,7 @@
 // filesystem paths. It is generated entirely on the device and copied to the
 // clipboard — no network request is made (see the no-upload guard test).
 
-import type { RawMaskStats } from './raw-mask-stats';
+import { isSuspectRawMask, type RawMaskStats } from './raw-mask-stats';
 
 /** Schema version of the structured report. Bump on any breaking field change. */
 export const DIAGNOSTIC_SCHEMA_VERSION = '1.0';
@@ -232,6 +232,16 @@ function joinList(v: readonly number[]): string {
   return v.length ? v.map((n) => n.toFixed(0)).join(', ') : 'none';
 }
 
+/** One-line reading of the raw mask, so a pasted report is self-diagnosing. */
+function rawMaskVerdict(stats: RawMaskStats): string {
+  if (stats.width === 0 || stats.height === 0) return 'no mask measured';
+  const tail = stats.below_001_fraction + stats.above_095_fraction;
+  if (isSuspectRawMask(stats)) {
+    return `SUSPECT — not bimodal (tail ${pct(tail)}), alpha may look washed out`;
+  }
+  return `ok (bimodal, tail ${pct(tail)})`;
+}
+
 /**
  * Renders the structured report as readable, sectioned plain text. Tail
  * fractions are shown as percentages here while the structured data keeps the
@@ -311,6 +321,7 @@ export function formatDiagnosticReport(report: DiagnosticReport): string {
   lines.push(`Above 0.95: ${pct(rawMask.above_095_fraction)}`);
   lines.push(`Above 0.99: ${pct(rawMask.above_099_fraction)}`);
   lines.push(`Non-finite values: ${rawMask.non_finite_count}`);
+  lines.push(`Verdict: ${rawMaskVerdict(rawMask)}`);
   lines.push('');
   lines.push('Postprocessing');
   lines.push(`Mask recovery: ${postprocessing.maskRecoveryTriggered ? 'triggered' : 'not triggered'}`);

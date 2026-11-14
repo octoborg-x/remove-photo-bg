@@ -11,8 +11,6 @@ import {
   isSuspectRawMask,
   emptyRawMaskStats,
   formatRawMaskStats,
-  SUSPECT_MEAN_MIN,
-  SUSPECT_MEAN_MAX,
 } from './raw-mask-stats';
 
 /** A squashed mask: every pixel in [0.5, 0.7], so the mean is ~0.6 and neither
@@ -20,6 +18,18 @@ import {
 function squashedMask(n = 512 * 512): Float32Array {
   const out = new Float32Array(n);
   for (let i = 0; i < n; i++) out[i] = 0.5 + (0.7 - 0.5) * (i / (n - 1));
+  return out;
+}
+
+/** The mask a real Qualcomm Adreno-6xx phone produced (HARDWARE_TESTING.md §8),
+ *  on BOTH providers: flat and low-confidence, no foreground core. min 0.0065 /
+ *  mean 0.2324 / max 0.6437, 0.69% below 0.01, 0% above 0.95. */
+function deviceFlatMask(n = 512 * 512): Float32Array {
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    // ~0.7% near zero (the tail that survives), the rest spread across [0.1,0.64].
+    out[i] = i % 150 === 0 ? 0.006 : 0.1 + 0.54 * ((i % 997) / 997);
+  }
   return out;
 }
 
@@ -64,7 +74,7 @@ describe('rawMaskStats', () => {
 });
 
 describe('isSuspectRawMask (the ghost-image regression guard)', () => {
-  it('flags the squashed mask: mid-band mean, empty tails', () => {
+  it('flags the double-sigmoid squash: mid-band mean, empty tails', () => {
     const stats = rawMaskStats(squashedMask());
     expect(stats.mean).toBeGreaterThan(0.55);
     expect(stats.mean).toBeLessThan(0.65);
@@ -73,7 +83,18 @@ describe('isSuspectRawMask (the ghost-image regression guard)', () => {
     expect(isSuspectRawMask(stats)).toBe(true);
   });
 
-  it('does NOT flag a bimodal mask with the same ~0.6 mean (subject-heavy portrait)', () => {
+  it('flags the REAL device signature: flat mask, low mean, no foreground core', () => {
+    // Regression for HARDWARE_TESTING.md §8: this shape (mean ≈0.23, max ≈0.64,
+    // 0% >0.95) is the ghost the phone actually produced. A guard that only
+    // looked at mean ∈ [0.45, 0.80] stayed silent on it — that was the bug.
+    const stats = rawMaskStats(deviceFlatMask());
+    expect(stats.mean).toBeLessThan(0.4);
+    expect(stats.max).toBeLessThan(0.8);
+    expect(stats.above_095_fraction).toBe(0);
+    expect(isSuspectRawMask(stats)).toBe(true);
+  });
+
+  it('does NOT flag a bimodal mask with a mid-range mean (subject-heavy portrait)', () => {
     const n = 512 * 512;
     const healthy = new Float32Array(n);
     for (let i = 0; i < n; i++) healthy[i] = i < n * 0.6 ? 0 : 1;
@@ -82,15 +103,24 @@ describe('isSuspectRawMask (the ghost-image regression guard)', () => {
     expect(isSuspectRawMask(stats)).toBe(false);
   });
 
-  it('does not flag a mask whose mean is outside the suspicious band', () => {
-    // Nearly all background: low mean, not suspect even though it is unimodal.
-    const low = rawMaskStats(new Float32Array(512 * 512).fill(0.02));
-    expect(low.mean).toBeLessThan(SUSPECT_MEAN_MIN);
-    expect(isSuspectRawMask(low)).toBe(false);
-    // Nearly all subject: high mean, not suspect.
-    const high = rawMaskStats(new Float32Array(512 * 512).fill(0.98));
-    expect(high.mean).toBeGreaterThan(SUSPECT_MEAN_MAX);
-    expect(isSuspectRawMask(high)).toBe(false);
+  it('does NOT flag a nearly-empty (all-background) mask', () => {
+    // A legitimately empty result is still bimodal: its mass is at 0.
+    const empty = rawMaskStats(new Float32Array(512 * 512).fill(0));
+    expect(empty.below_01_fraction).toBe(1);
+    expect(isSuspectRawMask(empty)).toBe(false);
+  });
+
+  it('does NOT flag an all-foreground mask', () => {
+    const full = rawMaskStats(new Float32Array(512 * 512).fill(1));
+    expect(full.above_095_fraction).toBe(1);
+    expect(isSuspectRawMask(full)).toBe(false);
+  });
+
+  it('flags a unimodal mask centred in the middle regardless of its mean', () => {
+    // Every value 0.3 — no tail at all, so the cut-out is uniformly translucent.
+    expect(isSuspectRawMask(rawMaskStats(new Float32Array(512 * 512).fill(0.3)))).toBe(true);
+    // Every value 0.8 — high mean, but still no foreground core → ghost.
+    expect(isSuspectRawMask(rawMaskStats(new Float32Array(512 * 512).fill(0.8)))).toBe(true);
   });
 });
 

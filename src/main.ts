@@ -22,6 +22,8 @@ import {
 } from './features/background-removal/mask-postprocess';
 import { composeResult } from './features/background-removal/composite';
 import { recoverForegroundMask } from './features/background-removal/mask-recovery';
+import { formatMaskStats, isSuspiciousMask, type MaskStats } from './features/background-removal/mask-stats';
+import { buildDeviceReport } from './features/background-removal/device-report';
 import { cropMaskFloat, alphaToBytes, lumaFromRgba } from './features/background-removal/mask-resize';
 import { RefinementRunner } from './features/background-removal/refinement-client';
 import {
@@ -178,6 +180,7 @@ const siteHeaderEl = document.getElementById('siteHeader')!;
 const studioGridEl = document.querySelector<HTMLElement>('.studioGrid')!;
 const consoleToggleBtn = document.getElementById('consoleToggle')! as HTMLButtonElement;
 const consoleCloseBtn = document.getElementById('consoleClose')! as HTMLButtonElement;
+const deviceReportBtn = document.getElementById('deviceReportBtn')! as HTMLButtonElement;
 const consoleResizeEl = document.getElementById('consoleResize')!;
 const consoleCardEl = document.querySelector<HTMLElement>('.consoleCard')!;
 // Result-tab settings sidebar (engine controls). Declared here with the other
@@ -602,6 +605,11 @@ const WARM_RUNS = 1;
 const WORKER_START_TIMEOUT_MS = 15000;
 const timings: number[] = [];
 let loadTimeMs = 0;
+// Raw-mask statistics from the most recent run (folded into the device report),
+// plus the GPU adapter reported on the WebGPU path ('' on CPU).
+let lastMaskStats: MaskStats | null = null;
+let lastMaskSuspect = false;
+let lastAdapter = '';
 
 // ——— Model + provider selection ———
 let models: ModelManifestEntry[] = [];
@@ -867,6 +875,47 @@ function appendConsoleLine(line: string): void {
 function scrollConsoleToBottom(): void {
   consoleScrollEl.scrollTop = consoleScrollEl.scrollHeight;
 }
+
+// Build the copyable device report and copy it to the clipboard. This is the
+// one-tap capture a real-device tester uses when a cut-out looks wrong: it
+// carries the provider, GPU adapter, model, timings AND the raw-mask
+// min/mean/max, so a "washed-out / ghost" report is diagnosable without a
+// debug build.
+function deviceReportText(): string {
+  return buildDeviceReport({
+    buildId: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev',
+    userAgent: navigator.userAgent,
+    provider: window.smokeProvider ?? '',
+    modelId: window.smokeModelId ?? selectedModel?.id ?? '',
+    adapter: lastAdapter,
+    loadMs: loadTimeMs > 0 ? loadTimeMs : null,
+    timings,
+    maskStats: lastMaskStats,
+    maskSuspect: lastMaskSuspect,
+    crossOriginIsolated: window.crossOriginIsolated === true,
+    hardwareConcurrency: navigator.hardwareConcurrency ?? null,
+  });
+}
+
+async function copyDeviceReport(): Promise<void> {
+  const text = deviceReportText();
+  // Always log it so the report is visible (and selectable) even when the
+  // clipboard API is unavailable or denied.
+  log(text.replace(/\n/g, ' | '));
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    copied = true;
+  } catch {
+    copied = false;
+  }
+  showToast(copied ? 'Device report copied to the clipboard.' : 'Device report written to the Console log.', {
+    kind: 'info',
+    title: 'Device report',
+  });
+}
+
+deviceReportBtn.addEventListener('click', () => void copyDeviceReport());
 
 // The Zero-Upload statement is hidden behind a clickable shield icon.
 privacyToggle.addEventListener('click', () => {
@@ -1244,6 +1293,7 @@ async function initWorker(): Promise<void> {
       log(`Model load time: ${loadTimeMs.toFixed(1)} ms`);
       log(`Execution provider: ${msg.provider}`);
       if (msg.adapter) log(`GPU adapter: ${msg.adapter}`);
+      lastAdapter = msg.adapter ?? '';
       window.smokeProvider = msg.provider;
       window.smokeModelId = loadedModelId;
       announcedLog.push(msg.provider);
@@ -1356,6 +1406,20 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   }
   const image = currentImageData;
   const jobId = activeJobId;
+  // Record the raw-mask sanity numbers the worker measured right after
+  // inference. They feed the console note and the copyable device report, so a
+  // real-device tester can capture the evidence for a washed-out cut-out.
+  lastMaskStats = msg.maskStats ?? null;
+  lastMaskSuspect = msg.maskSuspect ?? (lastMaskStats ? isSuspiciousMask(lastMaskStats) : false);
+  if (lastMaskStats) {
+    log(`Raw mask: ${formatMaskStats(lastMaskStats)}.`);
+    if (lastMaskSuspect) {
+      log(
+        'WARNING: the raw mask is not bimodal — the cut-out may look washed out. ' +
+          'Copy the device report from the Console for the details.',
+      );
+    }
+  }
   // The inference is done; the remaining work is mask reconstruction/refinement
   // and compositing, which have no measurable percentage of their own.
   beginProcPhase('finalize', phaseExpectedMs('finalize', 0));
@@ -1952,6 +2016,8 @@ declare global {
     /** Resolves once the current job has produced its final (refined) preview. */
     waitForJobSettled: () => Promise<void>;
     crossOriginIsolated: boolean;
+    /** Copyable device report (provider, adapter, timings, raw-mask stats). */
+    deviceReport: () => string;
   }
 }
 
@@ -2041,6 +2107,7 @@ window.smokeModelPaused = false;
 // A getter so the harness always reads the current run's stage timings.
 Object.defineProperty(window, 'smokeRefineStages', { get: () => smokeRefineStages });
 window.waitForJobSettled = waitForJobSettled;
+window.deviceReport = deviceReportText;
 
 // ——— Progress state ———
 // The stage line, the progress ring, and the processing panel all read from the

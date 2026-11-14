@@ -75,6 +75,18 @@ export type WorkerProgressMessage =
       /** The run this mask belongs to, so the page can drop a superseded run's
        *  late result instead of letting it overwrite a newer job. */
       runId?: number;
+      /** Raw-mask min/mean/max + tail fractions, measured right after inference.
+       *  Folded into the device report so a real-device tester captures the
+       *  evidence for a washed-out cut-out in one tap. */
+      maskStats?: {
+        min: number;
+        mean: number;
+        max: number;
+        lowFraction: number;
+        highFraction: number;
+      };
+      /** True when the raw mask tripped the "squashed mask" heuristic. */
+      maskSuspect?: boolean;
     }
   | {
       kind: 'error';

@@ -55,6 +55,11 @@ button on the page.
    `window.runSmoke()` from the console and read `window.smokeProvider` /
    `window.smokeModelId` — the automated harness in
    `scripts/run-smoke.mjs` uses the same API.
+   For a support-quality capture in one tap, press **Copy report** in the
+   Console header: it copies a `key: value` block with the provider, GPU
+   adapter, model, timings, and the **raw-mask min/mean/max** plus a
+   `raw mask check: ok (bimodal)` / `SUSPECT` verdict (see §9). The same text
+   is also written to the console log and available as `window.deviceReport()`.
 5. _Optionally_, also capture:
    - page `#stage` text during the first run (shader-compile note prints only
      on the `webgpu` path; append `?provider=webgpu` to force it, or open the
@@ -238,3 +243,84 @@ reason Change-1 (model size) stays the primary product risk.
 - GitHub Actions billing (free on public repos): https://docs.github.com/en/billing/concepts/product-billing/github-actions
 - Netlify pricing (300-credit free cap, 20 credits/GB): https://www.netlify.com/pricing/
 - Vercel limits (100 MB static-file upload on Hobby): https://vercel.com/docs/limits
+
+## 8. Ghost / washed-out cut-out — what was ruled out (2026-11-14)
+
+A report of a uniform washed-out "ghost" cut-out (background *and* subject
+translucent, page backdrop visible through everything) on **mobile Chrome,
+provider=webgpu**. That symptom matches a mask squashed into ≈[0.5,0.73] — the
+fingerprint of a second sigmoid over an already-probability output (MODEL_CARD.md
+"regression hazard"). The investigation below ruled that out with evidence; the
+remaining suspect is a real-device WebGPU driver/precision issue (§1 already
+lists Qualcomm Adreno-6xx as visually wrong on WebGPU). **No logic bug was found
+or changed.**
+
+### What the pipeline actually does (verified)
+
+| Check | Result | Evidence |
+|---|---|---|
+| ONNX output contract | single `Sigmoid` node ends the graph; `output_image` is already `[0,1]` probabilities | Python `onnxruntime` inspection of the shipped `model_512_int8_fp16.onnx`; MODEL_CARD.md |
+| Second sigmoid in the repo | **none** | `public/inference-worker.js` has exactly one `1 / (1 + Math.exp(…))`, guarded by `if (outputIsProbability) { mask.set(out) } else { … }` (the branch is dead for this model). `mask-postprocess.ts` / `composite.ts` / `mask-resize.ts` / `refine-mask.ts` apply no sigmoid/logit transform |
+| Provider-specific mask branches | **none** — one `runInference()` shared by WASM and the WebGPU→WASM fallback | `public/inference-worker.js` `runInference`; both call sites pass the same normalisation |
+| Repo vs upstream | byte-identical | local git tree == `origin/main` (0 differing blobs) |
+| Artifact served | matches manifest | sha256 `10f1cf12…` == `models-manifest.json` |
+
+### Mask statistics (the decisive numbers)
+
+Offline ONNX run of the shipped artifact on the repo's test images — raw mask,
+immediately after inference, before crop/resize (a healthy mask is bimodal,
+spanning 0..1):
+
+| Image | min | mean | max | tail `<0.1` / `>0.9` |
+|---|---|---|---|---|
+| glass-wine.jpg | 0.000 | 0.393 | 1.000 | 60% / 39% |
+| portrait-hair.jpg | 0.000 | 0.575 | 1.000 | 42% / 56% |
+| product-scent-bottle.jpg | 0.000 | 0.288 | 1.000 | 71% / 28% |
+
+In-browser (headless Chromium, `?provider=wasm`, glass-wine.jpg) the same number
+is captured live and shown in the Console and the device report:
+
+```
+raw mask: min 0.000 / mean 0.293 / max 1.000 (tail 70%/29%)
+raw mask check: ok (bimodal)
+```
+
+A double-sigmoid squash would put the mean at ≈0.5–0.73 with almost no pixels in
+either tail; every measured mask is the opposite — min 0, max 1, bimodal. The
+**WebGPU path itself could not be reproduced in this sandbox**: headless Chromium
+falls back to WASM (no hardware GPU), so a real phone is required.
+
+### Conclusion
+
+The alpha/compositing logic in this repo is correct on both providers — no
+double sigmoid, no provider-specific divergence, no model-URL mismatch. The
+reported ghost output is therefore most consistent with a **real-device WebGPU
+driver/precision issue** (the Adreno-6xx class already documented in §1/§4),
+which needs a physical phone to diagnose further. To make that diagnosis
+one-tap, the app now captures the raw-mask statistics into the **Copy report**
+button (§3 step 4) and warns in the Console when a mask is squashed (§9).
+
+### Guards added (so a real squash can never ship silently)
+
+- Runtime: the worker measures raw-mask min/mean/max right after inference and
+  posts a `adapter-warning` when the mask is not bimodal (mean in `[0.45, 0.8]`
+  with too few pixels in the tails); the page logs a warning and the device
+  report prints `raw mask check: SUSPECT`.
+- Unit tests: `mask-stats.test.ts` (the heuristic, incl. the measured masks
+  above), `device-report.test.ts` (the report contract), and
+  `model-output-contract.test.ts` (every served model is `outputIsProbability`,
+  the sigmoid appears exactly once and is flag-guarded, and one `runInference`
+  is shared by all providers).
+
+## 9. Reading a device report
+
+Press **Copy report** in the Console header (or call `window.deviceReport()`).
+Key lines:
+
+- `provider:` / `gpu adapter:` — which path actually ran. `(none — CPU path)`
+  means WASM.
+- `raw mask: min … / mean … / max …` and `raw mask check:` — the ghost-image
+  evidence. `ok (bimodal)` with `min 0.000 / max 1.000` is healthy; a
+  `SUSPECT` verdict (mean ≈0.5–0.73, empty tails) means the alpha is squashed.
+- `warm inference:` — the timings used for the Change-2 device comparison (§1).
+

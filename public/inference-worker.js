@@ -66,6 +66,31 @@ let MODEL_SIZE = 512;
 let outputIsProbability = true;
 let currentModelId = null;
 
+// Raw-mask sanity statistics. A correctly-segmenting mask is bimodal (pixels
+// near 0 and near 1, spanning [0,1]); a mask squashed toward the middle (e.g. a
+// second sigmoid over an already-probability output, collapsing [0,1] into
+// ≈[0.5,0.73]) composites to a uniform, washed-out "ghost" image. Measured once
+// per run and echoed on `result-ready` so the page can warn and fold the numbers
+// into the copyable device report. See src/features/background-removal/mask-stats.ts.
+function maskStats(mask) {
+  const n = mask.length;
+  if (!n) return { min: 0, mean: 0, max: 0, lowFraction: 0, highFraction: 0 };
+  let min = Infinity;
+  let max = -Infinity;
+  let sum = 0;
+  let low = 0;
+  let high = 0;
+  for (let i = 0; i < n; i++) {
+    const v = mask[i];
+    if (v < min) min = v;
+    if (v > max) max = v;
+    sum += v;
+    if (v < 0.1) low++;
+    else if (v > 0.9) high++;
+  }
+  return { min, mean: sum / n, max, lowFraction: low / n, highFraction: high / n };
+}
+
 function post(msg) {
   self.postMessage(msg);
 }
@@ -484,6 +509,21 @@ self.onmessage = async (e) => {
         await createSession(['wasm']);
         result = await runInference(msg.tensor);
       }
+      // Raw-mask sanity: measure the min/mean/max of the mask right after
+      // inference (before any cropping/resizing). A squashed mask — mean in the
+      // middle band and not bimodal — composites to a washed-out "ghost"; warn
+      // loudly and echo the numbers so the device report carries the evidence.
+      const stats = maskStats(result.mask);
+      const bimodal = stats.lowFraction + stats.highFraction >= 0.4;
+      const suspect = stats.mean >= 0.45 && stats.mean <= 0.8 && !bimodal;
+      if (suspect) {
+        post({
+          kind: 'adapter-warning',
+          message:
+            `the raw mask is not bimodal (min ${stats.min.toFixed(3)} / mean ${stats.mean.toFixed(3)} / ` +
+            `max ${stats.max.toFixed(3)}). The cut-out may look washed out; copy the device report for details.`,
+        });
+      }
       // result-ready first: the main thread renders the image before the promise
       // for this run settles, so the output is on screen before the summary.
       post({
@@ -495,6 +535,8 @@ self.onmessage = async (e) => {
         // Echo the run id so the page can drop a late result that belongs to a
         // superseded run (a newer upload started before this one finished).
         runId: msg.runId,
+        maskStats: stats,
+        maskSuspect: suspect,
       });
       post({ kind: 'inference-time', ms: result.timeMs, runId: msg.runId });
       return;

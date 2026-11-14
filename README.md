@@ -403,6 +403,15 @@ See [`DEPLOY.md`](./DEPLOY.md) for the asset architecture and deployment details
   its WebAssembly module; no JS `eval` is permitted.
 - The smoke harness records all network requests; results are in
   `PHASE1_REPORT.md`, `PHASE2_REPORT.md`, and `smoke-results*/requests.json`.
+- **Optional, privacy-first product analytics** (added 2026-11-14) measure
+  anonymous usage (sessions, processing success/failure, download actions,
+  first-success, and optional quality reports) with consent, no image data, and
+  no third-party SDKs. Analytics is **off by default** and stays off unless
+  `VITE_ANALYTICS_ENDPOINT` is configured. See
+  [`docs/analytics-architecture.md`](./docs/analytics-architecture.md),
+  [`docs/analytics-events.md`](./docs/analytics-events.md),
+  [`docs/analytics-deployment.md`](./docs/analytics-deployment.md), and
+  [`docs/quality-reporting.md`](./docs/quality-reporting.md).
 
 ## Repository code licence
 

@@ -46,6 +46,10 @@ smoke-results/benchmark-t4/masks/
 
 # Cloudflare local state
 .wrangler/
+# Wrangler local dev vars (never commit; copy from .dev.vars.example)
+cloudflare/**/.dev.vars
+# Node deps for the standalone analytics Worker, if installed locally
+cloudflare/**/node_modules/
 
 # Colab SSH keys (never commit private keys)
 .ssh/

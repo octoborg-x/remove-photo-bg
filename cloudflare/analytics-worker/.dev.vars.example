@@ -1,0 +1,14 @@
+# Local development variables for `wrangler dev` (cloudflare/analytics-worker).
+#
+# Copy this file to `.dev.vars` (git-ignored) and adjust. These are NOT secrets —
+# the Worker holds no credentials of its own; access is granted by the bindings
+# in wrangler.toml. Never put a Cloudflare API token or D1 credential here.
+#
+#   cp .dev.vars.example .dev.vars
+
+# Comma-separated origins allowed to call the Worker. Add the local dev server so
+# the frontend can post events while developing.
+ALLOWED_ORIGINS="http://localhost:3000,http://127.0.0.1:3000"
+
+# Set to "1" to accept requests but write nothing (kill switch).
+ANALYTICS_DISABLED="0"

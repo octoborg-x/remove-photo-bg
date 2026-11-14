@@ -1547,6 +1547,156 @@ try {
     );
     await page.close();
   }
+
+  // ——— Scenario: analytics is consent-gated, text-only, and non-blocking ———
+  // Points the client at a same-origin fake endpoint (?analytics=/__analytics)
+  // and records the event bodies in-page (sendBeacon bodies are not exposed to
+  // puppeteer's request interception), then checks the counting rules and the
+  // privacy guarantee (no image data ever leaves the page).
+  {
+    const page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      window.__analyticsEvents = [];
+      window.__analyticsReports = [];
+      const record = (kind, body) => {
+        if (body == null) return;
+        try {
+          const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+          if (parsed == null) return;
+          (kind === 'report' ? window.__analyticsReports : window.__analyticsEvents).push(parsed);
+        } catch {
+          /* ignore */
+        }
+      };
+      const origBeacon = navigator.sendBeacon?.bind(navigator);
+      navigator.sendBeacon = (url, data) => {
+        if (String(url).includes('/__analytics/')) {
+          const kind = String(url).includes('quality-reports') ? 'report' : 'event';
+          if (data instanceof Blob) data.text().then((t) => record(kind, t));
+          else record(kind, data);
+          return true;
+        }
+        return origBeacon ? origBeacon(url, data) : false;
+      };
+      const origFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = typeof input === 'string' ? input : input?.url ?? '';
+        if (String(url).includes('/__analytics/')) {
+          record(String(url).includes('quality-reports') ? 'report' : 'event', init?.body ?? '');
+          return Promise.resolve(new Response('{}', { status: 200 }));
+        }
+        return origFetch(input, init);
+      };
+    });
+    const analyticsUrl = new URL(pageUrl.toString());
+    analyticsUrl.searchParams.set('analytics', '/__analytics');
+    analyticsUrl.searchParams.set('provider', 'wasm');
+    await page.goto(analyticsUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+
+    const events = () => page.evaluate(() => window.__analyticsEvents.map((e) => e.event_name));
+
+    // 1. The consent banner is shown before any decision, and nothing is sent.
+    const bannerShown = await page
+      .waitForSelector('#consentBanner:not([hidden])', { timeout: 20000 })
+      .then(() => true)
+      .catch(() => false);
+    record('the analytics consent banner is shown before a decision', bannerShown === true);
+    record('no event is sent before consent', (await events()).length === 0, `${(await events()).length} sent`);
+
+    // 2. Declining sends nothing and creates no identifier.
+    await page.click('#consentReject');
+    const afterReject = await page.evaluate(() => ({
+      banner: document.getElementById('consentBanner')?.hidden === false,
+      visitor: localStorage.getItem('remove-bg:analytics-visitor'),
+    }));
+    record(
+      'declining analytics sends nothing and stores no identifier',
+      afterReject.banner === false && afterReject.visitor === null && (await events()).length === 0,
+    );
+
+    // 3. Change the choice via the footer control, then allow.
+    await page.click('#analyticsSettingsBtn');
+    const bannerBack = await page.evaluate(
+      () => document.getElementById('consentBanner')?.hidden === false,
+    );
+    record('the footer control re-opens the consent choice', bannerBack === true);
+    await page.click('#consentAccept');
+
+    // 4. Process an image: the lifecycle events must arrive, once each.
+    await openStudio(page);
+    await chooseFile(page, resolve(FIXTURES, 'input.png'));
+    await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 }).catch(() => {});
+    await page.waitForFunction(
+      () => !!document.querySelector('#outputBox img'),
+      { timeout: 600000 },
+    ).catch(() => {});
+    await sleep(500);
+
+    const names = await events();
+    record(
+      'a successful process emits started + succeeded + first-success once each',
+      names.filter((n) => n === 'image_processing_started').length === 1 &&
+        names.filter((n) => n === 'image_processing_succeeded').length === 1 &&
+        names.filter((n) => n === 'first_successful_image_processed').length === 1,
+      names.join(','),
+    );
+
+    // 5. Trigger a download: exactly one download_initiated.
+    await page.click('#downloadImage');
+    await sleep(400);
+    record(
+      'a download action emits download_initiated',
+      (await events()).filter((n) => n === 'download_initiated').length === 1,
+    );
+
+    // 6. Privacy: no captured body carries image data or a filename.
+    const bodies = await page.evaluate(() => JSON.stringify(window.__analyticsEvents));
+    record(
+      'no analytics payload carries image data or a filename',
+      !/base64|data:image|\.png|\.jpg|input\.png/i.test(bodies),
+    );
+
+    // 7. The quality-report form: diagnostics are off by default and the report
+    //    is a separate, explicit action (works even with analytics declined).
+    await page.click('#reportProblemBtn');
+    const formOpen = await page.evaluate(
+      () => document.getElementById('qualityReportForm')?.hidden === false,
+    );
+    const diagnosticsOff = await page.evaluate(
+      () => document.getElementById('reportDiagnosticsPreview')?.hidden === true,
+    );
+    record('the report form opens with diagnostics off by default', formOpen === true && diagnosticsOff === true);
+
+    // Submitting with no category is refused client-side.
+    await page.click('#reportSubmit');
+    const refused = await page.evaluate(() => {
+      const err = document.getElementById('reportError');
+      return err && err.hidden === false && /category/i.test(err.textContent || '');
+    });
+    record('the report form refuses a submission with no category', refused === true);
+
+    // A valid report is posted to the quality-reports endpoint.
+    await page.select('#reportCategory', 'poor_edges');
+    await page.click('#reportAttachDiagnostics');
+    const previewShown = await page.evaluate(
+      () => document.getElementById('reportDiagnosticsPreview')?.hidden === false,
+    );
+    const previewText = await page.evaluate(
+      () => document.getElementById('reportDiagnosticsJson')?.textContent || '',
+    );
+    record(
+      'ticking diagnostics shows the exact payload before sending',
+      previewShown === true && previewText.includes('app_version'),
+    );
+    await page.click('#reportSubmit');
+    await sleep(400);
+    const reports = await page.evaluate(() => window.__analyticsReports);
+    record(
+      'a valid report is posted to the quality-reports endpoint',
+      reports.length === 1 && reports[0].category === 'poor_edges',
+    );
+    await page.close();
+  }
 } finally {
   await browser.close();
   if (server && !keepServer) {

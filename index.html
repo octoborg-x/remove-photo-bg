@@ -20,6 +20,21 @@
     <!-- Floating notifications host -->
     <div id="toastHost" class="toastHost" aria-live="polite" aria-atomic="false"></div>
 
+    <!-- Analytics consent banner. Shown only while no decision is recorded and
+         only when an analytics endpoint is configured (see main.ts). The choice
+         is remembered; it can be changed any time from the footer. -->
+    <div id="consentBanner" class="consentBanner" role="region" aria-label="Analytics consent" hidden>
+      <p class="consentText">
+        We use privacy-first, first-party analytics to see which pages work and whether image
+        processing succeeds. No image is ever sent — only anonymous, non-identifying usage counts.
+        <a href="./PRIVACY.md" class="consentLink">Learn more</a>
+      </p>
+      <div class="consentActions">
+        <button id="consentAccept" type="button" class="consentBtn primary">Allow analytics</button>
+        <button id="consentReject" type="button" class="consentBtn">Decline</button>
+      </div>
+    </div>
+
     <!-- Top Navigation Bar: 3-Zone Contract -->
     <header id="siteHeader" class="siteHeader sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/80 transition-all" data-collapsed="false">
       <div class="siteHeaderInner max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-8 header-stagger">
@@ -984,6 +999,70 @@
                   </a>
                 </div>
               </div>
+
+              <!-- Report a quality problem: an explicit, optional action in the
+                   result area. Diagnostics are opt-in and shown before sending. -->
+              <div class="qualityReport">
+                <button
+                  id="reportProblemBtn"
+                  type="button"
+                  class="reportProblemBtn"
+                  aria-expanded="false"
+                  aria-controls="qualityReportForm"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 9v4" /><path d="M12 17h.01" />
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                  </svg>
+                  Report a quality problem
+                </button>
+
+                <form id="qualityReportForm" class="qualityReportForm" hidden novalidate>
+                  <div class="reportField">
+                    <label for="reportCategory" class="reportLabel">What went wrong?</label>
+                    <select id="reportCategory" class="reportSelect" required>
+                      <option value="" selected disabled>Choose a problem…</option>
+                    </select>
+                  </div>
+
+                  <div class="reportField">
+                    <label for="reportDescription" class="reportLabel">
+                      Describe it (optional)
+                    </label>
+                    <textarea
+                      id="reportDescription"
+                      class="reportTextarea"
+                      rows="3"
+                      maxlength="500"
+                      placeholder="What did you expect to happen?"
+                    ></textarea>
+                    <span id="reportDescCount" class="reportHint">0 / 500</span>
+                  </div>
+
+                  <label class="reportCheckbox">
+                    <input id="reportAttachDiagnostics" type="checkbox" />
+                    <span>
+                      Attach technical diagnostics
+                      <span class="reportHint">
+                        Off by default. Nothing technical is sent unless you tick this box.
+                      </span>
+                    </span>
+                  </label>
+
+                  <div id="reportDiagnosticsPreview" class="reportDiagnosticsPreview" hidden>
+                    <span class="reportHint">This exact information will be submitted:</span>
+                    <pre id="reportDiagnosticsJson" class="reportDiagnosticsJson"></pre>
+                  </div>
+
+                  <p id="reportError" class="reportError" role="alert" hidden></p>
+
+                  <div class="reportActions">
+                    <button id="reportSubmit" type="submit" class="reportSubmitBtn">Send report</button>
+                    <button id="reportCancel" type="button" class="reportCancelBtn">Cancel</button>
+                    <span class="reportHint">No name or email is collected.</span>
+                  </div>
+                </form>
+              </div>
               </div>
               </div>
             </section>
@@ -1117,6 +1196,12 @@
           <a href="./THIRD_PARTY_LEGAL_NOTICES.md" class="hover:text-blue-600 underline">Legal Notices</a> ·
           <a href="./LICENSE_AUDIT.md" class="hover:text-blue-600 underline">Licence Audit</a> ·
           <a href="./MODEL_CARD.md" class="hover:text-blue-600 underline">Model Card</a>
+        </p>
+
+        <p class="text-[11px] text-slate-400">
+          <button id="analyticsSettingsBtn" type="button" class="analyticsSettingsBtn">
+            Analytics settings
+          </button>
         </p>
 
         <p class="text-[11px] text-slate-400 font-mono">

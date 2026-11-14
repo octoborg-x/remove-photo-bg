@@ -3,6 +3,12 @@
 // for the constructs that would create one, so a future change that adds a
 // fetch/XHR/beacon/form upload of image data fails the build instead of silently
 // shipping.
+//
+// Privacy-first analytics posts a *text-only* JSON event to the SmartCutAI
+// Worker. That is the one sanctioned network write, so the upload constructs are
+// allowed only inside src/features/analytics/ — and that directory is separately
+// asserted to contain no image-bearing code (no canvas, ImageData, data URLs,
+// File, or image MIME types). Every other shipped file stays fully restricted.
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -18,6 +24,9 @@ function walk(dir: string, out: string[] = []): string[] {
   }
   return out;
 }
+
+const ANALYTICS_DIR = join(ROOT, 'src', 'features', 'analytics');
+const isAnalyticsFile = (f: string): boolean => f.startsWith(ANALYTICS_DIR);
 
 function shippedSources(): string[] {
   const files = [
@@ -38,6 +47,18 @@ const FORBIDDEN: Array<{ name: string; re: RegExp }> = [
   { name: 'fetch with body', re: /fetch\([^)]*\bbody\s*:/s },
 ];
 
+// The analytics module may post text, but must never touch image data. If any of
+// these appear there, the exception above would be unsafe.
+const IMAGE_CONSTRUCTS: Array<{ name: string; re: RegExp }> = [
+  { name: 'canvas', re: /\bcanvas\b/i },
+  { name: 'ImageData', re: /\bImageData\b/ },
+  { name: 'getImageData', re: /getImageData/ },
+  { name: 'toDataURL', re: /toDataURL/ },
+  { name: 'readAsDataURL', re: /readAsDataURL/ },
+  { name: 'File/FileReader', re: /\bFile(?:Reader)?\b/ },
+  { name: 'image MIME type', re: /image\/(png|jpe?g|webp|gif)/i },
+];
+
 describe('no app-level image upload path (MVP §9)', () => {
   const sources = shippedSources();
 
@@ -47,14 +68,25 @@ describe('no app-level image upload path (MVP §9)', () => {
   });
 
   for (const { name, re } of FORBIDDEN) {
-    it(`does not use ${name}`, () => {
-      const offenders = sources.filter((f) => re.test(readFileSync(f, 'utf8')));
+    it(`does not use ${name} (outside the text-only analytics module)`, () => {
+      const offenders = sources.filter((f) => !isAnalyticsFile(f) && re.test(readFileSync(f, 'utf8')));
       expect(offenders, `found ${name} in: ${offenders.join(', ')}`).toEqual([]);
     });
   }
 
-  it('does not reference a remote API endpoint', () => {
-    const offenders = sources.filter((f) => /https?:\/\/[^\s'"]*\/api\//.test(readFileSync(f, 'utf8')));
+  it('does not reference a remote API endpoint outside the analytics module', () => {
+    const offenders = sources.filter(
+      (f) => !isAnalyticsFile(f) && /https?:\/\/[^\s'"]*\/api\//.test(readFileSync(f, 'utf8')),
+    );
     expect(offenders).toEqual([]);
+  });
+
+  it('the analytics module never references image data', () => {
+    const analyticsFiles = sources.filter(isAnalyticsFile);
+    expect(analyticsFiles.length).toBeGreaterThan(3);
+    for (const { name, re } of IMAGE_CONSTRUCTS) {
+      const offenders = analyticsFiles.filter((f) => re.test(readFileSync(f, 'utf8')));
+      expect(offenders, `found ${name} in: ${offenders.join(', ')}`).toEqual([]);
+    }
   });
 });

@@ -318,15 +318,38 @@ confidently segment at that precision. This points at the real-device
 WebGPU/WASM **fp16 precision** path (§1 lists Adreno-6xx as visually wrong on
 WebGPU), not at the repo's alpha/compositing logic.
 
+### The exported PNG proves the repo pipeline is not the culprit (2026-11-14)
+
+The reporting user also attached the actual **ghost export** (a 256×385 RGBA
+PNG) with its device report (`Image dimensions: 256x385`, raw mask min 0.0086 /
+mean 0.2284 / max 0.6326, 99.70% below 0.5, 0% above 0.95). Two facts settle it:
+
+- The export's alpha is **column-constant**: 95.1% of its energy sits at
+  vertical frequency 0, and its rank-1 share is 0.955. The alpha spans 2–105
+  (mean 58 = 0.2275) — i.e. the *export alpha mean equals the report's raw-mask
+  mean* (0.2275 ≈ 0.2284). The whole photo shows at ~23% opacity.
+- Running the **real repo pipeline** (crop → `upscaleMask` → `refineMask` with
+  the real image as the guided filter's guide) on the model mask produced from
+  the ghost PNG's own RGB yields a **healthy 2-D** result — `colRank 0.229,
+  max 255, mean 98` — nothing like the ghost's `colRank 0.951, max 105, mean
+  58`. The mask→alpha→composite path does not flatten a good mask.
+
+So the degenerate mask came from the device, not from this repo's
+alpha/compositing code. A double sigmoid is also impossible here: its output is
+`≥0.5` everywhere, but the ghost alpha **max is 0.41**.
+
 ### Conclusion
 
 The alpha/compositing logic in this repo is correct on both providers — no
-double sigmoid, no provider-specific divergence, no model-URL mismatch. The
-reported ghost output is therefore most consistent with a **real-device
-precision issue** (the Adreno-6xx class already documented in §1/§4), which
-needs a physical phone to diagnose further. To make that diagnosis one-tap, the
-app captures the raw-mask statistics into the **Copy report** button (§3 step 4)
-and warns in the Console whenever a mask is not bimodal (§9).
+double sigmoid, no provider-specific divergence, no model-URL mismatch, and the
+post-processing path demonstrably preserves a healthy 2-D mask. The reported
+ghost output is therefore most consistent with a **real-device precision issue**
+(the Adreno-6xx class already documented in §1/§4), which needs a physical phone
+to diagnose further. To make that diagnosis one-tap, the app captures the
+raw-mask statistics into the **Copy report** button (§3 step 4), warns in the
+Console whenever a mask is not bimodal (§9), and — new — classifies the FINAL
+composite alpha so a washed-out result is named as such instead of being
+mislabelled "fully transparent".
 
 ### Guards added (so a real squash can never ship silently)
 
@@ -336,6 +359,14 @@ and warns in the Console whenever a mask is not bimodal (§9).
   diagnostic report prints a `SUSPECT` verdict. The measurement lives in ONE
   shared module used by the page (the worker no longer keeps a duplicate copy),
   so the thresholds cannot drift between paths.
+- Output-level: `finishResult` also classifies the FINAL composite alpha
+  (`src/features/diagnostics/output-alpha.ts`, `classifyOutputAlpha`) into
+  `empty` / `washed` / `kept` / `ok` and logs an actionable warning. Before this,
+  the ghost — which has **zero** pixels above the mid-alpha cutoff — was reported
+  as "fully transparent, so there is no subject to show", the opposite of the
+  faint whole-frame wash actually on screen. The `washed` verdict is exactly
+  "no near-opaque pixel, yet the faint alpha covers the frame"; a clean cut-out
+  reaches alpha 254+, and a faint but small translucent object is not flagged.
 - The guard tests **bimodality alone** — the share of pixels in the two tails
   (`<0.01` plus `>0.95`) must be at least `MIN_BIMODAL_TAIL` (0.4). It
   deliberately has **no mean band**: an earlier version required
@@ -346,10 +377,12 @@ and warns in the Console whenever a mask is not bimodal (§9).
   mask is **0.75**, so the 0.4 threshold has a wide margin and no false
   positives.
 - Unit tests: `raw-mask-stats.test.ts` (the heuristic, incl. a synthetic
-  squashed mask and a same-mean bimodal mask), `diagnostic-report.test.ts` (the
-  report contract + a privacy guard), `raw-mask-worker.test.ts` (drives a
-  synthetic squashed mask through the real worker and asserts the guard flags
-  it), and `model-output-contract.test.ts` (every served model is
+  squashed mask and a same-mean bimodal mask), `output-alpha.test.ts` (the final
+  composite classifier, incl. the real ghost signature as `washed` and a
+  faint-but-small object as `ok`), `diagnostic-report.test.ts` (the report
+  contract + a privacy guard), `raw-mask-worker.test.ts` (drives a synthetic
+  squashed mask through the real worker and asserts the guard flags it), and
+  `model-output-contract.test.ts` (every served model is
   `outputIsProbability`, the sigmoid appears exactly once and is flag-guarded,
   the mask is normalised in exactly one place, and one `runInference` is shared
   by all providers).

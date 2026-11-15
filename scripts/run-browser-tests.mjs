@@ -1448,6 +1448,22 @@ try {
       refined.stages ? `total ${Math.round(refined.stages.totalMs)}ms` : 'null',
     );
     record('the refining banner is hidden once the final result is ready', refined.noticeHidden === true);
+    // The output-alpha classifier runs on the final composite: a clean cut-out
+    // must report its alpha and must NOT be mislabelled as a washed-out ghost or
+    // as "fully transparent".
+    const alphaReport = await page.evaluate(() => {
+      const text = document.getElementById('consoleOutput')?.textContent ?? '';
+      return {
+        hasOutputAlpha: /Output alpha: min \d+/.test(text),
+        ghostWarning: /WARNING: .*ghost/i.test(text),
+        fullyTransparent: /WARNING: .*fully transparent/i.test(text),
+      };
+    });
+    record(
+      'the console reports the output alpha and does not cry ghost on a clean cut-out',
+      alphaReport.hasOutputAlpha && !alphaReport.ghostWarning && !alphaReport.fullyTransparent,
+      `outputAlpha=${alphaReport.hasOutputAlpha}`,
+    );
     await page.close();
 
     // A/B baseline: ?refine=off bypasses Stages 3-4 (no stage timings, same size).

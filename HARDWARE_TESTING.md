@@ -13,7 +13,7 @@ missing, and verified free-tier facts from vendor documentation (checked
 |---|---|
 | WebGPU timed on real hardware? | **Yes — one phone (Android, Qualcomm Adreno-6xx), 2026-10-26** (§4, canonical mobile-UA run: WebGPU ≈6709 ms vs WASM ≈6600 ms; both runs WebGPU left opaque artifacts on the subject (WASM clean)). WASM is the safe default. Sandbox itself still has no GPU/WebGPU (`PHASE1_REPORT.md` §Environment honesty). |
 | WASM (CPU) measured? | Yes — 4.4–4.6 s warm per image in headless Chromium 155 (`PHASE1_REPORT.md` §5). |
-| Known bad devices | Intel Gen-9 WebGPU stalls, Qualcomm Adreno-6xx (WebGPU slow + visually wrong — §4 phone result / `PHASE1_REPORT.md` §9). |
+| Known bad devices | Qualcomm Adreno-6xx (WebGPU slow + visually wrong — §4 phone result / `PHASE1_REPORT.md` §9). Intel Gen-9 integrated WebGPU is known-slow (kept off the GPU default); on the desktop measured 2026-11-15 it was **correct but slow**, not stalled (§4 laptop result). |
 | Download size | ~58 MB (`model_512_int8_fp16.onnx`), the only artifact served. |
 | GPU benchmark run? | **Yes (measured).** **2026-10-28 ran the methodology on a Google Colab Tesla T4** via `scripts/benchmark-pipelines.py --providers CUDAExecutionProvider` (§4/§5) — 10 warm runs/image with device VRAM sampled (512 fp32: 1.16 GB; 1024 fp16: 3.21 GB). First real-GPU measurement of 1024-vs-512: §4 table. Local CPU cross-check in the same script (1024 fp16 ≈14.2–15.6 s warm / ≈8.6 GB peak RSS vs 512 fp32 ≈3.6 s / ≈1.3 GB; mean IoU@0.5 0.992). |
 
@@ -186,14 +186,50 @@ devices" phone for Adreno quirks, and it is the first real-device evidence that
 — not the primary provider. The fallback message for non-WASM quality should be
 "try WASM," not "your GPU is too weak."
 
+### Laptop result — 2026-11-15, Windows desktop (Intel Gen-9) — first desktop WebGPU measurement
+
+First **class-1 desktop** datapoint (the gap this section's §5 "right now" step
+asks for). Windows 11, Chrome 157, cross-origin isolated, `?provider=webgpu`
+(forced — the gate keeps Gen-9 on CPU by default, hence `Adapter usable: no`).
+Three separate **page sessions**, each a single cold run, captured with **Copy
+report**:
+
+| Session (UTC) | Adapter | Selected / Actual provider | Session built | Cold inference | Postprocessing | Raw mask |
+|---|---|---|---|---|---|---|
+| 08:51 | intel gen-9, shader-f16=yes | webgpu / **webgpu** | yes | 11503 ms | 1110 ms | ok (tail 92.40%) |
+| 08:57 | intel gen-9 | webgpu / **webgpu** | yes | 4818 ms | 393 ms | ok (tail 92.40%) |
+| 08:58 | intel gen-9 | webgpu / **webgpu** | yes | **4394 ms** | **196 ms** | ok (tail 92.40%) |
+
+- **The mask is correct and deterministic.** All three raw-mask blocks are
+  byte-identical (min 0.0000 / mean 0.2590 / max 1.0000; 70.23% below 0.01,
+  22.18% above 0.95; 0 non-finite). The GPU path segments the subject correctly on
+  real hardware — the first desktop evidence that WebGPU can be *correct* here.
+- **The cold→cold decay is driver shader caching, not a warm run.** Every session
+  reports `Warm inference: none`, so each is `timings[0]` (`src/main.ts`). The
+  11.5 s → 4.8 s → 4.4 s trend (and 1110 → 196 ms postprocessing) is the GPU
+  driver reusing WGSL pipelines across sessions, converging on ~4.4 s first-run
+  cost for this Gen-9. The **within-session warm** number (second run, same page)
+  is still unmeasured.
+- **Gen-9 is correct-but-slow, with no stall.** No watchdog trip, no fallback, no
+  error in any session — it does *not* hit the "Intel Gen-9 WebGPU stalls" mode
+  §1 warns about. It stays off the GPU default (`classifyGpuAdapter` →
+  `usable: false`).
+- **No fallback fired, so this does not exercise the PR #130 path.** All three:
+  `WebGPU session: initialized`, `Actual inference provider: webgpu`,
+  `WASM executed inference: no`, `Fallback reason: unknown`. The GPU run
+  completed cleanly each time, so the `provider-restart` → fresh-worker restart
+  never ran. These reports **neither confirm nor refute** the mid-run-abort
+  hypothesis and do **not** reproduce the ghost (which needs `above 0.95 ≈ 0%`,
+  max ≈0.63, tail ≈0%).
+
 ### What no free tier provides
 
 A **real, user-visible GPU device** (your laptop, a colleague's laptop, an
 Android phone). Free hosting/CI can exercise the CPU fallback and the memory
 paths every commit, and ensure the page is reachable over HTTPS with the right
-COOP/COEP — but Change-2's WebGPU-on-Intel-Gen9 / on-Adreno numbers still need
-a human with hardware. This is not a failure of the architecture; it is the one
-unavoidable manual step.
+COOP/COEP — but the WebGPU-on-Adreno numbers still need a human with hardware
+(Intel Gen-9 is now measured: §4 laptop result, correct but slow). This is not a
+failure of the architecture; it is the one unavoidable manual step.
 
 ## 5. Recommendation (keep the stack; change only delivery)
 
@@ -256,7 +292,9 @@ remaining suspect is a real-device WebGPU driver/precision issue (§1 already
 lists Qualcomm Adreno-6xx as visually wrong on WebGPU). No logic bug was found in
 the alpha/compositing path itself — the one in-repo defect found (a mid-run GPU
 fallback that rebuilt a WASM session inside the aborted worker) was fixed in
-PR #124; see "The GPU-abort fallback restarts on a fresh worker" below.
+PR #124; see "The GPU-abort fallback restarts on a fresh worker" below. A later
+capture (2026-11-15) shows the ghost needs **no** fallback at all, so that defect
+is not its cause — see "2026-11-15: the ghost reproduces on a clean WebGPU run".
 
 ### What the pipeline actually does (verified)
 
@@ -320,6 +358,40 @@ confidently segment at that precision. This points at the real-device
 WebGPU/WASM **fp16 precision** path (§1 lists Adreno-6xx as visually wrong on
 WebGPU), not at the repo's alpha/compositing logic.
 
+### 2026-11-15: the ghost reproduces on a CLEAN WebGPU run — no fallback fired
+
+A second Qualcomm Adreno-6xx phone capture (Android 10, Chrome 157, 256×385
+photo, `?provider=webgpu`) reproduces the exact ghost mask — and its runtime
+block rules out the mid-run-fallback mechanism that PR #124/#130 addressed:
+
+| Capture | min | mean | max | `<0.01` | `<0.5` | `>0.95` | Verdict |
+|---|---|---|---|---|---|---|---|
+| 2026-11-14 report 1 | 0.0065 | 0.2324 | 0.6437 | 0.69% | — | 0.00% | SUSPECT |
+| 2026-11-14 report 2 | 0.0068 | 0.2385 | 0.6411 | 0.01% | — | 0.00% | SUSPECT |
+| **2026-11-15** | 0.0082 | 0.2322 | 0.6424 | 0.04% | 99.88% | 0.00% | SUSPECT (tail 0.04%) |
+
+The runtime block reads `WebGPU session: initialized`, `Selected provider:
+webgpu`, **`Actual inference provider: webgpu`**, `WebGPU executed inference:
+yes`, `WASM executed inference: no`, `Fallback reason: unknown`. Those fields are
+set by `src/main.ts` only after a run *resolves* (`actualProvider` from the
+inference that ran; `fallbackReason` only from a `provider-restart` message), so
+**the WebGPU run returned a mask without raising a provider error, and no
+fallback was ever sent.** That is exactly the path PR #124/#130 was built to
+guard (reusing a module after a GPU abort) — and it was not taken here. So either
+the GPU kernel returned this wrong mask cleanly, or it aborted *silently* (ORT
+resolved with partial data instead of throwing); either way the abort never
+surfaced as a provider error, so the fresh-worker restart cannot fire and is
+**not** the fix. (The restart is still correct hygiene — never reuse a module
+after an abort — but it only triggers on a thrown provider failure.)
+
+This also kills the last in-repo candidate: the mask is neither empty nor
+provider-divergent, and the same flat shape appears whether a fallback ran
+(2026-11-14 report 1, `WASM`) or not (2026-11-15, `webgpu`). The failure is the
+**GPU kernel output itself** on this Adreno-6xx class, consistent with the
+driver/precision hypothesis in §1. Note the app already keeps this device off the
+GPU default (`Adapter usable: no` → `classifyGpuAdapter`), so the affected path
+is the *forced* `?provider=webgpu` opt-in.
+
 ### The exported PNG proves the repo pipeline is not the culprit (2026-11-14)
 
 The reporting user also attached the actual **ghost export** (a 256×385 RGBA
@@ -347,7 +419,11 @@ double sigmoid, no provider-specific divergence, no model-URL mismatch, and the
 post-processing path demonstrably preserves a healthy 2-D mask. The reported
 ghost output is therefore most consistent with a **real-device precision issue**
 (the Adreno-6xx class already documented in §1/§4), which needs a physical phone
-to diagnose further. To make that diagnosis one-tap, the app captures the
+to diagnose further. The 2026-11-15 capture narrows this to a **clean WebGPU
+run** — the ghost appears with no fallback and no provider divergence, so it is
+the GPU kernel output itself, not any repo code path (the mid-run-fallback defect
+fixed in PR #124 was a real bug but is not this ghost's cause). To make the
+diagnosis one-tap, the app captures the
 raw-mask statistics into the **Copy report** button (§3 step 4), warns in the
 Console whenever a mask is not bimodal (§9), and — new — classifies the FINAL
 composite alpha so a washed-out result is named as such instead of being
@@ -416,10 +492,12 @@ The fallback now discards the whole worker instead:
   pending promise settles instead of hanging.
 
 This is the general-correctness fix — never reuse a module after a GPU EP aborts
-mid-run — and it is the leading candidate for the ghost, but it is **not proven
-to fix the device**: the GPU-abort path cannot execute without a real GPU (a
-sandbox never starts a real WebGPU run, so nothing aborts mid-flight), so a
-physical phone must still confirm it. Scope is unchanged: no change to the model
+mid-run. It was the leading candidate for the ghost, but the 2026-11-15 capture
+above **falsifies that**: the ghost reproduces on a clean WebGPU run with no
+fallback at all (`Actual inference provider: webgpu`, `WASM executed inference:
+no`). Keep this fix — reusing a module after an abort is wrong regardless — but
+it is **not** the ghost fix, and real-phone confirmation of the ghost is still
+outstanding. Scope is unchanged: no change to the model
 artifact, the input resolution, or the provider try-order. The normal
 (no-fallback) boot is untouched — same worker factory, no added latency.
 `fresh-worker-fallback.test.ts` pins the main-thread half (single factory,

@@ -13,7 +13,7 @@ missing, and verified free-tier facts from vendor documentation (checked
 |---|---|
 | WebGPU timed on real hardware? | **Yes — one phone (Android, Qualcomm Adreno-6xx), 2026-10-26** (§4, canonical mobile-UA run: WebGPU ≈6709 ms vs WASM ≈6600 ms; both runs WebGPU left opaque artifacts on the subject (WASM clean)). WASM is the safe default. Sandbox itself still has no GPU/WebGPU (`PHASE1_REPORT.md` §Environment honesty). |
 | WASM (CPU) measured? | Yes — 4.4–4.6 s warm per image in headless Chromium 155 (`PHASE1_REPORT.md` §5). |
-| Known bad devices | Intel Gen-9 WebGPU stalls, Qualcomm Adreno-6xx (WebGPU slow + visually wrong — §4 phone result / `PHASE1_REPORT.md` §9). |
+| Known bad devices | Qualcomm Adreno-6xx (WebGPU slow + visually wrong — §4 phone result / `PHASE1_REPORT.md` §9). Intel Gen-9 integrated WebGPU is known-slow (kept off the GPU default); on the desktop measured 2026-11-15 it was **correct but slow**, not stalled (§4 laptop result). |
 | Download size | ~58 MB (`model_512_int8_fp16.onnx`), the only artifact served. |
 | GPU benchmark run? | **Yes (measured).** **2026-10-28 ran the methodology on a Google Colab Tesla T4** via `scripts/benchmark-pipelines.py --providers CUDAExecutionProvider` (§4/§5) — 10 warm runs/image with device VRAM sampled (512 fp32: 1.16 GB; 1024 fp16: 3.21 GB). First real-GPU measurement of 1024-vs-512: §4 table. Local CPU cross-check in the same script (1024 fp16 ≈14.2–15.6 s warm / ≈8.6 GB peak RSS vs 512 fp32 ≈3.6 s / ≈1.3 GB; mean IoU@0.5 0.992). |
 
@@ -186,14 +186,50 @@ devices" phone for Adreno quirks, and it is the first real-device evidence that
 — not the primary provider. The fallback message for non-WASM quality should be
 "try WASM," not "your GPU is too weak."
 
+### Laptop result — 2026-11-15, Windows desktop (Intel Gen-9) — first desktop WebGPU measurement
+
+First **class-1 desktop** datapoint (the gap this section's §5 "right now" step
+asks for). Windows 11, Chrome 157, cross-origin isolated, `?provider=webgpu`
+(forced — the gate keeps Gen-9 on CPU by default, hence `Adapter usable: no`).
+Three separate **page sessions**, each a single cold run, captured with **Copy
+report**:
+
+| Session (UTC) | Adapter | Selected / Actual provider | Session built | Cold inference | Postprocessing | Raw mask |
+|---|---|---|---|---|---|---|
+| 08:51 | intel gen-9, shader-f16=yes | webgpu / **webgpu** | yes | 11503 ms | 1110 ms | ok (tail 92.40%) |
+| 08:57 | intel gen-9 | webgpu / **webgpu** | yes | 4818 ms | 393 ms | ok (tail 92.40%) |
+| 08:58 | intel gen-9 | webgpu / **webgpu** | yes | **4394 ms** | **196 ms** | ok (tail 92.40%) |
+
+- **The mask is correct and deterministic.** All three raw-mask blocks are
+  byte-identical (min 0.0000 / mean 0.2590 / max 1.0000; 70.23% below 0.01,
+  22.18% above 0.95; 0 non-finite). The GPU path segments the subject correctly on
+  real hardware — the first desktop evidence that WebGPU can be *correct* here.
+- **The cold→cold decay is driver shader caching, not a warm run.** Every session
+  reports `Warm inference: none`, so each is `timings[0]` (`src/main.ts`). The
+  11.5 s → 4.8 s → 4.4 s trend (and 1110 → 196 ms postprocessing) is the GPU
+  driver reusing WGSL pipelines across sessions, converging on ~4.4 s first-run
+  cost for this Gen-9. The **within-session warm** number (second run, same page)
+  is still unmeasured.
+- **Gen-9 is correct-but-slow, with no stall.** No watchdog trip, no fallback, no
+  error in any session — it does *not* hit the "Intel Gen-9 WebGPU stalls" mode
+  §1 warns about. It stays off the GPU default (`classifyGpuAdapter` →
+  `usable: false`).
+- **No fallback fired, so this does not exercise the PR #130 path.** All three:
+  `WebGPU session: initialized`, `Actual inference provider: webgpu`,
+  `WASM executed inference: no`, `Fallback reason: unknown`. The GPU run
+  completed cleanly each time, so the `provider-restart` → fresh-worker restart
+  never ran. These reports **neither confirm nor refute** the mid-run-abort
+  hypothesis and do **not** reproduce the ghost (which needs `above 0.95 ≈ 0%`,
+  max ≈0.63, tail ≈0%).
+
 ### What no free tier provides
 
 A **real, user-visible GPU device** (your laptop, a colleague's laptop, an
 Android phone). Free hosting/CI can exercise the CPU fallback and the memory
 paths every commit, and ensure the page is reachable over HTTPS with the right
-COOP/COEP — but Change-2's WebGPU-on-Intel-Gen9 / on-Adreno numbers still need
-a human with hardware. This is not a failure of the architecture; it is the one
-unavoidable manual step.
+COOP/COEP — but the WebGPU-on-Adreno numbers still need a human with hardware
+(Intel Gen-9 is now measured: §4 laptop result, correct but slow). This is not a
+failure of the architecture; it is the one unavoidable manual step.
 
 ## 5. Recommendation (keep the stack; change only delivery)
 

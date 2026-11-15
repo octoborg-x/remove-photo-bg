@@ -21,6 +21,10 @@
     "build-demo": "node scripts/build-demo-assets.mjs",
     "dev:local": "vite",
     "license:audit": "license-checker-rseidelsohn --production && license-checker-rseidelsohn --summary",
+    "analytics:dev": "npx wrangler dev --config cloudflare/analytics-worker/wrangler.toml",
+    "analytics:deploy": "npx wrangler deploy --config cloudflare/analytics-worker/wrangler.toml",
+    "analytics:migrate:local": "npx wrangler d1 migrations apply smartcutai-reports --local --config cloudflare/analytics-worker/wrangler.toml",
+    "analytics:migrate:remote": "npx wrangler d1 migrations apply smartcutai-reports --remote --config cloudflare/analytics-worker/wrangler.toml",
     "vercel:build": "node scripts/fetch-models.mjs --webgpu --no-models && npm run build && node scripts/copy-legal-docs.mjs && node scripts/strip-large-assets.mjs"
   },
   "dependencies": {

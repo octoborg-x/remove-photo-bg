@@ -403,6 +403,15 @@ See [`DEPLOY.md`](./DEPLOY.md) for the asset architecture and deployment details
   its WebAssembly module; no JS `eval` is permitted.
 - The smoke harness records all network requests; results are in
   `PHASE1_REPORT.md`, `PHASE2_REPORT.md`, and `smoke-results*/requests.json`.
+- **Optional, privacy-first product analytics** (added 2026-11-14) measure
+  anonymous usage (sessions, processing success/failure, download actions,
+  first-success, and optional quality reports) with consent, no image data, and
+  no third-party SDKs. Analytics is **off by default** and stays off unless
+  `VITE_ANALYTICS_ENDPOINT` is configured. See
+  [`docs/analytics-architecture.md`](./docs/analytics-architecture.md),
+  [`docs/analytics-events.md`](./docs/analytics-events.md),
+  [`docs/analytics-deployment.md`](./docs/analytics-deployment.md), and
+  [`docs/quality-reporting.md`](./docs/quality-reporting.md).
 
 ## Repository code licence
 
@@ -475,9 +484,12 @@ copyrighted materials. See [LICENSE](./LICENSE) for the terms.
   by only 12% and ran 2.3× slower, because Conv dominates and its kernels stay
   float. fp16 weights ran ~2× slower on CPU for the same reason.
 - Mitigations in place: WebGPU is the default when a GPU adapter exists, the
-  high-performance GPU adapter is requested, and a WebGPU session failure
-  automatically rebuilds on the WASM provider and reports the fallback in the
-  log ("provider fallback: webgpu -> wasm").
+  high-performance GPU adapter is requested, and a WebGPU session failure falls
+  back to WASM and reports it in the log ("provider fallback: webgpu -> wasm").
+  A GPU run that aborts **mid-execution** does not rebuild WASM inside the same
+  worker (whose shared ORT module the aborted run may have corrupted): the page
+  discards the worker and retries on a **fresh** one pinned to the CPU (PR #124,
+  `HARDWARE_TESTING.md` §8).
 - WebGPU is **on by default when the browser exposes an adapter** (no allowlist).
   `navigator.gpu` existing + `requestAdapter()` returning an adapter is enough
   to offer it. A GPU that fails to build/run the session falls back to WASM

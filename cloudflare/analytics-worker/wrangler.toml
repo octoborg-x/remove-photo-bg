@@ -1,0 +1,47 @@
+# Cloudflare Worker: SmartCutAI analytics + quality reports.
+#
+# Bindings (all must exist in the Cloudflare account — see
+# docs/analytics-deployment.md for the exact creation commands):
+#   ANALYTICS            Workers Analytics Engine dataset (auto-created on first write)
+#   DB                   D1 database holding submitted quality reports
+#   EVENTS_RATE_LIMITER  Cloudflare Rate Limiting binding (free)
+#
+# Deploy:  npx wrangler deploy --config cloudflare/analytics-worker/wrangler.toml
+
+name = "smartcutai-analytics"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+# Non-secret configuration. The production origins must be listed so the Worker
+# only answers requests from the real site(s). A request from any other Origin is
+# rejected with 403, so the endpoint cannot be called from another site.
+[vars]
+ALLOWED_ORIGINS = "https://remove-photo-bg.vercel.app,https://remove-photo-bg-git-main-miloudlafttah849-cells-projects.vercel.app,https://remove-photo-bg-git-staging-miloudlafttah849-cells-projects.vercel.app,https://remove-photo-bg-git-production-miloudlafttah849-cells-projects.vercel.app"
+ANALYTICS_DISABLED = "0"
+
+# Workers Analytics Engine: the dataset is created automatically on first write.
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "smartcutai_events"
+
+# D1: created with `wrangler d1 create smartcutai-reports`.
+[[d1_databases]]
+binding = "DB"
+database_name = "smartcutai-reports"
+database_id = "eeeed6a7-3375-4704-9c75-94486c73dbec"
+migrations_dir = "migrations"
+
+# Rate limiting: a per-location cap that keeps a single source from flooding the
+# endpoint. namespace_id must be an integer unique to this account.
+[[ratelimits]]
+name = "EVENTS_RATE_LIMITER"
+namespace_id = "1001"
+
+[ratelimits.simple]
+limit = 120
+period = 60
+
+# Local development: `npx wrangler dev` reads `.dev.vars` (copy from
+# `.dev.vars.example`) for the same vars and simulates the bindings locally, so
+# no account resources are needed. No `[env.*]` block is required.

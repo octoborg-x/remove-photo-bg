@@ -3,6 +3,18 @@
 Guidance for AI agents working in this repository. `MVP_OPENHANDS.md` holds the product
 spec and `PHASE*_REPORT.md` the history.
 
+## Analytics & quality reporting
+
+Privacy-first product analytics live in `src/features/analytics/` (consent-gated,
+best-effort, no image data) and a separate Cloudflare Worker in
+`cloudflare/analytics-worker/` (Workers Analytics Engine + D1). Analytics is **off
+by default**: with `VITE_ANALYTICS_ENDPOINT` unset there is no banner, no events,
+and the CSP stays `connect-src 'self'`. See `docs/analytics-architecture.md`,
+`docs/analytics-events.md`, `docs/analytics-deployment.md`, and
+`docs/quality-reporting.md`. The `no-upload-path` test still forbids image-bearing
+uploads everywhere except the text-only analytics module, which is separately
+asserted to contain no image code.
+
 ## Seeing an attached image (there is no vision model)
 
 The default LLM profile here is **not vision-capable**, and every `inspect_image_with_vision`

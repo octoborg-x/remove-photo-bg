@@ -292,7 +292,9 @@ remaining suspect is a real-device WebGPU driver/precision issue (§1 already
 lists Qualcomm Adreno-6xx as visually wrong on WebGPU). No logic bug was found in
 the alpha/compositing path itself — the one in-repo defect found (a mid-run GPU
 fallback that rebuilt a WASM session inside the aborted worker) was fixed in
-PR #124; see "The GPU-abort fallback restarts on a fresh worker" below.
+PR #124; see "The GPU-abort fallback restarts on a fresh worker" below. A later
+capture (2026-11-15) shows the ghost needs **no** fallback at all, so that defect
+is not its cause — see "2026-11-15: the ghost reproduces on a clean WebGPU run".
 
 ### What the pipeline actually does (verified)
 
@@ -356,6 +358,40 @@ confidently segment at that precision. This points at the real-device
 WebGPU/WASM **fp16 precision** path (§1 lists Adreno-6xx as visually wrong on
 WebGPU), not at the repo's alpha/compositing logic.
 
+### 2026-11-15: the ghost reproduces on a CLEAN WebGPU run — no fallback fired
+
+A second Qualcomm Adreno-6xx phone capture (Android 10, Chrome 157, 256×385
+photo, `?provider=webgpu`) reproduces the exact ghost mask — and its runtime
+block rules out the mid-run-fallback mechanism that PR #124/#130 addressed:
+
+| Capture | min | mean | max | `<0.01` | `<0.5` | `>0.95` | Verdict |
+|---|---|---|---|---|---|---|---|
+| 2026-11-14 report 1 | 0.0065 | 0.2324 | 0.6437 | 0.69% | — | 0.00% | SUSPECT |
+| 2026-11-14 report 2 | 0.0068 | 0.2385 | 0.6411 | 0.01% | — | 0.00% | SUSPECT |
+| **2026-11-15** | 0.0082 | 0.2322 | 0.6424 | 0.04% | 99.88% | 0.00% | SUSPECT (tail 0.04%) |
+
+The runtime block reads `WebGPU session: initialized`, `Selected provider:
+webgpu`, **`Actual inference provider: webgpu`**, `WebGPU executed inference:
+yes`, `WASM executed inference: no`, `Fallback reason: unknown`. Those fields are
+set by `src/main.ts` only after a run *resolves* (`actualProvider` from the
+inference that ran; `fallbackReason` only from a `provider-restart` message), so
+**the WebGPU run returned a mask without raising a provider error, and no
+fallback was ever sent.** That is exactly the path PR #124/#130 was built to
+guard (reusing a module after a GPU abort) — and it was not taken here. So either
+the GPU kernel returned this wrong mask cleanly, or it aborted *silently* (ORT
+resolved with partial data instead of throwing); either way the abort never
+surfaced as a provider error, so the fresh-worker restart cannot fire and is
+**not** the fix. (The restart is still correct hygiene — never reuse a module
+after an abort — but it only triggers on a thrown provider failure.)
+
+This also kills the last in-repo candidate: the mask is neither empty nor
+provider-divergent, and the same flat shape appears whether a fallback ran
+(2026-11-14 report 1, `WASM`) or not (2026-11-15, `webgpu`). The failure is the
+**GPU kernel output itself** on this Adreno-6xx class, consistent with the
+driver/precision hypothesis in §1. Note the app already keeps this device off the
+GPU default (`Adapter usable: no` → `classifyGpuAdapter`), so the affected path
+is the *forced* `?provider=webgpu` opt-in.
+
 ### The exported PNG proves the repo pipeline is not the culprit (2026-11-14)
 
 The reporting user also attached the actual **ghost export** (a 256×385 RGBA
@@ -383,7 +419,11 @@ double sigmoid, no provider-specific divergence, no model-URL mismatch, and the
 post-processing path demonstrably preserves a healthy 2-D mask. The reported
 ghost output is therefore most consistent with a **real-device precision issue**
 (the Adreno-6xx class already documented in §1/§4), which needs a physical phone
-to diagnose further. To make that diagnosis one-tap, the app captures the
+to diagnose further. The 2026-11-15 capture narrows this to a **clean WebGPU
+run** — the ghost appears with no fallback and no provider divergence, so it is
+the GPU kernel output itself, not any repo code path (the mid-run-fallback defect
+fixed in PR #124 was a real bug but is not this ghost's cause). To make the
+diagnosis one-tap, the app captures the
 raw-mask statistics into the **Copy report** button (§3 step 4), warns in the
 Console whenever a mask is not bimodal (§9), and — new — classifies the FINAL
 composite alpha so a washed-out result is named as such instead of being
@@ -452,10 +492,12 @@ The fallback now discards the whole worker instead:
   pending promise settles instead of hanging.
 
 This is the general-correctness fix — never reuse a module after a GPU EP aborts
-mid-run — and it is the leading candidate for the ghost, but it is **not proven
-to fix the device**: the GPU-abort path cannot execute without a real GPU (a
-sandbox never starts a real WebGPU run, so nothing aborts mid-flight), so a
-physical phone must still confirm it. Scope is unchanged: no change to the model
+mid-run. It was the leading candidate for the ghost, but the 2026-11-15 capture
+above **falsifies that**: the ghost reproduces on a clean WebGPU run with no
+fallback at all (`Actual inference provider: webgpu`, `WASM executed inference:
+no`). Keep this fix — reusing a module after an abort is wrong regardless — but
+it is **not** the ghost fix, and real-phone confirmation of the ghost is still
+outstanding. Scope is unchanged: no change to the model
 artifact, the input resolution, or the provider try-order. The normal
 (no-fallback) boot is untouched — same worker factory, no added latency.
 `fresh-worker-fallback.test.ts` pins the main-thread half (single factory,

@@ -3,7 +3,11 @@
 // the policy must stay `connect-src 'self'` so the default deployment has no new
 // network origin at all.
 import { describe, it, expect } from 'vitest';
-import { analyticsOrigins, contentSecurityPolicy } from '../../../scripts/write-headers.mjs';
+import {
+  analyticsOrigins,
+  contentSecurityPolicy,
+  webAnalyticsOrigins,
+} from '../../../scripts/write-headers.mjs';
 
 describe('analytics CSP origins', () => {
   it('adds nothing when no endpoint is configured', () => {
@@ -23,5 +27,20 @@ describe('analytics CSP origins', () => {
 
   it('ignores a malformed endpoint rather than widening the policy', () => {
     expect(analyticsOrigins('not-a-url')).toEqual([]);
+  });
+});
+
+describe('Cloudflare Web Analytics CSP origins', () => {
+  it('adds nothing when no beacon token is configured', () => {
+    expect(webAnalyticsOrigins('')).toEqual({ script: [], connect: [] });
+    const csp = contentSecurityPolicy('');
+    expect(csp).not.toMatch(/cloudflareinsights/);
+    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
+  });
+
+  it('allows the beacon script and collector when a token is set', () => {
+    const csp = contentSecurityPolicy('', '', 'token123');
+    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com");
+    expect(csp).toContain('https://cloudflareinsights.com');
   });
 });

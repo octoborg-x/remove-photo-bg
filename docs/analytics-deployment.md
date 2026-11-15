@@ -153,19 +153,34 @@ one Worker origin.
 ## 8. Cloudflare Web Analytics
 
 Landing-page traffic uses Cloudflare's own Web Analytics, separately from the
-custom events.
+custom events. It is **consent-gated**: the beacon is injected by the app only
+after the visitor allows analytics (see
+`src/features/analytics/web-analytics.ts`), not shipped as a static tag.
 
 1. Cloudflare dashboard → **Web Analytics** → **Add a site**.
-2. Enter the site hostname; copy the JS snippet from **Manage site**.
-3. Add the snippet to `index.html` before `</body>` (and, if you need it gated by
-   consent, only inject it after the analytics grant — Cloudflare Web Analytics is
-   a distinct technology from the custom events and its own consent applies).
+2. Enter the site hostname; open **Manage site** and copy the **token** value from
+   the snippet (the `"token"` field inside `data-cf-beacon`).
+3. Set `VITE_CF_WEB_ANALYTICS_TOKEN` to that token (Vercel → Settings →
+   Environment Variables, all environments) and redeploy. The build then:
+   - injects the beacon after consent at runtime, and
+   - adds `https://static.cloudflareinsights.com` to `script-src` and
+     `https://cloudflareinsights.com` to `connect-src` in the generated CSP.
 4. Data appears within a few minutes. Verify under **Web Analytics → the site**:
    page views, referrers, and geography.
 
+Do **not** paste the raw snippet into `index.html`: that would load the beacon
+before consent and be blocked by the CSP. The token-driven injection is the only
+supported path.
+
 If the site is proxied through Cloudflare, Web Analytics can be enabled
-automatically instead of via the snippet. **Do not** collect full URLs with
+automatically instead of via the beacon. **Do not** collect full URLs with
 query parameters in any page-view tracking.
+
+### Vercel CSP for the beacon
+
+The deployed CSP comes from `vercel.json` (the `vercel:build` command does not run
+`write-headers.mjs`), so the beacon origins are already added there. If you deploy
+without Web Analytics, remove them to keep the policy minimal.
 
 ## Free-tier limits (checked 2026-11-14)
 

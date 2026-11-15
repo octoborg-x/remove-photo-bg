@@ -64,12 +64,21 @@ All under `src/features/analytics/`:
 | `consent.ts` | Consent state machine (`granted` / `denied` / `unset`), storage read/write. |
 | `visitor-id.ts` | Anonymous visitor id (crypto UUID), 90-day rotation, session id. |
 | `events.ts` | The closed allowlist of event names and field limits. |
-| `diagnostics.ts` | Builds the optional, non-identifying diagnostics payload and scrubs identifiers from it. |
 | `report-categories.ts` | The eight problem categories (single source of truth). |
 | `event-client.ts` | Best-effort transport (`sendBeacon` → `keepalive` fetch). |
 | `report-client.ts` | Client-side validation and submission of a quality report. |
 | `analytics.ts` | The `AnalyticsClient` facade; enforces the counting rules. |
 | `ui.ts` | DOM wiring: consent banner, footer control, report form. |
+| `web-analytics.ts` | Loads the Cloudflare Web Analytics beacon after consent. |
+
+The quality-report form does **not** define its own diagnostics shape. It reuses
+the SAME structure the Console's **Copy report** button builds —
+`src/features/diagnostics/diagnostic-report.ts` (one schema, one
+`buildDiagnosticReport()`). The upload view is produced by
+`src/features/diagnostics/diagnostic-report-upload.ts`, which clears the
+fingerprint fields (`browser.userAgent`, `browser.platform`) and scrubs urls,
+paths, emails, and IPs from every remaining string before the report can be
+attached. The local Copy report is unaffected (it stays on the device).
 
 `src/main.ts` imports only `initAnalyticsUi` and the thin `track…` helpers, and
 calls them at the real lifecycle points. Nothing in the image pipeline depends on
@@ -116,21 +125,25 @@ Counting rules are enforced in `AnalyticsClient` and asserted in
 
 ### Cloudflare Web Analytics vs custom analytics
 
-These are **two different technologies with different consent characteristics**,
-and one decision does not automatically cover the other:
+These are **two different technologies**, and this project gates both behind the
+same in-app consent choice:
 
-- **Cloudflare Web Analytics** is a cookieless beacon served by Cloudflare. It
+- **Cloudflare Web Analytics** is a cookieless beacon served by Cloudflare
+  (`static.cloudflareinsights.com`) that reports to `cloudflareinsights.com`. It
   records page views, referrers, and coarse geography without cookies or
-  fingerprinting. Its own data collection is documented by Cloudflare and it is
-  controlled in the Cloudflare dashboard, not by this code. If you operate in a
-  jurisdiction that requires opt-in for any analytics, gate the Web Analytics
-  snippet behind the same consent flag (the deployment guide shows where).
+  fingerprinting. It is **not** shipped as a static `<script>` tag: the beacon is
+  injected by `src/features/analytics/web-analytics.ts` only after the visitor
+  allows analytics, so nothing loads before the decision. It is enabled by
+  setting `VITE_CF_WEB_ANALYTICS_TOKEN` (empty disables it).
 - **Custom analytics** (this system) writes product events to Workers Analytics
-  Engine and quality reports to D1. It is fully gated by the in-app consent
-  banner.
+  Engine and quality reports to D1. It is gated by the same consent banner.
+
+The beacon cannot be un-loaded once injected, so withdrawing consent stops future
+custom events and clears the anonymous id, but the already-loaded page keeps the
+beacon for that page view. This is documented in `PRIVACY.md`.
 
 The privacy notice (`PRIVACY.md`) states both, and the in-app banner explains
-what the custom analytics measures.
+what is measured.
 
 ## Data minimisation
 
@@ -146,8 +159,12 @@ description, build id, optional model id, and — only if explicitly ticked — 
 diagnostics JSON. **No** name, email, account, contact field, image, image URL,
 EXIF, cookie, token, storage dump, or filesystem path.
 
-The diagnostics builder additionally **scrubs** URLs, absolute paths, emails, and
-IP addresses from any string before it is shown or sent.
+The diagnostics come from the shared builder
+(`src/features/diagnostics/diagnostic-report.ts`). Before upload they pass
+through `sanitizeDiagnosticsForUpload()`, which clears the browser fingerprint
+fields and **scrubs** URLs, absolute paths, emails, and IP addresses from any
+remaining string. The same structure is rendered locally by the Copy report
+button; only the sanitized view is ever attached to a server request.
 
 ## CSP and network
 

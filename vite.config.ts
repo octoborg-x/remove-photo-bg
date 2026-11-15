@@ -11,7 +11,11 @@ export default defineConfig(({ mode }) => {
   // Same CSP the deployed site gets (scripts/write-headers.mjs), so `vite dev`
   // and `vite preview` exercise the real policy rather than a laxer one.
   const env = loadEnv(mode, process.cwd(), '');
-  const csp = contentSecurityPolicy(env.VITE_ASSET_BASE || '', env.VITE_ANALYTICS_ENDPOINT || '');
+  const csp = contentSecurityPolicy(
+    env.VITE_ASSET_BASE || '',
+    env.VITE_ANALYTICS_ENDPOINT || '',
+    env.VITE_CF_WEB_ANALYTICS_TOKEN || '',
+  );
   return {
   base: './',
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },

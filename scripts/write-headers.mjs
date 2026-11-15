@@ -41,8 +41,42 @@ export function assetOrigins(assetBase) {
   return [...origins];
 }
 
-export function contentSecurityPolicy(assetBase) {
-  const connect = ["'self'", ...assetOrigins(assetBase)].join(' ');
+// Origin the browser may POST analytics events and quality reports to. Empty
+// when analytics is not configured (VITE_ANALYTICS_ENDPOINT unset), so the CSP
+// stays `connect-src 'self'` by default.
+export function analyticsOrigins(endpoint) {
+  if (!endpoint || !endpoint.trim()) return [];
+  try {
+    return [new URL(endpoint).origin];
+  } catch {
+    console.warn(`write-headers: VITE_ANALYTICS_ENDPOINT is not a URL, ignoring: ${endpoint}`);
+    return [];
+  }
+}
+
+// Cloudflare Web Analytics needs its script host in `script-src` and its RUM
+// collector in `connect-src`. Only added when a beacon token is configured, so a
+// deployment without Web Analytics keeps the strictest policy.
+export const CF_WEB_ANALYTICS_SCRIPT_ORIGIN = 'https://static.cloudflareinsights.com';
+export const CF_WEB_ANALYTICS_CONNECT_ORIGIN = 'https://cloudflareinsights.com';
+
+export function webAnalyticsOrigins(beaconToken) {
+  if (!beaconToken || !beaconToken.trim()) return { script: [], connect: [] };
+  return {
+    script: [CF_WEB_ANALYTICS_SCRIPT_ORIGIN],
+    connect: [CF_WEB_ANALYTICS_CONNECT_ORIGIN],
+  };
+}
+
+export function contentSecurityPolicy(assetBase, analyticsEndpoint = '', webAnalyticsToken = '') {
+  const cf = webAnalyticsOrigins(webAnalyticsToken);
+  const script = ["'self'", "'wasm-unsafe-eval'", ...cf.script].join(' ');
+  const connect = [
+    "'self'",
+    ...assetOrigins(assetBase),
+    ...analyticsOrigins(analyticsEndpoint),
+    ...cf.connect,
+  ].join(' ');
   return [
     "default-src 'self'",
     // `'wasm-unsafe-eval'` (not `'unsafe-eval'`) lets onnxruntime-web compile its
@@ -50,7 +84,7 @@ export function contentSecurityPolicy(assetBase) {
     // `script-src 'self'`; this keyword permits only WASM compilation, not JS
     // eval, so it is the minimal allowance. Supported in Chrome 97+, Firefox
     // 102+, Safari 16.4+.
-    "script-src 'self' 'wasm-unsafe-eval'",
+    `script-src ${script}`,
     // Inline styles are set on elements by main.ts (e.g. hiding the download
     // link) and in index.html; no inline scripts are used, so script-src stays
     // otherwise strict.
@@ -81,7 +115,9 @@ export function withCsp(template, csp) {
 // Only run when executed directly, so the exports stay importable for tests.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const assetBase = process.env.VITE_ASSET_BASE || '';
-  const csp = contentSecurityPolicy(assetBase);
+  const analyticsEndpoint = process.env.VITE_ANALYTICS_ENDPOINT || '';
+  const webAnalyticsToken = process.env.VITE_CF_WEB_ANALYTICS_TOKEN || '';
+  const csp = contentSecurityPolicy(assetBase, analyticsEndpoint, webAnalyticsToken);
   const template = existsSync(TEMPLATE) ? readFileSync(TEMPLATE, 'utf8') : '/*\n\n';
   const out = withCsp(template, csp);
   if (!existsSync(DIST)) {
@@ -89,6 +125,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exit(1);
   }
   writeFileSync(resolve(DIST, '_headers'), out);
-  console.log(`write-headers: dist/_headers written (connect-src from ${assetBase || 'same-origin'})`);
+  console.log(`write-headers: dist/_headers written (connect-src from ${assetBase || 'same-origin'}${analyticsEndpoint ? ` + ${analyticsEndpoint}` : ''}${webAnalyticsToken ? ' + Cloudflare Web Analytics' : ''})`);
   console.log(`  CSP: ${csp}`);
 }

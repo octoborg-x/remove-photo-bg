@@ -94,7 +94,7 @@ const modelReady = await page
   .catch(async () => {
     const st = await page.evaluate(() => ({
       stage: document.getElementById('processingLabel')?.textContent,
-      log: document.getElementById('log')?.textContent,
+      log: document.getElementById('consoleOutput')?.textContent,
       ready: window.smokeModelReady,
       provider: window.smokeProvider,
       model: window.smokeModelId,
@@ -151,20 +151,39 @@ results.provider = await page.evaluate(() => window.smokeProvider);
 // run used the A/B baseline (?refine=off) or refinement failed.
 results.refineStages = await page.evaluate(() => window.smokeRefineStages ?? null);
 
-// Grab the output PNG data URL + the pre log.
+// The structured diagnostic report: GPU adapter facts, the provider that
+// actually executed inference, and — most importantly for the "washed-out ghost"
+// investigation — the raw mask's min/mean/max and tail fractions, measured from
+// the model's ORIGINAL output before any post-processing.
+results.diagnosticReport = await page.evaluate(() => window.diagnosticReport?.() ?? null);
+if (results.diagnosticReport?.rawMask) {
+  const m = results.diagnosticReport.rawMask;
+  console.log(
+    `Raw mask: min ${m.min.toFixed(4)} / mean ${m.mean.toFixed(4)} / max ${m.max.toFixed(4)} ` +
+      `(below 0.01 ${(m.below_001_fraction * 100).toFixed(2)}%, above 0.95 ${(m.above_095_fraction * 100).toFixed(2)}%)`,
+  );
+}
+
+// Grab the output PNG data URL + the console text.
 results.outputPngDataUrl = await page.evaluate(() => {
   const img = document.querySelector('#outputBox img');
   return img ? img.getAttribute('src') : null;
 });
-results.log = await page.evaluate(() => document.querySelector('#log')?.textContent);
+results.log = await page.evaluate(() => document.getElementById('consoleOutput')?.textContent);
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
 mkdirSync(outDir, { recursive: true });
 
 if (results.outputPngDataUrl) {
   const b64 = results.outputPngDataUrl.split(',')[1];
   writeFileSync(`${outDir}/output.png`, Buffer.from(b64, 'base64'));
   console.log(`Saved output PNG to ${outDir}/output.png`);
+}
+// The "before" is the source image. When it is a local file, copy it beside the
+// output so a smoke run always leaves a before/after pair to eyeball.
+if (image && existsSync(image)) {
+  copyFileSync(image, `${outDir}/input.png`);
+  console.log(`Saved input PNG to ${outDir}/input.png`);
 }
 writeFileSync(`${outDir}/requests.json`, JSON.stringify(requests, null, 2));
 
@@ -195,6 +214,8 @@ writeFileSync(
       model: results.run?.modelId ?? readyInfo.model,
       run: results.run,
       refineStages: results.refineStages,
+      rawMask: results.diagnosticReport?.rawMask ?? null,
+      diagnosticReport: results.diagnosticReport,
       measuresIndex,
       pageLog: results.log,
     },
@@ -202,6 +223,13 @@ writeFileSync(
     2,
   ),
 );
+// Also save the human-readable diagnostic report, so a smoke run leaves the same
+// evidence a real-device tester would copy with the Console's Copy report button.
+if (results.diagnosticReport) {
+  const text = await page.evaluate(() => window.deviceReport?.() ?? '');
+  writeFileSync(`${outDir}/diagnostic-report.txt`, text);
+  console.log(`Saved diagnostic report to ${outDir}/diagnostic-report.txt`);
+}
 console.log(JSON.stringify({ ...results.run, measuresIndex }, null, 2));
 console.log(`Saved summary to ${outDir}/summary.json`);
 

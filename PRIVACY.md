@@ -83,3 +83,50 @@ is in `PHASE1_REPORT.md` §4.
   disclosed in the UI and enforced before/after decoding.
 - Files that fail validation are rejected with an actionable message; no partial
   or decoded data is retained.
+
+## Product analytics (added 2026-11-14)
+
+_This section describes the optional, privacy-first analytics system. It never
+receives your images or anything derived from them._
+
+**What is measured.** Anonymous counts of: a session starting; background
+removal starting, succeeding, or failing; the first successful removal per
+anonymous browser; and a download being initiated. If you submit the optional
+**Report a quality problem** form, the problem category, an optional description
+you type (≤500 characters), the build id, the model id, and — only if you tick
+the box — a small technical diagnostics block are stored.
+
+**What is never collected.** Image pixels, filenames, EXIF, image URLs or other
+image metadata; your name, email, phone, or any account or contact information;
+IP addresses for analytics storage; cookies for tracking; browser fingerprints.
+The analytics server does not record your IP address — the only identifier is a
+random, anonymous id stored in your browser.
+
+**Consent.** Analytics is **off until you allow it**. A banner asks once; if you
+decline, nothing is sent and no identifier is created. You can change or withdraw
+your choice any time via **Analytics settings** in the footer, which also deletes
+the anonymous id. Declining analytics never blocks image processing, downloads, or
+quality reports.
+
+**Anonymous id.** A random UUID from your browser's cryptographic generator,
+stored in first-party local storage only after you allow analytics, rotated after
+**90 days**, never derived from anything identifying. Clearing your browser
+storage, using another browser, or using another device creates a new id — so the
+"returning" figure counts anonymous browsers, not verified people.
+
+**Where it goes.** Events are sent to a first-party SmartCutAI Cloudflare Worker
+and stored in Cloudflare Workers Analytics Engine (three-month retention).
+Quality reports are stored in Cloudflare D1. No third-party analytics SDK, ad
+network, session replay, or heatmap is used.
+
+**Landing-page traffic.** If enabled, Cloudflare Web Analytics records page views,
+referrers, and coarse geography. It is a cookieless Cloudflare technology, and its
+beacon is loaded **only after you allow analytics** (never before). See
+`docs/analytics-architecture.md` for how it relates to the in-app consent choice.
+
+Withdrawing consent stops future custom events and deletes the anonymous id. The
+Cloudflare Web Analytics beacon cannot be removed from an already-loaded page, so
+that one page view is still reported; a reload after withdrawing loads nothing.
+
+See `docs/analytics-architecture.md`, `docs/analytics-events.md`, and
+`docs/quality-reporting.md` for the full detail.

@@ -757,6 +757,63 @@ try {
         panelState.privacyNoLabel === true,
       `inHead ${panelState.privacyInHead} borderless ${panelState.privacyBorderless} noLabel ${panelState.privacyNoLabel}`,
     );
+    // Copy report: an always-visible button in the console header whose report
+    // carries real GPU/mask facts and no image or personal data. It must be
+    // visible WITHOUT opening any disclosure (a regression once buried it in a
+    // collapsed <details>, so the button existed in the DOM but a user could not
+    // see or click it).
+    const reportState = await page.evaluate(() => {
+      const btn = document.getElementById('copyReport');
+      const inConsoleHead = !!btn?.closest('.consoleHead');
+      const insideClosedDetails = !!btn?.closest('details:not([open])');
+      const rect = btn?.getBoundingClientRect();
+      const style = btn ? getComputedStyle(btn) : null;
+      const visible =
+        !!rect &&
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style?.visibility !== 'hidden' &&
+        style?.display !== 'none' &&
+        style?.opacity !== '0';
+      const btnLabel = (btn?.textContent ?? '').trim();
+      const report = window.diagnosticReport?.() ?? null;
+      const text = window.deviceReport?.() ?? '';
+      return {
+        hasBtn: !!btn,
+        inConsoleHead,
+        insideClosedDetails,
+        visible,
+        btnLabel,
+        hasReport: !!report,
+        schema: report?.schemaVersion ?? null,
+        hasRawMaskBlock: /RAW MASK STATISTICS/.test(text),
+        hasMean: /Mean:/.test(text),
+        hasGpuSection: /GPU/.test(text),
+        leaksImage: /data:image|base64,/.test(text),
+      };
+    });
+    record(
+      'the Copy report button is visible in the console header without opening a disclosure',
+      reportState.hasBtn === true &&
+        reportState.inConsoleHead === true &&
+        reportState.insideClosedDetails === false &&
+        reportState.visible === true &&
+        reportState.btnLabel === 'Copy report',
+      `btn ${reportState.hasBtn} inConsoleHead ${reportState.inConsoleHead} insideClosedDetails ${reportState.insideClosedDetails} visible ${reportState.visible} label "${reportState.btnLabel}"`,
+    );
+    record(
+      'the Copy report button copies a report with real GPU + raw-mask facts',
+      reportState.hasReport === true &&
+        reportState.hasRawMaskBlock === true &&
+        reportState.hasMean === true &&
+        reportState.hasGpuSection === true,
+      `report ${reportState.hasReport} maskBlock ${reportState.hasRawMaskBlock} mean ${reportState.hasMean} gpu ${reportState.hasGpuSection}`,
+    );
+    record(
+      'the diagnostic report carries no image data',
+      reportState.leaksImage === false,
+      `leaksImage ${reportState.leaksImage}`,
+    );
 
     // The Processing-tab status text must stay light in both themes: it sits on
     // the always-dark wallpaper, so a theme token that inverts would vanish.
@@ -1391,6 +1448,22 @@ try {
       refined.stages ? `total ${Math.round(refined.stages.totalMs)}ms` : 'null',
     );
     record('the refining banner is hidden once the final result is ready', refined.noticeHidden === true);
+    // The output-alpha classifier runs on the final composite: a clean cut-out
+    // must report its alpha and must NOT be mislabelled as a washed-out ghost or
+    // as "fully transparent".
+    const alphaReport = await page.evaluate(() => {
+      const text = document.getElementById('consoleOutput')?.textContent ?? '';
+      return {
+        hasOutputAlpha: /Output alpha: min \d+/.test(text),
+        ghostWarning: /WARNING: .*ghost/i.test(text),
+        fullyTransparent: /WARNING: .*fully transparent/i.test(text),
+      };
+    });
+    record(
+      'the console reports the output alpha and does not cry ghost on a clean cut-out',
+      alphaReport.hasOutputAlpha && !alphaReport.ghostWarning && !alphaReport.fullyTransparent,
+      `outputAlpha=${alphaReport.hasOutputAlpha}`,
+    );
     await page.close();
 
     // A/B baseline: ?refine=off bypasses Stages 3-4 (no stage timings, same size).
@@ -1544,6 +1617,161 @@ try {
       'the settings sidebar drag-resizes up to 50% of the workspace',
       resize.grownW <= resize.cap + 1 && resize.grownW >= resize.openW - 1 && resize.shrunkW < resize.grownW && resize.shrunkW > 0,
       `open ${Math.round(resize.openW)} cap ${Math.round(resize.cap)} grown ${Math.round(resize.grownW)} shrunk ${Math.round(resize.shrunkW)}`,
+    );
+    await page.close();
+  }
+
+  // ——— Scenario: analytics is consent-gated, text-only, and non-blocking ———
+  // Points the client at a same-origin fake endpoint (?analytics=/__analytics)
+  // and records the event bodies in-page (sendBeacon bodies are not exposed to
+  // puppeteer's request interception), then checks the counting rules and the
+  // privacy guarantee (no image data ever leaves the page).
+  {
+    const page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      window.__analyticsEvents = [];
+      window.__analyticsReports = [];
+      const record = (kind, body) => {
+        if (body == null) return;
+        try {
+          const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+          if (parsed == null) return;
+          (kind === 'report' ? window.__analyticsReports : window.__analyticsEvents).push(parsed);
+        } catch {
+          /* ignore */
+        }
+      };
+      const origBeacon = navigator.sendBeacon?.bind(navigator);
+      navigator.sendBeacon = (url, data) => {
+        if (String(url).includes('/__analytics/')) {
+          const kind = String(url).includes('quality-reports') ? 'report' : 'event';
+          if (data instanceof Blob) data.text().then((t) => record(kind, t));
+          else record(kind, data);
+          return true;
+        }
+        return origBeacon ? origBeacon(url, data) : false;
+      };
+      const origFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = typeof input === 'string' ? input : input?.url ?? '';
+        if (String(url).includes('/__analytics/')) {
+          record(String(url).includes('quality-reports') ? 'report' : 'event', init?.body ?? '');
+          return Promise.resolve(new Response('{}', { status: 200 }));
+        }
+        return origFetch(input, init);
+      };
+    });
+    const analyticsUrl = new URL(pageUrl.toString());
+    analyticsUrl.searchParams.set('analytics', '/__analytics');
+    analyticsUrl.searchParams.set('provider', 'wasm');
+    await page.goto(analyticsUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+
+    const events = () => page.evaluate(() => window.__analyticsEvents.map((e) => e.event_name));
+
+    // 1. The consent banner is shown before any decision, and nothing is sent.
+    const bannerShown = await page
+      .waitForSelector('#consentBanner:not([hidden])', { timeout: 20000 })
+      .then(() => true)
+      .catch(() => false);
+    record('the analytics consent banner is shown before a decision', bannerShown === true);
+    record('no event is sent before consent', (await events()).length === 0, `${(await events()).length} sent`);
+
+    // 2. Declining sends nothing and creates no identifier.
+    await page.click('#consentReject');
+    const afterReject = await page.evaluate(() => ({
+      banner: document.getElementById('consentBanner')?.hidden === false,
+      visitor: localStorage.getItem('remove-bg:analytics-visitor'),
+    }));
+    record(
+      'declining analytics sends nothing and stores no identifier',
+      afterReject.banner === false && afterReject.visitor === null && (await events()).length === 0,
+    );
+
+    // 3. Change the choice via the footer control, then allow.
+    await page.click('#analyticsSettingsBtn');
+    const bannerBack = await page.evaluate(
+      () => document.getElementById('consentBanner')?.hidden === false,
+    );
+    record('the footer control re-opens the consent choice', bannerBack === true);
+    await page.click('#consentAccept');
+
+    // 4. Process an image: the lifecycle events must arrive, once each.
+    await openStudio(page);
+    await chooseFile(page, resolve(FIXTURES, 'input.png'));
+    await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 }).catch(() => {});
+    await page.waitForFunction(
+      () => !!document.querySelector('#outputBox img'),
+      { timeout: 600000 },
+    ).catch(() => {});
+    await sleep(500);
+
+    const names = await events();
+    record(
+      'a successful process emits started + succeeded + first-success once each',
+      names.filter((n) => n === 'image_processing_started').length === 1 &&
+        names.filter((n) => n === 'image_processing_succeeded').length === 1 &&
+        names.filter((n) => n === 'first_successful_image_processed').length === 1,
+      names.join(','),
+    );
+
+    // 5. Trigger a download: exactly one download_initiated.
+    await page.click('#downloadImage');
+    await sleep(400);
+    record(
+      'a download action emits download_initiated',
+      (await events()).filter((n) => n === 'download_initiated').length === 1,
+    );
+
+    // 6. Privacy: no captured body carries image data or a filename.
+    const bodies = await page.evaluate(() => JSON.stringify(window.__analyticsEvents));
+    record(
+      'no analytics payload carries image data or a filename',
+      !/base64|data:image|\.png|\.jpg|input\.png/i.test(bodies),
+    );
+
+    // 7. The quality-report form: diagnostics are off by default and the report
+    //    is a separate, explicit action (works even with analytics declined).
+    await page.click('#reportProblemBtn');
+    const formOpen = await page.evaluate(
+      () => document.getElementById('qualityReportForm')?.hidden === false,
+    );
+    const diagnosticsOff = await page.evaluate(
+      () => document.getElementById('reportDiagnosticsPreview')?.hidden === true,
+    );
+    record('the report form opens with diagnostics off by default', formOpen === true && diagnosticsOff === true);
+
+    // Submitting with no category is refused client-side.
+    await page.click('#reportSubmit');
+    const refused = await page.evaluate(() => {
+      const err = document.getElementById('reportError');
+      return err && err.hidden === false && /category/i.test(err.textContent || '');
+    });
+    record('the report form refuses a submission with no category', refused === true);
+
+    // A valid report is posted to the quality-reports endpoint.
+    await page.select('#reportCategory', 'poor_edges');
+    await page.click('#reportAttachDiagnostics');
+    const previewShown = await page.evaluate(
+      () => document.getElementById('reportDiagnosticsPreview')?.hidden === false,
+    );
+    const previewText = await page.evaluate(
+      () => document.getElementById('reportDiagnosticsJson')?.textContent || '',
+    );
+    record(
+      'ticking diagnostics shows the exact payload before sending',
+      previewShown === true && previewText.includes('schemaVersion'),
+    );
+    // The upload view must not carry the browser fingerprint fields.
+    record(
+      'the diagnostics upload view clears the browser fingerprint fields',
+      /"userAgent"\s*:\s*""/.test(previewText) && /"platform"\s*:\s*null/.test(previewText),
+    );
+    await page.click('#reportSubmit');
+    await sleep(400);
+    const reports = await page.evaluate(() => window.__analyticsReports);
+    record(
+      'a valid report is posted to the quality-reports endpoint',
+      reports.length === 1 && reports[0].category === 'poor_edges',
     );
     await page.close();
   }

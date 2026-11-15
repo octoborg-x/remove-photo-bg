@@ -1,0 +1,127 @@
+{
+  "generatedBy": "scripts/eval/build-failure-gallery.py",
+  "model": {
+    "id": "qmix-cut-512",
+    "file": "models/model_512_int8_fp16.onnx"
+  },
+  "caseCount": 9,
+  "cases": [
+    {
+      "caseId": "failure-001",
+      "category": "empty-output",
+      "severity": "high",
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "input": "eval/images/hair-fur-07.jpg",
+      "verdict": "empty",
+      "reproduction": "reproduced",
+      "fixImplemented": false,
+      "assetsSynthetic": false,
+      "path": "cases/failure-001/metadata.json"
+    },
+    {
+      "caseId": "failure-002",
+      "category": "empty-output",
+      "severity": "high",
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "input": "eval/images/hair-fur-08.jpg",
+      "verdict": "empty",
+      "reproduction": "reproduced",
+      "fixImplemented": false,
+      "assetsSynthetic": false,
+      "path": "cases/failure-002/metadata.json"
+    },
+    {
+      "caseId": "failure-003",
+      "category": "empty-output",
+      "severity": "high",
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "input": "eval/images/complex-bg-05.jpg",
+      "verdict": "empty",
+      "reproduction": "reproduced",
+      "fixImplemented": false,
+      "assetsSynthetic": false,
+      "path": "cases/failure-003/metadata.json"
+    },
+    {
+      "caseId": "failure-004",
+      "category": "empty-output",
+      "severity": "high",
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "input": "eval/images/thin-structure-04.jpg",
+      "verdict": "empty",
+      "reproduction": "reproduced",
+      "fixImplemented": false,
+      "assetsSynthetic": false,
+      "path": "cases/failure-004/metadata.json"
+    },
+    {
+      "caseId": "failure-005",
+      "category": "near-empty-output",
+      "severity": "high",
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "input": "eval/images/complex-bg-07.jpg",
+      "verdict": "ok",
+      "reproduction": "reproduced",
+      "fixImplemented": false,
+      "assetsSynthetic": false,
+      "path": "cases/failure-005/metadata.json"
+    },
+    {
+      "caseId": "failure-006",
+      "category": "partial-subject-removal",
+      "severity": "medium",
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "input": "eval/images/accessory-07.jpg",
+      "verdict": "ok",
+      "reproduction": "reproduced",
+      "fixImplemented": false,
+      "assetsSynthetic": false,
+      "path": "cases/failure-006/metadata.json"
+    },
+    {
+      "caseId": "failure-007",
+      "category": "partial-subject-removal",
+      "severity": "medium",
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "input": "eval/images/hair-fur-06.jpg",
+      "verdict": "ok",
+      "reproduction": "reproduced",
+      "fixImplemented": false,
+      "assetsSynthetic": false,
+      "path": "cases/failure-007/metadata.json"
+    },
+    {
+      "caseId": "failure-008",
+      "category": "partial-subject-removal",
+      "severity": "medium",
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "input": "eval/images/glass-transparent-06.jpg",
+      "verdict": "ok",
+      "reproduction": "reproduced",
+      "fixImplemented": false,
+      "assetsSynthetic": false,
+      "path": "cases/failure-008/metadata.json"
+    },
+    {
+      "caseId": "failure-009",
+      "category": "washed-out-ghost",
+      "severity": "high",
+      "provider": "webgpu",
+      "model": "qmix-cut-512",
+      "input": "test-images/product-scent-bottle.jpg",
+      "verdict": "washed",
+      "reproduction": "not-reproduced-locally (needs Adreno-6xx hardware)",
+      "fixImplemented": false,
+      "assetsSynthetic": true,
+      "path": "cases/failure-009/metadata.json"
+    }
+  ]
+}

@@ -33,29 +33,49 @@ Worker re-validates; an unknown category is rejected.
 
 ## Diagnostics: opt-in and scrubbed
 
-When the user ticks the box, `buildDiagnostics()` collects only
-non-identifying application facts:
+The form attaches the **same diagnostic structure** as the Console's **Copy
+report** button — built by `src/features/diagnostics/diagnostic-report.ts`
+(`buildDiagnosticReport()`), one schema and one builder for both features. The
+report is versioned (`schemaVersion`) and sectioned: environment, GPU, runtime,
+model, inference, raw-mask statistics, post-processing, and errors.
+
+Before it can be attached, it passes through
+`sanitizeDiagnosticsForUpload()` in
+`src/features/diagnostics/diagnostic-report-upload.ts`, which:
+
+- clears the fingerprint-adjacent fields `browser.userAgent` and
+  `browser.platform`;
+- scrubs URLs, absolute/POSIX paths, Windows paths, emails, and IPv4 addresses
+  from every remaining string.
+
+The structure has **no field** for an image, its pixels, its filename, EXIF, a
+cookie, a token, a storage dump, or a filesystem path. The local Copy report is
+never affected — it stays on the device.
+
+The diagnostics are attached **only** when the box is ticked, and the exact JSON
+that will be sent is shown in the form before submission. Copying a report with
+the Copy report button never submits anything.
+
+Example of the sanitized upload view (abridged):
 
 ```json
 {
-  "app_version": "20261114T090000",
-  "model_id": "model_512_int8_fp16",
-  "processing_provider": "wasm",
-  "gpu_adapter": "Apple M2",
-  "webgpu_available": true,
-  "cross_origin_isolated": true,
-  "last_inference_ms": 812,
-  "generated_at": "2026-11-14T09:30:00.000Z"
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-11-14T09:30:00.000Z",
+  "device": { "hardwareConcurrency": 8, "deviceMemoryGb": 8, "crossOriginIsolated": true },
+  "browser": { "userAgent": "", "platform": null },
+  "gpu": { "adapterDetected": true, "adapterUsable": true, "vendor": "apple", "device": "Apple M2", "shaderF16": "yes" },
+  "runtime": { "selectedProvider": "wasm", "actualProvider": "wasm", "inferenceRan": true },
+  "model": { "id": "model_512_int8_fp16", "inputSize": 512, "imageWidth": 1080, "imageHeight": 1350 },
+  "inference": { "coldMs": 1200, "warmMs": [900], "averageMs": 1050 },
+  "rawMask": { "min": 0, "mean": 0.42, "max": 1, "above_095_fraction": 0.33 },
+  "postprocessing": { "maskRecoveryTriggered": false, "refinementEnabled": true, "refinementSucceeded": true },
+  "errors": []
 }
 ```
 
-Every string is passed through `scrubDiagnosticText()`, which removes URLs,
-absolute/POSIX paths, Windows paths, emails, and IPv4 addresses, then bounds the
-length. The structure itself has **no field** for a filename, image, EXIF, URL,
-cookie, token, storage dump, or path.
-
-The diagnostics are attached **only** when the box is ticked. Copying anything
-else in the app never submits diagnostics.
+The Worker accepts the object only as a plain object and rejects anything over
+8 KB; the sanitized report is far smaller.
 
 ## Storage (D1)
 

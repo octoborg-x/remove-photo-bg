@@ -5,7 +5,11 @@
 // optional, explicitly-approved diagnostics payload.
 
 import { REPORT_DESCRIPTION_MAX, isReportCategory, type ReportCategory } from './report-categories';
-import type { DiagnosticReport } from './diagnostics';
+// The quality report reuses the SAME diagnostic structure as the Console's
+// "Copy report" button (src/features/diagnostics/diagnostic-report.ts). There is
+// one structure and one builder; the analytics form only chooses whether to
+// attach it.
+import type { DiagnosticReport } from '../diagnostics/diagnostic-report';
 
 export interface QualityReportInput {
   category: ReportCategory;

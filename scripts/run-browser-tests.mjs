@@ -1743,7 +1743,12 @@ try {
     );
     record(
       'ticking diagnostics shows the exact payload before sending',
-      previewShown === true && previewText.includes('app_version'),
+      previewShown === true && previewText.includes('schemaVersion'),
+    );
+    // The upload view must not carry the browser fingerprint fields.
+    record(
+      'the diagnostics upload view clears the browser fingerprint fields',
+      /"userAgent"\s*:\s*""/.test(previewText) && /"platform"\s*:\s*null/.test(previewText),
     );
     await page.click('#reportSubmit');
     await sleep(400);

@@ -120,9 +120,13 @@ Quality reports are stored in Cloudflare D1. No third-party analytics SDK, ad
 network, session replay, or heatmap is used.
 
 **Landing-page traffic.** If enabled, Cloudflare Web Analytics records page views,
-referrers, and coarse geography. It is a separate, cookieless Cloudflare
-technology; see `docs/analytics-architecture.md` for how it relates to the
-in-app consent choice.
+referrers, and coarse geography. It is a cookieless Cloudflare technology, and its
+beacon is loaded **only after you allow analytics** (never before). See
+`docs/analytics-architecture.md` for how it relates to the in-app consent choice.
+
+Withdrawing consent stops future custom events and deletes the anonymous id. The
+Cloudflare Web Analytics beacon cannot be removed from an already-loaded page, so
+that one page view is still reported; a reload after withdrawing loads nothing.
 
 See `docs/analytics-architecture.md`, `docs/analytics-events.md`, and
 `docs/quality-reporting.md` for the full detail.

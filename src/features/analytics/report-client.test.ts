@@ -50,11 +50,9 @@ describe('reportBody', () => {
   });
 
   it('includes diagnostics only when passed', () => {
-    const body = reportBody({
-      ...base,
-      diagnostics: { app_version: 'x', generated_at: '2026-01-01T00:00:00.000Z' },
-    });
-    expect(body.diagnostics).toEqual({ app_version: 'x', generated_at: '2026-01-01T00:00:00.000Z' });
+    const report = { schemaVersion: '1.0', generatedAt: '2026-01-01T00:00:00.000Z' } as never;
+    const body = reportBody({ ...base, diagnostics: report });
+    expect(body.diagnostics).toEqual(report);
   });
 
   it('never includes an email or contact field', () => {

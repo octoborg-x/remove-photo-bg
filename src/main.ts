@@ -121,7 +121,6 @@ import {
   supportsScreenPicker,
 } from './features/background-removal/screen-picker';
 import { initAnalyticsUi, type AnalyticsUi } from './features/analytics/ui';
-import type { DiagnosticsInput } from './features/analytics/diagnostics';
 import type { FailureReason } from './features/analytics/events';
 import type {
   LoadStage,
@@ -1744,8 +1743,6 @@ function finishResult(
   updateReprocessButton();
 
   const pct = ((opaquePx / (canvas.width * canvas.height)) * 100).toFixed(1);
-  // Remember the opaque fraction for the optional diagnostics attachment.
-  lastPercentOpaque = Number(pct);
   // A valid, displayable result exists now. The client de-duplicates, so the
   // interim preview and the refined final emit a single success per run.
   trackProcessingSucceeded();
@@ -2501,13 +2498,14 @@ initShowcaseGallery();
 initSupportCarousel();
 
 // ——— Privacy-first analytics ———
-// Endpoint comes from VITE_ANALYTICS_ENDPOINT at build time; when it is empty
-// (the default) analytics is fully disabled and no UI is shown. Every event is
-// consent-gated and fire-and-forget, so analytics can never delay image
-// processing or downloads. The diagnostics supplier reads only non-identifying
-// application facts.
+// Custom-event endpoint comes from VITE_ANALYTICS_ENDPOINT and the Cloudflare
+// Web Analytics beacon token from VITE_CF_WEB_ANALYTICS_TOKEN, both at build
+// time. When both are empty (the default) analytics is fully disabled and no UI
+// is shown. Every measurement is consent-gated and fire-and-forget, so analytics
+// can never delay image processing or downloads. The quality-report form reuses
+// the SAME diagnostic structure as the Console's Copy report button
+// (diagnosticReport), so there is one report shape and one builder.
 let analyticsUi: AnalyticsUi | null = null;
-let lastPercentOpaque: number | undefined;
 {
   // The build-time endpoint is the real configuration. A same-origin, relative
   // `?analytics=/path` override exists only for automated runs and local testing
@@ -2517,10 +2515,12 @@ let lastPercentOpaque: number | undefined;
   const endpoint = override && override.startsWith('/')
     ? override
     : (import.meta.env.VITE_ANALYTICS_ENDPOINT ?? '').trim();
+  const webAnalyticsToken = (import.meta.env.VITE_CF_WEB_ANALYTICS_TOKEN ?? '').trim();
   analyticsUi = initAnalyticsUi({
     endpoint,
+    webAnalyticsToken,
     appVersion: __BUILD_ID__,
-    diagnostics: collectDiagnostics,
+    diagnostics: diagnosticReport,
     onReportSubmitted: () => {
       // Confirmation is a plain toast; the report itself is already stored.
       showToast('Thanks — your report was sent.', { kind: 'info', title: 'Report sent' });
@@ -2531,20 +2531,6 @@ let lastPercentOpaque: number | undefined;
     // A session that already granted consent starts counting now.
     analyticsUi.client.sessionStarted();
   }
-}
-
-/** Non-identifying facts for the optional diagnostics attachment. */
-function collectDiagnostics(): DiagnosticsInput {
-  return {
-    app_version: __BUILD_ID__,
-    model_id: selectedModel?.id,
-    processing_provider: window.smokeProvider || selectedProvider,
-    gpu_adapter: gpuState?.adapter,
-    webgpu_available: Boolean(gpuState?.adapterPresent),
-    cross_origin_isolated: window.crossOriginIsolated,
-    last_inference_ms: timings.length ? timings[timings.length - 1] : undefined,
-    last_processing_percent_opaque: lastPercentOpaque,
-  };
 }
 
 // ——— Analytics lifecycle helpers ———

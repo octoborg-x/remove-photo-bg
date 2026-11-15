@@ -30,6 +30,12 @@ import {
   type RawMaskStats,
 } from './features/diagnostics/raw-mask-stats';
 import {
+  outputAlphaStats,
+  classifyOutputAlpha,
+  outputAlphaWarning,
+  formatOutputAlphaStats,
+} from './features/diagnostics/output-alpha';
+import {
   buildDiagnosticReport,
   formatDiagnosticReport,
 } from './features/diagnostics/diagnostic-report';
@@ -1712,10 +1718,10 @@ function finishResult(
   lastResultCanvas = canvas;
   lastPreviewCanvas = preview;
 
-  let opaquePx = 0;
   const ctx = canvas.getContext('2d')!;
   const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  for (let i = 3; i < data.length; i += 4) if (data[i] > 127) opaquePx++;
+  const alpha = outputAlphaStats(data, 4, 3);
+  const verdict = classifyOutputAlpha(alpha);
 
   // The compare view pairs the original photo with the current composite.
   compareBeforeEl.src = currentObjectUrl ?? '';
@@ -1742,22 +1748,17 @@ function finishResult(
   resultSettingsKey = engineSettingsKey();
   updateReprocessButton();
 
-  const pct = ((opaquePx / (canvas.width * canvas.height)) * 100).toFixed(1);
+  const pct = (alpha.opaqueFraction * 100).toFixed(1);
   // A valid, displayable result exists now. The client de-duplicates, so the
   // interim preview and the refined final emit a single success per run.
   trackProcessingSucceeded();
   log(`Rendered cut-out (${size}) as ${exportFormatInfo(exportFormat).label} on a ${describeChoice(background)} background, ${pct}% opaque.`);
-  // A uniform mask means the model did not segment anything; say so rather than
-  // leaving the user staring at a blank (fully transparent) image.
-  if (opaquePx === 0) {
-    log('WARNING: the mask is fully transparent, so there is no subject to show.');
-  } else if (opaquePx >= canvas.width * canvas.height * 0.995) {
-    // Essentially nothing was removed even after the flood-fill recovery — the
-    // image has no background separable from its edges (a busy scene, or a
-    // full-frame subject). Tell the user rather than showing the original
-    // silently.
-    log('WARNING: no background was found, so nothing was removed.');
-  }
+  log(`Output alpha: ${formatOutputAlphaStats(alpha)}.`);
+  // A faint whole-frame wash (the ghost), a fully transparent frame, or a frame
+  // that kept everything are all named here, so a bad result is never shown
+  // silently — and the ghost is no longer mislabelled "fully transparent".
+  const warning = outputAlphaWarning(verdict);
+  if (warning) log(`WARNING: ${warning}`);
 }
 
 function setSelectorsDisabled(disabled: boolean): void {

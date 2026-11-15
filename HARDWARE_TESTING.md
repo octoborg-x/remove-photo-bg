@@ -253,8 +253,10 @@ provider=webgpu**. That symptom matches a mask squashed into ≈[0.5,0.73] — t
 fingerprint of a second sigmoid over an already-probability output (MODEL_CARD.md
 "regression hazard"). The investigation below ruled that out with evidence; the
 remaining suspect is a real-device WebGPU driver/precision issue (§1 already
-lists Qualcomm Adreno-6xx as visually wrong on WebGPU). **No logic bug was found
-or changed.**
+lists Qualcomm Adreno-6xx as visually wrong on WebGPU). No logic bug was found in
+the alpha/compositing path itself — the one in-repo defect found (a mid-run GPU
+fallback that rebuilt a WASM session inside the aborted worker) was fixed in
+PR #124; see "The GPU-abort fallback restarts on a fresh worker" below.
 
 ### What the pipeline actually does (verified)
 
@@ -386,6 +388,43 @@ mislabelled "fully transparent".
   `outputIsProbability`, the sigmoid appears exactly once and is flag-guarded,
   the mask is normalised in exactly one place, and one `runInference` is shared
   by all providers).
+
+### The GPU-abort fallback restarts on a fresh worker (PR #124)
+
+The one in-repo defect behind the ghost hypothesis was in the **run-time
+fallback**, not the alpha path. `ort.all.min.js` bundles WebGPU (JSEP) and WASM
+into **one wasm module instance per worker**. A WebGPU run that aborts
+mid-execution (`bad_alloc`, a lost device, or the run watchdog) could leave that
+shared module in a bad state; the OLD fallback then rebuilt a WASM session
+**inside the same worker** (`session = null; await createSession(['wasm'])` in the
+run handler) and re-ran there, inheriting the corruption. The output stays
+bounded by the graph's sigmoid — so it looks like a plausible mask — but is
+structurally wrong, which is the column-constant, low-confidence signature the
+device reports show.
+
+The fallback now discards the whole worker instead:
+
+- **Worker** (`public/inference-worker.js`): on a provider failure during a
+  WebGPU run it posts `{kind:'provider-restart', from:'webgpu', to:'wasm',
+  reason, runId}` and returns. The run handler no longer calls `createSession` a
+  second time, so nothing is ever rebuilt inside the aborted module.
+- **Page** (`src/main.ts`, `restartOnFreshWorker`): terminates the worker and its
+  ORT module (`worker.terminate()`), spawns a **fresh** worker pinned to the CPU
+  with a one-shot `overrideProvider` (cleared by that load, so the user's own
+  provider choice governs every later load), reloads the model from the on-device
+  asset cache, and re-posts the failed run under the **same run id** so its
+  pending promise settles instead of hanging.
+
+This is the general-correctness fix — never reuse a module after a GPU EP aborts
+mid-run — and it is the leading candidate for the ghost, but it is **not proven
+to fix the device**: the GPU-abort path cannot execute without a real GPU (a
+sandbox never starts a real WebGPU run, so nothing aborts mid-flight), so a
+physical phone must still confirm it. Scope is unchanged: no change to the model
+artifact, the input resolution, or the provider try-order. The normal
+(no-fallback) boot is untouched — same worker factory, no added latency.
+`fresh-worker-fallback.test.ts` pins the main-thread half (single factory,
+terminate-before-recreate, CPU override, same-run-id retry) and
+`model-output-contract.test.ts` pins the worker half.
 
 ## 9. Reading a diagnostic report
 

@@ -16,7 +16,7 @@ changed, the measured numbers (not estimates), and an explicit verdict.
 export: **softer fine/specular edge detail** than the 1024 px reference (mean IoU@0.5
 0.9917 across three runtimes, i.e. the mask *area* already agrees; the difference is
 confined to the transition band — ≈2.4 px wide at 512 vs ≈1.4 px at 1024, most visible
-on the wine-glass rim). §6 and `COLAB_T4_REPORT.md` §5 report the edge-gradient *metric*
+on the wine-glass rim). §6 of `PHASE1_REPORT.md` reports the edge-gradient *metric*
 in opposite directions; this task targets the **visually-agreed softness**, not either
 number, and measures the transition band directly.
 

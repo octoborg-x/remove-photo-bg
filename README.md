@@ -257,11 +257,12 @@ Outputs to `--out`:
 ## WebGPU on a real GPU (Google Colab, free T4)
 
 The sandbox and CI have no GPU, so the app's WebGPU path could never be
-exercised against the real product — until now. `notebooks/colab-webgpu-smoke.ipynb`
-runs Google's official headless-Chrome-with-Vulkan recipe on a free Colab T4,
-opens the deployed app, forces `?provider=webgpu`, and asserts the provider
+exercised against the real product — until now. Google's official
+headless-Chrome-with-Vulkan recipe runs on a free Colab T4, opens the deployed
+app, forces `?provider=webgpu`, and asserts the provider
 comes back as `webgpu` (plus logs timings, the adapter report, and every network
-request for the privacy check). Cost: $0.
+request for the privacy check). Cost: $0. `scripts/run-smoke.mjs` is the
+supported driver — run it with `RUN_GPU=1` on a host that has a real GPU.
 
 The GPU path needs the host to serve the WebGPU-capable ORT bundle. Fetch it
 before starting the local preview server:
@@ -270,12 +271,17 @@ before starting the local preview server:
 npm run fetch-models -- --webgpu   # also copies ort.all.min.js + jsep wasm
 npm run build                      # or: vite preview after fetch-models --webgpu
 npx vite preview --port 4173 &
-npx cloudflared tunnel --url http://localhost:4173   # gives the notebook a HTTPS URL
+npx cloudflared tunnel --url http://localhost:4173   # gives the run a HTTPS URL
 ```
 
-Then paste the returned URL into the notebook's `PAGE_URL` cell and run all cells.
-The driver honors `RUN_GPU=1 node scripts/run-smoke.mjs …` for a local GPU too,
-but the notebook is the supported path (correct Vulkan/WebGPU flags for Colab).
+Then point the smoke driver at the returned URL:
+
+```bash
+RUN_GPU=1 node scripts/run-smoke.mjs <page-url> --provider webgpu --runs 5
+```
+
+`RUN_GPU=1` is the supported path for a local or Colab GPU (it drops the
+`--disable-gpu`/`--disable-webgpu` flags the sandbox needs).
 
 ## Reference inference (native CPU, fast)
 
@@ -370,8 +376,8 @@ Deploy (one-time manual steps in the dashboard):
    jsep runtime, skips the hundreds-of-MB model bodies — models come from HF at
    runtime via the service worker) then `vite build` then strips `dist/models/`.
 
-That produces a WebGPU-capable site. Verify with the Colab T4 notebook
-(`notebooks/colab-webgpu-smoke.ipynb`).
+That produces a WebGPU-capable site. Verify it with the smoke driver on a
+GPU host (`RUN_GPU=1 node scripts/run-smoke.mjs <page-url> --provider webgpu`).
 
 **Branch deployments.** `vercel.json` limits builds to the three release
 branches (`git.deploymentEnabled`: `main`, `staging`, `production`), so pushing
@@ -477,7 +483,7 @@ copyrighted materials. See [LICENSE](./LICENSE) for the terms.
   product and fur silhouettes are visually equivalent. This is an accepted
   trade-off, not a defect. Note that an earlier edge-sharpness metric reported
   the opposite direction; that was a grid-sampling artifact, corrected in
-  `COLAB_T4_REPORT.md` §5.
+  `PHASE1_REPORT.md` §6.
 - WASM/CPU inference on the 512×512 export takes roughly 3–6 s per image
   (native CPU ~2.2 s), so the CPU path is usable rather than a last resort.
 - A quantised variant was evaluated and rejected: dynamic int8 shrank the file

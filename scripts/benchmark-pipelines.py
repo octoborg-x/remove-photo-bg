@@ -10,7 +10,7 @@ model, one session, then per image:
 Each pipeline records the model's SHA-256 and size, and the summary carries an
 `environment` block (GPU name/driver/total VRAM, CUDA, onnxruntime version,
 available providers, git commit) so a results file identifies the machine that
-produced it. Earlier runs captured timings only; see COLAB_T4_REPORT.md.
+produced it.
 
 Outputs: smoke-results/benchmark/ (summary.json + masks/).
 

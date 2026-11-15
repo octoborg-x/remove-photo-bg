@@ -213,7 +213,7 @@ wider at 512 (≈2.4 px vs ≈1.4 px in original-image pixels). The absolute
 gradient numbers are themselves grid-dependent (`np.gradient` is a per-pixel
 difference, so the same edge reads steeper on a coarser grid), which is why the
 T4/ZeroGPU runs initially reported 512 as *sharper*; measured on a common grid
-they agree with this direction. See `COLAB_T4_REPORT.md` §5. Visual inspection
+they agree with this direction. See §6. Visual inspection
 of native-resolution cutouts shows the practical difference is confined to thin
 specular detail (the wine-glass rim shows a slightly softer, fainter edge); fur
 and product silhouettes are visually equivalent.
@@ -361,7 +361,7 @@ Quality (masks upscaled to original dimensions, 3 images): mean IoU@0.5
 Google Colab T4 GPU run, initial 5-run pass (onnxruntime-gpu 1.31.1,
 CUDA 13.0, `CUDAExecutionProvider`; artifacts in
 `smoke-results/benchmark-t4/`; superseded by the 10-run peak-VRAM run in
-[`COLAB_T4_REPORT.md`](./COLAB_T4_REPORT.md)):
+`smoke-results/benchmark-t4/summary.json`):
 
 | Pipeline | Model load | Cold (img₁) | **Warm avg (5×)** | Peak RSS |
 |---|---|---|---|---|
@@ -377,8 +377,9 @@ side-by-side cutouts in `smoke-results/benchmark-t4/quality-t4/`.
 
 The per-field record for this run — model files and SHA-256, exact runtime,
 10-run latency, peak VRAM, and the mask-IoU table — is
-[`COLAB_T4_REPORT.md`](./COLAB_T4_REPORT.md), reproducible with
-`notebooks/colab-t4-benchmark.ipynb`. The earlier arm of this run (the five
+`smoke-results/benchmark-t4/summary.json` +
+`smoke-results/benchmark-t4/environment.json`, reproducible with
+`scripts/benchmark-pipelines.py`. The earlier arm of this run (the five
 warm runs and host-RSS figures above, from the initial T4 pass) has been
 superseded: the follow-up T4 run sampled peak VRAM and ran 10 warm runs per
 image.

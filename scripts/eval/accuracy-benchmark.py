@@ -49,6 +49,9 @@ CHECKLIST_COLUMNS = [
     # identity (§3.1)
     "id", "category", "name", "path", "license", "source",
     "expected_w", "expected_h",
+    # minimum acceptable thresholds that apply to this image (§3.2, §5)
+    "min_fg_frac", "min_bimodal_tail", "min_alpha_max", "max_speckle_frac",
+    "max_infer_ms",
     # execution (§3.3) + dimensions (§3.4)
     "exec_ok", "error", "provider", "out_w", "out_h", "dims_match",
     # timing (§3.5)
@@ -320,12 +323,23 @@ def main() -> int:
     for row in report["rows"]:
         iid = row["id"]
         meta = manifest_meta.get(iid, {})
+        budget = timing_budget(
+            max(row.get("expected", {}).get("width", meta.get("width")) or 0,
+                row.get("expected", {}).get("height", meta.get("height")) or 0),
+            row.get("provider") or "", thresholds)
         rec = {
             "id": iid,
             "name": row.get("title", meta.get("title", iid)),
             "category": row["category"],
             "license": meta.get("license"),
             "source": meta.get("page"),
+            # §3.2 — the thresholds that apply to this image, so a row is
+            # self-documenting and a reader can see the bar it was judged against.
+            "min_fg_frac": uni["min_fg_frac"],
+            "min_bimodal_tail": uni["min_bimodal_tail"],
+            "min_alpha_max": uni["min_alpha_max"],
+            "max_speckle_frac": uni["max_speckle_frac"],
+            "max_infer_ms": budget["fail_above"] if budget else None,
             "exec_ok": bool(row.get("ok")),
             "error": row.get("error"),
             "expected_w": row.get("expected", {}).get("width", meta.get("width")),
@@ -379,8 +393,6 @@ def main() -> int:
             hard_fail.append(f"alpha_max {rec['alpha_max']} < {uni['min_alpha_max']}")
         if rec["speckle_frac"] > uni["max_speckle_frac"]:
             hard_fail.append(f"speckle_frac {rec['speckle_frac']} > {uni['max_speckle_frac']}")
-        budget = timing_budget(max(rec["expected_w"] or 0, rec["expected_h"] or 0),
-                               rec.get("provider") or "", thresholds)
         if budget and rec["infer_ms"] is not None:
             v, f = gate(rec["infer_ms"], budget, "infer_ms")
             if v == "FAIL":

@@ -318,12 +318,19 @@ diffed after any model or runtime change.
 - `scripts/eval/analyze-eval.py` — measures edge-character metrics from those
   PNGs (foreground share, soft-edge band, edge contrast, components, speckle)
   and writes `quality.json` / `quality.md`.
+- `scripts/eval/accuracy-benchmark.py` — the quantitative layer: a per-image
+  checklist (identity, success, dimensions, timing, alpha character, empty,
+  segmentation character) scored against `eval/thresholds.json` into
+  PASS/REVIEW/FAIL verdicts, plus IoU/Dice/boundary-F/MAE wherever a ground-truth mask
+  exists. Writes `benchmark.json` / `checklist.csv` / `benchmark.md`. See
+  [`docs/accuracy-benchmark.md`](./docs/accuracy-benchmark.md).
 
 ```bash
 npm run eval:set                       # download the pinned images (once)
 npm run build
 npm run eval:run -- --provider wasm --out eval-results/wasm
 npm run eval:analyze                   # or: python3 scripts/eval/analyze-eval.py eval-results/wasm
+npm run eval:benchmark -- eval-results/wasm   # per-image checklist + verdicts
 # WebGPU, on a machine that has it:
 RUN_GPU=1 npm run eval:run -- --provider webgpu --out eval-results/webgpu
 ```
@@ -333,7 +340,10 @@ for these images). Use them for regression comparison and review
 `eval-results/<run>/outputs/*.png` visually — a mask that looks correct to the
 customer matters more than a faster inference time. See
 [`EVALUATION.md`](./EVALUATION.md) for the full method and the recorded baseline
-(64/64 succeeded, 0 wrong dimensions, mean 4.1 s/image, 8 empty outputs).
+(64/64 succeeded, 0 wrong dimensions, mean 4.1 s/image, 8 empty outputs). To turn
+the descriptive metrics into an actual accuracy score, add reference masks under
+`eval/ground-truth/` and re-run `eval:benchmark` — see
+[`docs/accuracy-benchmark.md`](./docs/accuracy-benchmark.md).
 
 ## Commands
 
@@ -349,6 +359,7 @@ customer matters more than a faster inference time. See
 | `npm run eval:set` | download the fixed evaluation images (`eval/images/`) |
 | `npm run eval:run` | run the deployed pipeline over the evaluation set (WASM; `RUN_GPU=1` for WebGPU) |
 | `npm run eval:analyze` | edge-character metrics from an evaluation run's output PNGs |
+| `npm run eval:benchmark -- <run-dir>` | per-image accuracy checklist + PASS/REVIEW/FAIL verdicts (+ IoU/Dice with ground truth) |
 | `npm run verify` | lint + typecheck + unit tests + build |
 | `npm run fetch-models` | download + verify model/WASM artifacts (also prepares `public/wasm/` for local dev) |
 | `npm run license:audit` | dependency licence audit (all permissive; see `LICENSE_AUDIT.md`) |

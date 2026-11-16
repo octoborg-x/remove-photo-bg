@@ -357,14 +357,23 @@ npm run build
 # Tier A — descriptive + thresholds over the 64 photos
 npm run eval:run -- --provider wasm --out eval-results/wasm
 npm run eval:analyze
-python3 scripts/eval/benchmark-checklist.py --run eval-results/wasm
+# Worksheet only (no scoring): identity + threshold columns, blank measurements.
+npm run eval:checklist
+# Scored: fills the §3 measurements and applies the §5 gates → §6 verdicts.
+npm run eval:benchmark -- eval-results/wasm
 # WebGPU on a machine that has it:
 RUN_GPU=1 npm run eval:run -- --provider webgpu --out eval-results/webgpu
+# Provider parity (§3.9): per-image mask flips between the two runs.
+npm run eval:benchmark -- eval-results/wasm --parity eval-results/webgpu
 
 # Tier B — exact ground truth (to be built: eval/synthetic-manifest.json)
 python3 scripts/distill/evaluate.py --teacher <ref> --candidates <out.onnx> \
     --manifest eval/synthetic-manifest.csv --out eval-results/synthetic
 ```
+
+The metrics and gate logic are checked offline in CI
+(`python3 scripts/eval/accuracy-benchmark.py --self-test`), so a broken gate fails
+the build without a model or a browser.
 
 ## 8. Open items (the work this spec unblocks)
 
@@ -372,15 +381,39 @@ python3 scripts/distill/evaluate.py --teacher <ref> --candidates <out.onnx> \
    cut-outs (`clothing-03.png`, `large-06.png`, the 3 reference masks) over the
    background matrix; emit GT alpha PNGs + a manifest. This is the single change
    that turns "agreement" into "accuracy".
-2. **Implement the §3.8 segmentation metrics** in `analyze-eval.py` (components
-   and speckle already exist; add holes, border-leak, bandwidth, trimap).
-3. **Wire the gates** into a `benchmark.json` with per-image PASS/FAIL/REVIEW and
-   a run-level `determinism` + `provider_parity` block.
+2. ~~**Implement the §3.8 segmentation metrics**~~ — **done**; `quality_metrics.py`
+   computes components, speckle, largest-component share, holes, hole area,
+   border leak, bbox fill, centroid offset, boundary bandwidth and the trimap.
+   `analyze-eval.py` keeps the original five keys for baseline diffing and imports
+   the same implementations, so the two scripts cannot disagree.
+3. ~~**Wire the gates** into a `benchmark.json`~~ — **done**;
+   `accuracy-benchmark.py` applies the §5 gates and writes the §6 verdict
+   (PASS / FAIL(exec|dims|empty|kept|gate) / REVIEW) per image, plus a run-level
+   `--parity` block (§3.9). See §9.
 4. **Label a Tier-C gold subset** — 2 images per category, hand-traced — to
    confirm the synthetic score transfers to real photos.
 5. **Run the Tier-D rubric** on the 64 outputs (accept / minor / reject) to
    anchor the thresholds to human judgement.
 
-Until item 1 lands, every quality figure in this repo is Tier A/E — descriptive
-or agreement — and must be labelled as such. This document exists so that is a
-stated position, not an unexamined one.
+Until item 1 (or item 4) lands, every quality figure in this repo is Tier A/E —
+descriptive or agreement — and must be labelled as such. This document exists so
+that is a stated position, not an unexamined one.
+
+## 9. Implementation status
+
+| Piece | Where | State |
+|---|---|---|
+| Descriptive metrics (§3.6–3.8) | `scripts/eval/quality_metrics.py` | done |
+| Per-image worksheet (§3.1–3.2) | `scripts/eval/benchmark-checklist.py` (`eval:checklist`) | done |
+| Scoring + §6 verdicts (§5) | `scripts/eval/accuracy-benchmark.py` (`eval:benchmark`) | done |
+| Accuracy metrics (§4) | `quality_metrics.accuracy_metrics` | done — needs a GT mask to fire |
+| Provider parity (§3.9) | `accuracy-benchmark.py --parity <run>` | done |
+| Offline gate self-test | `accuracy-benchmark.py --self-test`, wired into CI | done |
+| Tier-B synthetic set | — | open (item 1) |
+| Tier-C gold masks | `eval/ground-truth/` (see its README) | open (item 4) |
+
+The accuracy columns (`iou`/`dice`/`boundary_f`/`mae`/`fg_precision`/`fg_recall`)
+are `null` until a ground-truth mask exists for that image; the report prints
+`Accuracy: not measured` and the `n=` of scored images so a reader always knows
+which tier a number came from. Drop a mask in `eval/ground-truth/` and re-run
+`eval:benchmark` to turn those rows into scores.

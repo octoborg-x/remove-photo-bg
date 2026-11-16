@@ -17,6 +17,7 @@
     "eval:run": "node scripts/eval/run-eval.mjs",
     "eval:analyze": "python3 scripts/eval/analyze-eval.py eval-results/wasm",
     "eval:checklist": "python3 scripts/eval/benchmark-checklist.py",
+    "eval:benchmark": "python3 scripts/eval/accuracy-benchmark.py",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "fetch-models": "node scripts/fetch-models.mjs",
     "build-demo": "node scripts/build-demo-assets.mjs",

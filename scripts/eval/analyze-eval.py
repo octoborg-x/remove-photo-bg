@@ -36,62 +36,32 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from quality_metrics import component_stats, alpha_stats  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def rel(path: Path) -> str:
+    """Path relative to the repo root when possible, else the absolute path."""
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
 def analyse_alpha(alpha: np.ndarray) -> dict:
-    h, w = alpha.shape
-    fg = alpha >= 0.5
-    fg_frac = float(fg.mean())
-    soft = (alpha > 0.02) & (alpha < 0.98)
-    soft_frac = float(soft.mean())
-    # Boundary = foreground pixels with at least one background 4-neighbour.
-    p = np.pad(fg, 1, constant_values=False)
-    interior = p[:-2, 1:-1] & p[2:, 1:-1] & p[1:-1, :-2] & p[1:-1, 2:]
-    boundary = fg & ~interior
-    gy, gx = np.gradient(alpha)
-    gmag = np.hypot(gx, gy)
-    edge_contrast = float(gmag[boundary].mean()) if boundary.any() else 0.0
-    return {
-        "foreground_frac": round(fg_frac, 5),
-        "soft_edge_frac": round(soft_frac, 6),
-        "edge_contrast": round(edge_contrast, 5),
-        "boundary_px": int(boundary.sum()),
-    }
+    return alpha_stats(alpha)
 
 
 def connected_components(fg: np.ndarray) -> tuple[int, float]:
     """Count 8-connected foreground regions and the fraction that are tiny.
 
-    A small flood-fill is enough here (no scipy); images are capped at a few
-    megapixels and this runs offline.
+    Thin wrapper over the shared `component_stats` so the recorded baseline and
+    the accuracy benchmark use one implementation.
     """
-    h, w = fg.shape
-    labels = np.zeros((h, w), dtype=np.int32)
-    current = 0
-    total = h * w
-    for y0 in range(h):
-        row = fg[y0]
-        for x0 in range(w):
-            if not row[x0] or labels[y0, x0]:
-                continue
-            current += 1
-            stack = [(y0, x0)]
-            labels[y0, x0] = current
-            while stack:
-                y, x = stack.pop()
-                for dy in (-1, 0, 1):
-                    for dx in (-1, 0, 1):
-                        ny, nx = y + dy, x + dx
-                        if 0 <= ny < h and 0 <= nx < w and fg[ny, nx] and not labels[ny, nx]:
-                            labels[ny, nx] = current
-                            stack.append((ny, nx))
-    if current == 0:
-        return 0, 0.0
-    sizes = np.bincount(labels.ravel())[1:]
-    tiny = sizes < 0.0005 * total
-    speckle = float(tiny.sum() / current)
-    return current, round(speckle, 4)
+    stats = component_stats(fg)
+    return stats["components"], stats["speckle_frac"]
 
 
 def main() -> int:
@@ -148,7 +118,7 @@ def main() -> int:
         }
 
     quality = {
-        "runDir": str(run_dir.relative_to(ROOT)),
+        "runDir": rel(run_dir),
         "provider": report.get("provider"),
         "model": report.get("model"),
         "note": "Descriptive edge-character metrics (no ground truth); use for regression comparison and visual review.",

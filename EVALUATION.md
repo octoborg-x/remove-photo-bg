@@ -130,7 +130,10 @@ Recorded on a GitHub-hosted-class Linux container (no GPU), Chromium headless,
 - **WebGPU.** No GPU in this environment (see `HARDWARE_TESTING.md`). Record
   WebGPU separately with `RUN_GPU=1`; do not compare a software-rendered number
   to a GPU one.
-- **Ground-truth accuracy.** None of the above is a segmentation score.
+- **Ground-truth accuracy.** None of the above is a segmentation score. For the
+  accuracy layer built on top of this harness — the per-image checklist,
+  explicit thresholds, and IoU/Dice/boundary-F/MAE against reference masks — see
+  [`docs/accuracy-benchmark.md`](./docs/accuracy-benchmark.md).
 
 ## Comparing runs
 

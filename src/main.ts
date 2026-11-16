@@ -33,6 +33,7 @@ import {
   outputAlphaStats,
   classifyOutputAlpha,
   outputAlphaWarning,
+  transitionBandFraction,
   formatOutputAlphaStats,
 } from './features/diagnostics/output-alpha';
 import {
@@ -229,6 +230,8 @@ const exportToggleBtn = document.getElementById('exportToggle') as HTMLButtonEle
 const tilingSelect = document.getElementById('tilingSelect') as HTMLSelectElement | null;
 const tilingValueEl = document.getElementById('tilingValue');
 const tilingHintEl = document.getElementById('tilingHint');
+const tilingAdviceEl = document.getElementById('tilingAdvice');
+const tilingApplyBtn = document.getElementById('tilingApply') as HTMLButtonElement | null;
 const refineToggle = document.getElementById('refineToggle') as HTMLSelectElement | null;
 const refineValueEl = document.getElementById('refineValue');
 const refineFieldEl = document.getElementById('refineField');
@@ -595,8 +598,6 @@ function showToast(
     kind?: ToastKind;
     title?: string;
     durationMs?: number;
-    /** Optional single action button (e.g. "Run 2x2 tiles"). Dismisses on click. */
-    action?: { label: string; onClick: () => void };
   } = {},
 ): void {
   const kind = opts.kind ?? 'info';
@@ -628,17 +629,6 @@ function showToast(
 
   toast.appendChild(body);
   toast.appendChild(close);
-  if (opts.action) {
-    const action = document.createElement('button');
-    action.type = 'button';
-    action.className = 'toastAction';
-    action.textContent = opts.action.label;
-    action.addEventListener('click', () => {
-      opts.action!.onClick();
-      remove();
-    });
-    toast.appendChild(action);
-  }
   toastHost.appendChild(toast);
   const timer = setTimeout(remove, opts.durationMs ?? TOAST_DEFAULT_MS);
 }
@@ -2119,42 +2109,41 @@ function finishResult(
   // silently — and the ghost is no longer mislabelled "fully transparent".
   const warning = outputAlphaWarning(verdict);
   if (warning) log(`WARNING: ${warning}`);
-  // Offer tiling once per photo, when it would measurably sharpen this image and
-  // the user has not already enabled it. The toast's action re-runs with 2x2.
-  if (phase === 'final') maybeRecommendTiling();
+  // Advise tiling when it would sharpen THIS image (a wide, soft edge on a photo
+  // the model must upscale a lot) and the user has not already enabled it. The
+  // advice is shown in the sidebar, never as a toast.
+  if (phase === 'final') maybeRecommendTiling(transitionBandFraction(data, 4, 3));
 }
 
-// Tracks the image a tiling suggestion was last shown for, so the offer appears
-// once per photo rather than after every run.
-let tilingOfferedFor: string | null = null;
-function maybeRecommendTiling(): void {
-  if (!currentImageData || tileGrid > 1) return;
-  const key = `${currentImageData.width}x${currentImageData.height}`;
-  if (tilingOfferedFor === key) return;
+// The tiling recommendation for the photo on screen, kept so the sidebar hint can
+// show it. Recomputed on every final result; null when tiling is not advised (or
+// already on), which is what hides the hint.
+let tilingAdvice: { reason: string; grid: TileGrid } | null = null;
+// The photo the advice belongs to. A new photo clears the advice, so a stale
+// recommendation from the previous image never lingers in the panel.
+let tilingAdviceFor: string | null = null;
+
+// Decide whether tiling would sharpen the current photo, and record it for the
+// sidebar hint. Deliberately NOT a toast: an interruption on every large photo
+// would nag, so the advice lives in the tiling field's own info panel, where a
+// user who wants it will look. `softEdgeShare` is the measured soft-edge fraction
+// of the first mask — the one signal that separates "this edge is blurry" from
+// "this edge is already crisp", so it is what keeps the advice from firing on
+// every image.
+function maybeRecommendTiling(softEdgeShare: number): void {
+  if (!currentImageData || tileGrid > 1) {
+    tilingAdvice = null;
+    return;
+  }
   const rec = recommendTiling({
     imageWidth: currentImageData.width,
     imageHeight: currentImageData.height,
+    softEdgeShare,
   });
-  if (!rec.recommended) return;
-  tilingOfferedFor = key;
-  log(`Tiling suggestion: ${rec.reason}`);
-  showToast(rec.reason, {
-    kind: 'info',
-    title: 'Sharpen fine edges with tiled inference?',
-    durationMs: 12000,
-    action: {
-      label: 'Run 2 × 2 tiles',
-      onClick: () => {
-        tileGrid = rec.suggestedGrid;
-        savePref('remove-bg:tiles', tileGrid);
-        applyTilingUi();
-        if (currentImageData) {
-          setStudioTab('processing', true);
-          void runSmoke();
-        }
-      },
-    },
-  });
+  tilingAdviceFor = `${currentImageData.width}x${currentImageData.height}`;
+  tilingAdvice = rec.recommended ? { reason: rec.reason, grid: rec.suggestedGrid } : null;
+  applyTilingUi();
+  if (rec.recommended) log(`Tiling suggestion: ${rec.reason}`);
 }
 
 function setSelectorsDisabled(disabled: boolean): void {
@@ -2539,12 +2528,29 @@ function applyTilingUi(): void {
   // Explain why tiling is unavailable for a small photo, so the option never
   // silently does nothing.
   const img = currentImageData;
-  if (tilingHintEl && img) {
-    const longSide = Math.max(img.width, img.height);
-    tilingHintEl.textContent =
-      longSide < TILING_MIN_LONG_SIDE
-        ? `This photo is ${longSide}px on its longest side — below the ${TILING_MIN_LONG_SIDE}px minimum, so a single pass is used.`
-        : `Runs the model on overlapping tiles and crossfades the masks. ${tileGrid > 1 ? `Currently ${tileGrid} × ${tileGrid} = ${tileGrid * tileGrid} passes.` : 'Best for large photos whose mask is upscaled a lot.'}`;
+  if (tilingHintEl) {
+    tilingHintEl.hidden = !img;
+    if (img) {
+      const longSide = Math.max(img.width, img.height);
+      tilingHintEl.textContent =
+        longSide < TILING_MIN_LONG_SIDE
+          ? `This photo is ${longSide}px on its longest side — below the ${TILING_MIN_LONG_SIDE}px minimum, so a single pass is used.`
+          : `Runs the model on overlapping tiles and crossfades the masks. ${tileGrid > 1 ? `Currently ${tileGrid} × ${tileGrid} = ${tileGrid * tileGrid} passes.` : 'Best for large photos whose mask is upscaled a lot.'}`;
+    }
+  }
+  // The per-photo recommendation, shown inside the info panel (never a toast).
+  // Hidden when tiling is already on or not advised for this photo. A new photo
+  // (different size key) clears any advice left over from the previous image.
+  if (img && tilingAdvice && tilingAdviceFor !== `${img.width}x${img.height}`) {
+    tilingAdvice = null;
+  }
+  if (tilingAdviceEl) {
+    tilingAdviceEl.hidden = !tilingAdvice;
+    tilingAdviceEl.textContent = tilingAdvice ? `Recommended for this photo: ${tilingAdvice.reason}` : '';
+  }
+  if (tilingApplyBtn) {
+    tilingApplyBtn.hidden = !tilingAdvice;
+    if (tilingAdvice) tilingApplyBtn.textContent = `Run ${tilingAdvice.grid} × ${tilingAdvice.grid} tiles`;
   }
 }
 tilingSelect?.addEventListener('change', () => {
@@ -2554,6 +2560,19 @@ tilingSelect?.addEventListener('change', () => {
   applyTilingUi();
   log(`Tiled inference: ${tileGrid === 1 ? 'off' : `${tileGrid}x${tileGrid}`}`);
   updateReprocessButton();
+});
+// The recommendation's one-click apply, inside the info panel. Re-runs with the
+// suggested grid, like the old toast action did.
+tilingApplyBtn?.addEventListener('click', () => {
+  if (!tilingAdvice) return;
+  tileGrid = tilingAdvice.grid;
+  savePref('remove-bg:tiles', tileGrid);
+  tilingAdvice = null;
+  applyTilingUi();
+  if (currentImageData) {
+    setStudioTab('processing', true);
+    void runSmoke();
+  }
 });
 
 // ——— Edge refinement controls ———

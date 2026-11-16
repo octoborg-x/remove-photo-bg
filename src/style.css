@@ -692,24 +692,6 @@
   .toast .toastClose:hover {
     color: var(--color-slate-700);
   }
-  /* Optional single action button (e.g. "Run 2x2 tiles" on a tiling tip). */
-  .toast .toastAction {
-    flex: none;
-    align-self: center;
-    border: 0;
-    border-radius: 0.55rem;
-    padding: 0.35rem 0.7rem;
-    background: var(--color-blue-600);
-    color: #fff;
-    font-size: 0.76rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s ease;
-  }
-  .toast .toastAction:hover {
-    background: var(--color-blue-700);
-  }
-
   /* ——— Recovery panel ——— */
   .recovery .actions {
     display: flex;
@@ -1498,6 +1480,26 @@
     border: 1px solid var(--color-slate-200);
     border-radius: 0.3rem;
     padding: 0 0.25rem;
+  }
+  /* The "recommended for this photo" line and its one-click apply button, inside
+     the tiling info panel. Hidden until the recommendation fires. */
+  .infoPanel #tilingAdvice {
+    color: var(--color-blue-700, #1d4ed8);
+    font-weight: 600;
+  }
+  .infoApply {
+    margin-top: 0.5rem;
+    border: 0;
+    border-radius: 0.55rem;
+    padding: 0.35rem 0.7rem;
+    background: var(--color-blue-600);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .infoApply:hover {
+    background: var(--color-blue-700);
   }
   /* A control the current mode makes irrelevant (e.g. refine sliders when the
      stage is off) is dimmed and disabled, not hidden — its value is remembered. */

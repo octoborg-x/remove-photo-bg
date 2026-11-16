@@ -108,6 +108,29 @@ export function classifyOutputAlpha(stats: OutputAlphaStats): OutputAlphaVerdict
   return 'ok';
 }
 
+/** Alpha band (0..1 scale) outside which a pixel counts as flat foreground or
+ *  background. Mirrors the guided-filter transition test in `refine-mask.ts`. */
+const FLAT_ALPHA_LOW = 0.02;
+const FLAT_ALPHA_HIGH = 0.98;
+
+/**
+ * Share of pixels that sit in the soft transition band (`0.02 < a < 0.98`) — the
+ * partially-transparent edge of a cut-out. A crisp cut-out keeps this small (the
+ * three reference masks measure 0.013–0.019); a wide, blurred edge raises it.
+ * `recommendTiling` uses it to decide whether tiling would sharpen this image.
+ */
+export function transitionBandFraction(alpha: ArrayLike<number>, stride = 1, offset = 0): number {
+  const step = Math.max(1, Math.floor(stride));
+  let count = 0;
+  let band = 0;
+  for (let i = offset; i < alpha.length; i += step) {
+    const v = alpha[i] / 255;
+    count++;
+    if (v > FLAT_ALPHA_LOW && v < FLAT_ALPHA_HIGH) band++;
+  }
+  return count === 0 ? 0 : band / count;
+}
+
 /** The console message for a non-ok verdict, or null when the result is fine. */
 export function outputAlphaWarning(verdict: OutputAlphaVerdict): string | null {
   switch (verdict) {

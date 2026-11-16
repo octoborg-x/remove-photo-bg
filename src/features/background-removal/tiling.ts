@@ -53,6 +53,12 @@ export const TILING_MIN_LONG_SIDE = 1024;
  *  starts to visibly soften. */
 export const TILING_UPSCALE_TRIGGER = 2.5;
 
+/** Soft-edge share (fraction of output pixels in the 0.02..0.98 alpha band) above
+ *  which an edge is "soft" and tiling is worth offering. Measured on the three
+ *  reference cut-outs: a crisp edge reads 0.021–0.029, a blurred one 0.084–0.116,
+ *  at every output size — so this sits in the empty middle of that gap. */
+export const TILING_SOFT_EDGE_MIN = 0.05;
+
 /**
  * Plans a `grid` x `grid` set of overlapping tiles covering `imageWidth` x
  * `imageHeight`. Each interior seam sits at an even fraction of the image and
@@ -232,7 +238,7 @@ export interface TilingRecommendation {
   recommended: boolean;
   /** The grid to suggest (2 when recommended, otherwise 1 = off). */
   suggestedGrid: TileGrid;
-  /** One-line, user-facing reason (shown in the notification). */
+  /** One-line, user-facing reason (shown in the sidebar info panel). */
   reason: string;
 }
 
@@ -260,7 +266,7 @@ export function recommendTiling(input: TilingRecommendationInput): TilingRecomme
       reason: `The mask is only upscaled ${upscale.toFixed(1)}x here, so tiling would cost extra time for little gain.`,
     };
   }
-  if (input.softEdgeShare !== undefined && input.softEdgeShare < 0.01) {
+  if (input.softEdgeShare !== undefined && input.softEdgeShare < TILING_SOFT_EDGE_MIN) {
     return {
       recommended: false,
       suggestedGrid: 1,

@@ -139,7 +139,7 @@ describe('TileStitcher', () => {
 
 describe('recommendTiling', () => {
   it('recommends 2x2 for a large, soft-edged photo', () => {
-    const r = recommendTiling({ imageWidth: 1280, imageHeight: 1920, softEdgeShare: 0.024 });
+    const r = recommendTiling({ imageWidth: 1280, imageHeight: 1920, softEdgeShare: 0.11 });
     expect(r.recommended).toBe(true);
     expect(r.suggestedGrid).toBe(2);
     expect(r.reason).toMatch(/upscaled 3\.8x/);
@@ -159,9 +159,15 @@ describe('recommendTiling', () => {
   });
 
   it('does not recommend when the first mask is already crisp', () => {
-    const r = recommendTiling({ imageWidth: 1280, imageHeight: 1920, softEdgeShare: 0.002 });
+    const r = recommendTiling({ imageWidth: 1280, imageHeight: 1920, softEdgeShare: 0.025 });
     expect(r.recommended).toBe(false);
     expect(r.reason).toMatch(/already crisp/);
+  });
+
+  it('recommends when no first mask exists yet (size alone decides)', () => {
+    const r = recommendTiling({ imageWidth: 1280, imageHeight: 1920 });
+    expect(r.recommended).toBe(true);
+    expect(r.reason).not.toMatch(/soft edge/);
   });
 });
 

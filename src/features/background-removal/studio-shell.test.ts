@@ -41,11 +41,36 @@ describe('studio shell wiring (main.ts + index.html)', () => {
     for (const id of ['tilingSelect', 'refineToggle', 'refineStrength', 'refineEdgeSensitivity']) {
       expect(HTML).toContain(`id="${id}"`);
     }
-    // Each control has an info bubble whose panel it toggles.
-    expect((HTML.match(/class="infoBubble"/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    // Every sidebar control has an info bubble whose panel it toggles.
+    expect((HTML.match(/class="infoBubble"/g) ?? []).length).toBeGreaterThanOrEqual(5);
     expect(HTML).toContain('data-info-target="tilingInfo"');
     expect(HTML).toContain('data-info-target="refineInfo"');
     expect(MAIN).toMatch(/dataset\.infoTarget/);
+  });
+
+  it('hides every explanatory hint behind its info icon', () => {
+    // No hint text is visible by default: the prose lives inside a `hidden`
+    // info panel, so the sidebar shows controls only until the "?" is clicked.
+    for (const id of ['providerInfo', 'maskThresholdInfo', 'maskFeatherInfo', 'tilingInfo', 'refineInfo']) {
+      expect(HTML).toMatch(new RegExp(`id="${id}" class="infoPanel" hidden`));
+    }
+    // The old always-visible hint lines are gone.
+    expect(HTML).not.toContain('>Higher values trim translucent halo noise.<');
+    expect(HTML).not.toContain('>Softens edge transitions for fur and glass.<');
+    expect(HTML).not.toMatch(/class="hint block text-\[11px\] text-slate-400 mt-1" id="tilingHint">/);
+  });
+
+  it('shows the tiling recommendation in the info panel, never a toast', () => {
+    // The recommendation is stored and rendered into the tiling info panel.
+    expect(MAIN).toMatch(/tilingAdvice = rec\.recommended/);
+    expect(MAIN).toMatch(/tilingAdviceEl\.hidden = !tilingAdvice/);
+    // It is fed the measured soft-edge share, which is what gates it.
+    expect(MAIN).toMatch(/maybeRecommendTiling\(transitionBandFraction\(/);
+    // The old toast offer (with an action button) is gone.
+    expect(MAIN).not.toMatch(/title: 'Sharpen fine edges with tiled inference\?'/);
+    expect(MAIN).not.toMatch(/tilingOfferedFor/);
+    expect(HTML).toContain('id="tilingApply"');
+    expect(MAIN).toMatch(/tilingApplyBtn\?\.addEventListener\('click'/);
   });
 
   it('routes a tiled run through the stitcher and the shared composite path', () => {

@@ -693,8 +693,9 @@
                 <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
               </svg>
             </button>
-            <!-- Show/hide the result settings sidebar (like the console toggle).
-                 Only meaningful in the Result tab, so it appears there. -->
+            <!-- Show/hide the engine settings sidebar (like the console toggle).
+                 The sidebar is visible in every tab, so this button is always
+                 available. -->
             <button
               id="sidebarToggle"
               type="button"
@@ -703,11 +704,26 @@
               aria-pressed="true"
               aria-controls="settingsSidebar"
               title="Show or hide the settings sidebar"
-              hidden
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="3" y="4" width="18" height="16" rx="2" />
                 <line x1="9" y1="4" x2="9" y2="20" />
+              </svg>
+            </button>
+            <!-- Show/hide the export (format + download) bar at the bottom of the
+                 editor. Only meaningful once a cut-out exists. -->
+            <button
+              id="exportToggle"
+              type="button"
+              class="studioBarBtn"
+              aria-label="Show export bar"
+              aria-pressed="false"
+              aria-controls="exportBar"
+              title="Show or hide the export bar"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1" />
+                <path d="M12 3v12" /><path d="m7 10 5 5 5-5" />
               </svg>
             </button>
             <button id="studioThemeToggle" type="button" class="themeToggle" aria-label="Switch colour theme">
@@ -747,93 +763,12 @@
                 <button id="tabProcessing" class="editorTab" role="tab" data-tab="processing" aria-selected="false" aria-controls="panelProcessing" disabled>Processing</button>
                 <button id="tabResult" class="editorTab" role="tab" data-tab="result" aria-selected="false" aria-controls="panelResult" disabled>Result</button>
                 <button id="tabCompare" class="editorTab" role="tab" data-tab="compare" aria-selected="false" aria-controls="panelCompare" disabled>Compare</button>
+                <button id="tabLibrary" class="editorTab" role="tab" data-tab="library" aria-selected="false" aria-controls="panelLibrary">Library</button>
               </div>
-              <div class="studioTabBody">
-            <!-- Input tab: the chosen photo + the drop zone (default editor view) -->
-            <div id="panelInput" class="editorPanel" role="tabpanel" aria-labelledby="tabInput">
-            <!-- Selected photo preview (hidden until a photo is chosen). Clicking
-                 it re-opens the system file picker, so the drop zone can be hidden
-                 once a photo exists. -->
-            <div
-              id="inputPreview"
-              class="inputPreview"
-              hidden
-              role="button"
-              tabindex="0"
-              aria-label="Selected photo — click to choose a different image"
-              title="Click to choose a different image"
-            >
-              <img id="inputPreviewImg" class="inputPreviewImg" alt="Selected photo" />
-              <span class="inputPreviewBadge">Selected photo</span>
-              <span class="inputPreviewHint">Click to change image</span>
-            </div>
-            <!-- Drop Zone: Styled strictly like Image 3 (No "Choose a photo" title) -->
-            <div
-              id="dropZone"
-              class="dropZone group relative flex flex-col items-center justify-center p-8 sm:p-12 border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-3xl bg-white hover:bg-blue-50/30 text-center cursor-pointer transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/20"
-              role="button"
-              tabindex="0"
-              aria-label="Drop your image here, or browse"
-            >
-              <!-- Center Image Icon matching Image 3 (violet→blue theme accent) -->
-              <div class="dzIcon w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-100 to-blue-50 border border-violet-200/80 shadow-sm flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                <svg class="w-10 h-10 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <defs>
-                    <linearGradient id="dzIconGrad" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stop-color="#8b5cf6" />
-                      <stop offset="1" stop-color="#2563eb" />
-                    </linearGradient>
-                  </defs>
-                  <rect x="3" y="3" width="18" height="18" rx="4" fill="url(#dzIconGrad)" fill-opacity="0.14" stroke="url(#dzIconGrad)" />
-                  <circle cx="8.5" cy="8.5" r="1.75" fill="#8b5cf6" stroke="none" />
-                  <path d="M21 16l-5-5-5.5 6-2.5-2.5L3 18.5" stroke="url(#dzIconGrad)" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </div>
-
-              <!-- Typography matching Image 3 -->
-              <p class="text-base sm:text-lg font-semibold text-slate-800 mb-1.5">
-                Drop your image here, or <span class="text-blue-600 underline underline-offset-4 hover:text-blue-700">browse</span>
-              </p>
-              <p class="text-xs sm:text-sm text-slate-400 font-medium">
-                Supports: PNG, JPG, JPEG, WEBP <span class="hidden sm:inline">· Max <span id="limitBytes">20 MB</span> · Up to <span id="limitSide">4096</span> px</span>
-              </p>
-            </div>
-            </div>
-
-            <!-- Processing tab: animated "AI is working" visual + progress -->
-            <div id="panelProcessing" class="editorPanel" role="tabpanel" aria-labelledby="tabProcessing" hidden>
-              <div class="procWallpaper">
-                <div class="procGrid" aria-hidden="true"></div>
-                <div class="procGlow" aria-hidden="true"></div>
-                <div class="procScan" aria-hidden="true"></div>
-                <div class="procStage">
-                  <div class="procSpinner" aria-hidden="true">
-                    <span class="procSpinnerTrack"></span>
-                    <span class="procSpinnerArc"></span>
-                    <svg class="procSpinnerIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-                      <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" stroke-linecap="round" />
-                      <circle cx="12" cy="12" r="3.2" />
-                    </svg>
-                  </div>
-                  <div class="procStatus">
-                    <span class="procStatusDot" aria-hidden="true"></span>
-                    <span class="procStatusText">Removing background with on-device AI…</span>
-                  </div>
-                </div>
-                <div class="procProgress">
-                  <span id="procPct" class="procProgressPct">0%</span>
-                  <span id="procStageLabel" class="procProgressLabel">Preparing</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Result tab: the generated cut-out -->
-            <div id="panelResult" class="editorPanel" role="tabpanel" aria-labelledby="tabResult" hidden>
-              <section id="outputSection" class="relative rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-7 shadow-sm transition-all" hidden aria-label="Background-removed output">
-              <!-- Result workspace: the engine settings sidebar on the left, the
-                   cut-out preview on the right. The sidebar collapses (chevron in
-                   its header) and drag-resizes up to 50% of the workspace. -->
-              <div id="resultWorkspace" class="resultWorkspace">
+              <!-- Workspace: the shared engine sidebar (visible in every tab) on the left,
+                   the active tab's panel on the right. On small screens the
+                   sidebar slides over the panel instead of reflowing it. -->
+              <div id="studioWorkspace" class="studioWorkspace">
               <aside id="settingsSidebar" class="settingsSidebar" aria-label="Studio engine settings">
                 <div class="sidebarHead">
                   <div class="sidebarHeadTitle">
@@ -905,6 +840,79 @@
                       />
                       <span class="text-[10px] text-slate-400">Softens edge transitions for fur and glass.</span>
                     </div>
+
+                    <!-- Tiled inference: split the photo into overlapping tiles so
+                         the 512px mask is upscaled less, sharpening fine edges. -->
+                    <div class="sidebarField" id="tilingField">
+                      <div class="sidebarFieldHead">
+                        <label for="tilingSelect" class="font-semibold text-slate-700">Tiled inference</label>
+                        <span class="hint font-mono text-blue-600 font-bold" id="tilingValue">Off</span>
+                        <button
+                          type="button"
+                          class="infoBubble"
+                          aria-label="About tiled inference"
+                          aria-expanded="false"
+                          aria-controls="tilingInfo"
+                          data-info-target="tilingInfo"
+                        >?</button>
+                      </div>
+                      <select id="tilingSelect" class="sidebarSelect">
+                        <option value="off">Off — one 512px pass (fastest)</option>
+                        <option value="2">2 × 2 tiles — sharper edges (~4× slower)</option>
+                        <option value="3">3 × 3 tiles — maximum detail (~9× slower)</option>
+                        <option value="4">4 × 4 tiles — extreme detail (~16× slower)</option>
+                      </select>
+                      <span class="hint block text-[11px] text-slate-400 mt-1" id="tilingHint">Runs the model on overlapping tiles and crossfades the masks. Best for large photos whose mask is upscaled a lot.</span>
+                      <div id="tilingInfo" class="infoPanel" hidden>
+                        <p><strong>Why it helps.</strong> The model always works at 512 × 512, so a big photo produces a mask that must be stretched to full size. Running 2 × 2 overlapping tiles makes each mask stretch about half as far, so fine edges (hair, glass, thin structures) come out crisper.</p>
+                        <p><strong>Cost.</strong> Each tile is a full 512px run, so 2 × 2 is about four times slower and 3 × 3 about nine times. Tiles are processed one at a time and stitched in a stream, so memory stays flat.</p>
+                        <p><strong>Stitching.</strong> Neighbouring tiles overlap by 25% and are blended with a linear crossfade whose weights sum to one, so there is no visible seam.</p>
+                        <p><strong>Tip.</strong> Below ~1024px on the long side the model already sees the photo at about 1×, so tiling adds cost with little gain.</p>
+                      </div>
+                    </div>
+
+                    <!-- Edge refinement: the guided-filter stage on the soft mask. -->
+                    <div class="sidebarField" id="refineField">
+                      <div class="sidebarFieldHead">
+                        <label for="refineToggle" class="font-semibold text-slate-700">Edge refinement</label>
+                        <span class="hint font-mono text-blue-600 font-bold" id="refineValue">On</span>
+                        <button
+                          type="button"
+                          class="infoBubble"
+                          aria-label="About edge refinement"
+                          aria-expanded="false"
+                          aria-controls="refineInfo"
+                          data-info-target="refineInfo"
+                        >?</button>
+                      </div>
+                      <select id="refineToggle" class="sidebarSelect">
+                        <option value="on">On — guided-filter edge sharpening</option>
+                        <option value="off">Off — raw Stage-1 mask (worst case)</option>
+                      </select>
+
+                      <div class="sidebarSubField" id="refineStrengthField">
+                        <div class="flex items-center justify-between mb-1">
+                          <label for="refineStrength" class="font-semibold text-slate-700">Refine strength</label>
+                          <span class="hint font-mono text-blue-600 font-bold" id="refineStrengthValue">0.50</span>
+                        </div>
+                        <input type="range" id="refineStrength" min="0" max="100" step="1" value="50" class="w-full accent-blue-600" title="Blend between the raw mask (0) and the fully filtered mask (1)" />
+                      </div>
+
+                      <div class="sidebarSubField" id="refineSensitivityField">
+                        <div class="flex items-center justify-between mb-1">
+                          <label for="refineEdgeSensitivity" class="font-semibold text-slate-700">Edge sensitivity</label>
+                          <span class="hint font-mono text-blue-600 font-bold" id="refineEdgeSensitivityValue">1.00</span>
+                        </div>
+                        <input type="range" id="refineEdgeSensitivity" min="5" max="400" step="5" value="100" class="w-full accent-blue-600" title="Higher follows image edges more closely (sharper); lower smooths more" />
+                      </div>
+
+                      <div id="refineInfo" class="infoPanel" hidden>
+                        <p><strong>What it does.</strong> After the model returns a soft mask, a guided filter (guided by the original photo) snaps the mask to the real image edges. This stage is skipped entirely when refinement is Off.</p>
+                        <p><strong>Strength.</strong> Blends the raw mask (0) with the fully filtered mask (1). <code>?refine=on&amp;refineStrength=1</code> gives the sharpest, most filtered edges; <code>?refine=off</code> gives the raw Stage-1 bilinear mask — the worst case.</p>
+                        <p><strong>Edge sensitivity.</strong> How aggressively a boundary is treated as real versus noise. Above 1 follows image edges more closely (sharper, less smoothing); below 1 smooths more. <code>?refineEdgeSensitivity=2</code> is a good sharp setting.</p>
+                        <p><strong>URL equivalents.</strong> Every control here maps to a query parameter: <code>?refine=off</code>, <code>?refine=on</code>, <code>?refineStrength=1</code>, <code>?refineEdgeSensitivity=2</code>, <code>?refineRadius</code>, <code>?refineEpsilon</code>, <code>?refineCleanup=0</code>.</p>
+                      </div>
+                    </div>
                   </div>
 
                   <!-- Re-run inference with the current engine settings, then
@@ -935,6 +943,85 @@
                   <span class="sidebarResizeGrip" aria-hidden="true"></span>
                 </div>
               </aside>
+              <div class="studioTabBody">
+            <div id="panelInput" class="editorPanel" role="tabpanel" aria-labelledby="tabInput">
+            <!-- Selected photo preview (hidden until a photo is chosen). Clicking
+                 it re-opens the system file picker, so the drop zone can be hidden
+                 once a photo exists. -->
+            <div
+              id="inputPreview"
+              class="inputPreview"
+              hidden
+              role="button"
+              tabindex="0"
+              aria-label="Selected photo — click to choose a different image"
+              title="Click to choose a different image"
+            >
+              <img id="inputPreviewImg" class="inputPreviewImg" alt="Selected photo" />
+              <span class="inputPreviewBadge">Selected photo</span>
+              <span class="inputPreviewHint">Click to change image</span>
+            </div>
+            <!-- Drop Zone: Styled strictly like Image 3 (No "Choose a photo" title) -->
+            <div
+              id="dropZone"
+              class="dropZone group relative flex flex-col items-center justify-center p-8 sm:p-12 border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-3xl bg-white hover:bg-blue-50/30 text-center cursor-pointer transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/20"
+              role="button"
+              tabindex="0"
+              aria-label="Drop your image here, or browse"
+            >
+              <!-- Center Image Icon matching Image 3 (violet→blue theme accent) -->
+              <div class="dzIcon w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-100 to-blue-50 border border-violet-200/80 shadow-sm flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
+                <svg class="w-10 h-10 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <defs>
+                    <linearGradient id="dzIconGrad" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stop-color="#8b5cf6" />
+                      <stop offset="1" stop-color="#2563eb" />
+                    </linearGradient>
+                  </defs>
+                  <rect x="3" y="3" width="18" height="18" rx="4" fill="url(#dzIconGrad)" fill-opacity="0.14" stroke="url(#dzIconGrad)" />
+                  <circle cx="8.5" cy="8.5" r="1.75" fill="#8b5cf6" stroke="none" />
+                  <path d="M21 16l-5-5-5.5 6-2.5-2.5L3 18.5" stroke="url(#dzIconGrad)" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </div>
+
+              <!-- Typography matching Image 3 -->
+              <p class="text-base sm:text-lg font-semibold text-slate-800 mb-1.5">
+                Drop your image here, or <span class="text-blue-600 underline underline-offset-4 hover:text-blue-700">browse</span>
+              </p>
+              <p class="text-xs sm:text-sm text-slate-400 font-medium">
+                Supports: PNG, JPG, JPEG, WEBP <span class="hidden sm:inline">· Max <span id="limitBytes">20 MB</span> · Up to <span id="limitSide">4096</span> px</span>
+              </p>
+            </div>
+            </div>
+            <div id="panelProcessing" class="editorPanel" role="tabpanel" aria-labelledby="tabProcessing" hidden>
+              <div class="procWallpaper">
+                <div class="procGrid" aria-hidden="true"></div>
+                <div class="procGlow" aria-hidden="true"></div>
+                <div class="procScan" aria-hidden="true"></div>
+                <div class="procStage">
+                  <div class="procSpinner" aria-hidden="true">
+                    <span class="procSpinnerTrack"></span>
+                    <span class="procSpinnerArc"></span>
+                    <svg class="procSpinnerIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                      <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" stroke-linecap="round" />
+                      <circle cx="12" cy="12" r="3.2" />
+                    </svg>
+                  </div>
+                  <div class="procStatus">
+                    <span class="procStatusDot" aria-hidden="true"></span>
+                    <span class="procStatusText">Removing background with on-device AI…</span>
+                  </div>
+                </div>
+                <div class="procProgress">
+                  <span id="procPct" class="procProgressPct">0%</span>
+                  <span id="procStageLabel" class="procProgressLabel">Preparing</span>
+                </div>
+              </div>
+            </div>
+            <div id="panelResult" class="editorPanel" role="tabpanel" aria-labelledby="tabResult" hidden>
+              <section id="outputSection" class="relative rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-7 shadow-sm transition-all" hidden aria-label="Background-removed output">
+              
+              
               <div class="resultMain">
               <!-- Relative Image Container -->
               <div id="outputFrame" class="relative rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-100 shadow-inner group/output">
@@ -979,26 +1066,7 @@
               </div>
 
               <!-- Export Controls & Download Button -->
-              <div class="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-5 border-t border-slate-100">
-                <fieldset class="formatPicker">
-                  <legend class="sr-only">Output Format</legend>
-                  <div id="formatOptions" class="formatOptions"></div>
-                </fieldset>
-
-                <div class="exportActions">
-                  <a
-                    id="downloadImage"
-                    class="btn primary w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-on-accent font-semibold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 text-center"
-                    download
-                    hidden
-                  >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                    </svg>
-                    <span>Download Image</span>
-                  </a>
-                </div>
-              </div>
+              
 
               <!-- Report a quality problem: an explicit, optional action in the
                    result area. Diagnostics are opt-in and shown before sending. -->
@@ -1064,11 +1132,9 @@
                 </form>
               </div>
               </div>
-              </div>
+              
             </section>
             </div>
-
-            <!-- Compare tab: interactive original ↔ result slider -->
             <div id="panelCompare" class="editorPanel" role="tabpanel" aria-labelledby="tabCompare" hidden>
               <div class="rounded-3xl border border-slate-200/80 p-5 sm:p-6 bg-slate-50/60">
                 <figure id="studioCompare" class="compare group" data-compare data-pos="50">
@@ -1089,12 +1155,49 @@
                 </figure>
               </div>
             </div>
-
+            <div id="panelLibrary" class="editorPanel" role="tabpanel" aria-labelledby="tabLibrary" hidden>
+              <div class="libraryPanel">
+                <div class="libraryHead">
+                  <h3 class="libraryTitle">This session</h3>
+                  <button id="libraryClear" type="button" class="libraryClear">Clear</button>
+                </div>
+                <p class="libraryHint">Photos you process stay on this device, in this tab only. They are gone when you close or reload the page.</p>
+                <div id="libraryGrid" class="libraryGrid"></div>
+                <p id="libraryEmpty" class="libraryEmpty">Nothing here yet — open the Photo tab and drop in an image.</p>
               </div>
+            </div>
+            </div>
+              </div>
+
+              <!-- Export bar: output format + download. Shown once a cut-out
+                   exists; toggled from the studio top bar. -->
+              <div id="exportBar" class="exportBar" hidden>
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-5 border-t border-slate-100">
+                <fieldset class="formatPicker">
+                  <legend class="sr-only">Output Format</legend>
+                  <div id="formatOptions" class="formatOptions"></div>
+                </fieldset>
+
+                <div class="exportActions">
+                  <a
+                    id="downloadImage"
+                    class="btn primary w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-on-accent font-semibold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 text-center"
+                    download
+                    hidden
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                    </svg>
+                    <span>Download Image</span>
+                  </a>
+                </div>
+              </div>
+              </div>
+              <div id="recovery" class="recovery rounded-2xl p-4 bg-red-50 border border-red-200 text-red-900 text-sm" hidden></div>
             </div>
 
             <!-- Recovery Fallback UI -->
-            <div id="recovery" class="recovery rounded-2xl p-4 bg-red-50 border border-red-200 text-red-900 text-sm" hidden></div>
+            
           </div>
 
           <!-- Right Column: Console (compact, categorised) -->

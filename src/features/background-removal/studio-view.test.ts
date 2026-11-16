@@ -92,6 +92,13 @@ describe('reduceStudio tab transitions', () => {
     expect(tabEnabled(after, 'compare')).toBe(true);
   });
 
+  it('the library tab is always available, even before a photo is chosen', () => {
+    const empty = initialStudioView();
+    expect(tabEnabled(empty, 'library')).toBe(true);
+    const running = run([{ type: 'select-image' }, { type: 'run-start' }]);
+    expect(tabEnabled(running, 'library')).toBe(true);
+  });
+
   it('show-background keeps the current tab (result or compare)', () => {
     const onResult = run([{ type: 'run-start' }, { type: 'result' }, { type: 'show-background' }]);
     expect(onResult.tab).toBe('result');

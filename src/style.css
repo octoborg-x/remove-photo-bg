@@ -692,6 +692,23 @@
   .toast .toastClose:hover {
     color: var(--color-slate-700);
   }
+  /* Optional single action button (e.g. "Run 2x2 tiles" on a tiling tip). */
+  .toast .toastAction {
+    flex: none;
+    align-self: center;
+    border: 0;
+    border-radius: 0.55rem;
+    padding: 0.35rem 0.7rem;
+    background: var(--color-blue-600);
+    color: #fff;
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .toast .toastAction:hover {
+    background: var(--color-blue-700);
+  }
 
   /* ——— Recovery panel ——— */
   .recovery .actions {
@@ -1268,14 +1285,17 @@
   #outputFrame #outputBox {
     min-height: 0 !important;
   }
-  /* ——— Result workspace: engine settings sidebar (left) + preview (right) ———
-     The sidebar collapses to a thin rail via the chevron in its header, and its
-     right edge drag-resizes up to 50% of the workspace (clamp in main.ts). */
-  .resultWorkspace {
+  /* ——— Studio workspace: engine settings sidebar (left) + active panel (right).
+     The sidebar is shared by every editor tab; it collapses to a thin rail via
+     the chevron in its header, and its right edge drag-resizes up to 50% of the
+     workspace (clamp in main.ts). */
+  .studioWorkspace {
+    flex: 1;
+    min-height: 0;
     display: flex;
     align-items: stretch;
     gap: 1rem;
-    min-height: 0;
+    position: relative;
   }
   .resultMain {
     flex: 1;
@@ -1391,6 +1411,242 @@
   body.sidebar-resizing * {
     cursor: col-resize !important;
     user-select: none !important;
+  }
+
+  /* ——— Sidebar fields: tiling + edge refinement ——— */
+  .sidebarField {
+    padding-top: 0.75rem;
+    margin-top: 0.25rem;
+    border-top: 1px solid var(--color-slate-200);
+  }
+  .sidebarFieldHead {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.35rem;
+  }
+  .sidebarFieldHead label {
+    flex: 1;
+    min-width: 0;
+  }
+  .sidebarSelect {
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    background: var(--color-white);
+    border: 1px solid var(--color-slate-200);
+    border-radius: 0.75rem;
+    color: var(--color-slate-800);
+    font-size: 0.72rem;
+    font-weight: 500;
+  }
+  .sidebarSubField {
+    margin-top: 0.6rem;
+  }
+  .sidebarSubField[hidden] {
+    display: none;
+  }
+
+  /* The small "?" affordance next to a control label. */
+  .infoBubble {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 9999px;
+    border: 1px solid var(--color-slate-300);
+    background: var(--color-white);
+    color: var(--color-slate-500);
+    font-size: 0.66rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .infoBubble:hover,
+  .infoBubble[aria-expanded='true'] {
+    background: var(--color-blue-600);
+    border-color: var(--color-blue-600);
+    color: #fff;
+  }
+  .infoBubble:focus-visible {
+    outline: 2px solid var(--color-blue-500);
+    outline-offset: 1px;
+  }
+  /* The expanded explanation, in place under the control it belongs to. */
+  .infoPanel {
+    margin-top: 0.5rem;
+    padding: 0.6rem 0.7rem;
+    border-radius: 0.7rem;
+    border: 1px solid var(--color-blue-200, #bfdbfe);
+    background: var(--color-blue-50, #eff6ff);
+    color: var(--color-slate-700);
+    font-size: 0.7rem;
+    line-height: 1.5;
+  }
+  .infoPanel[hidden] {
+    display: none;
+  }
+  .infoPanel p + p {
+    margin-top: 0.5rem;
+  }
+  .infoPanel code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.66rem;
+    background: var(--color-white);
+    border: 1px solid var(--color-slate-200);
+    border-radius: 0.3rem;
+    padding: 0 0.25rem;
+  }
+  /* A control the current mode makes irrelevant (e.g. refine sliders when the
+     stage is off) is dimmed and disabled, not hidden — its value is remembered. */
+  .sidebarField[data-disabled='true'] .sidebarSubField {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  /* ——— Export bar: output format + download, below the workspace ——— */
+  .exportBar {
+    flex: none;
+    margin-top: 0.75rem;
+  }
+  .exportBar[hidden] {
+    display: none;
+  }
+  .exportBar .formatPicker {
+    margin: 0;
+  }
+  .exportBar .exportActions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* ——— Library tab: this session's images ——— */
+  .libraryPanel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+  .libraryHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.35rem;
+  }
+  .libraryTitle {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--color-slate-900);
+  }
+  .libraryClear {
+    padding: 0.3rem 0.7rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-white);
+    color: var(--color-slate-600);
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .libraryClear:hover {
+    background: var(--color-slate-100);
+  }
+  .libraryHint {
+    font-size: 0.7rem;
+    color: var(--color-slate-400);
+    margin-bottom: 0.75rem;
+  }
+  .libraryGrid {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: 0.75rem;
+    align-content: start;
+  }
+  .libraryCard {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.5rem;
+    border-radius: 0.8rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-white);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .libraryCard:hover {
+    border-color: var(--color-blue-300, #93c5fd);
+  }
+  .libraryCard[data-active='true'] {
+    border-color: var(--color-blue-500);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-blue-500) 22%, transparent);
+  }
+  .libraryThumb {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: contain;
+    border-radius: 0.55rem;
+    background-color: var(--color-slate-100);
+    background-image:
+      linear-gradient(45deg, var(--color-slate-200) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--color-slate-200) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--color-slate-200) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--color-slate-200) 75%);
+    background-size: 0.75rem 0.75rem;
+    background-position: 0 0, 0 0.375rem, 0.375rem -0.375rem, -0.375rem 0;
+  }
+  .libraryMeta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+  .libraryName {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--color-slate-800);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .libraryDims {
+    font-size: 0.62rem;
+    color: var(--color-slate-400);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .libraryRemove {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.3rem;
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: 9999px;
+    border: 0;
+    background: rgb(15 23 42 / 0.6);
+    color: #fff;
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .libraryRemove:hover {
+    background: rgb(15 23 42 / 0.85);
+  }
+  .libraryEmpty {
+    font-size: 0.75rem;
+    color: var(--color-slate-400);
+    text-align: center;
+    padding: 1.5rem 0;
+  }
+  .libraryEmpty[hidden] {
+    display: none;
   }
   /* A small, indeterminate banner over the already-usable preview while the edge
      refinement sharpens it. No percentage is shown (the stage has none). */

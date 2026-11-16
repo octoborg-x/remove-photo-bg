@@ -62,6 +62,13 @@ jobs:
       # before anything depends on it. Offline; uses only the Python stdlib.
       - name: Verify evaluation set
         run: python3 scripts/eval/build-eval-set.py --verify
+      # The accuracy-benchmark metrics + gate logic must stay correct without a
+      # model or a browser. The self-test builds synthetic masks and asserts the
+      # verdicts, so a broken gate fails the build instead of shipping.
+      - name: Accuracy-benchmark self-test
+        run: |
+          python3 -m pip install --quiet numpy pillow
+          python3 scripts/eval/accuracy-benchmark.py --self-test
 
   wasm-smoke:
     runs-on: ubuntu-latest

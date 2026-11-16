@@ -1,0 +1,38 @@
+{
+  "_comment": "Thresholds for the accuracy benchmark. Mirrors docs/accuracy-benchmark.md §5; the doc is the single source of truth. Constants the app itself uses are duplicated in src/features/diagnostics/{output-alpha,raw-mask-stats}.ts and asserted equal by scripts/eval/accuracy-benchmark.py --self-test.",
+  "universal": {
+    "_comment": "§5.1 — every image, every provider.",
+    "min_fg_frac": 0.01,
+    "min_bimodal_tail": 0.40,
+    "min_alpha_max": 0.902,
+    "max_opaque_frac": 0.995,
+    "max_speckle_frac": 0.05
+  },
+  "segmentation": {
+    "_comment": "§5.2 — per image; per-category overrides below.",
+    "min_largest_component_frac": 0.50,
+    "max_border_fg_frac": 0.02,
+    "review_hole_area_frac": 0.02,
+    "min_boundary_bandwidth_px": 0.5,
+    "max_boundary_bandwidth_px": 6.0
+  },
+  "perCategory": {
+    "_comment": "Categories whose subjects are legitimately multi-part relax the fragmentation gate (§5.2).",
+    "large": { "min_largest_component_frac": 0.0 },
+    "complex-bg": { "min_largest_component_frac": 0.0 }
+  },
+  "accuracy": {
+    "_comment": "§5.3 — Tier-B accuracy floors, applied only where a ground-truth mask exists. Calibrate against the human-label ceiling before using as a hard gate.",
+    "iou": { "fail_below": 0.95, "warn_below": 0.97 },
+    "dice": { "fail_below": 0.97, "warn_below": 0.98 },
+    "mae": { "fail_above": 0.02, "warn_above": 0.01 },
+    "boundary_f": { "fail_below": 0.85, "warn_below": 0.90 },
+    "fg_recall": { "fail_below": 0.90, "warn_below": 0.95 },
+    "fg_precision": { "fail_below": 0.90, "warn_below": 0.95 }
+  },
+  "timingMs": {
+    "_comment": "§5.4 — per-provider latency budget on the warm mean infer_ms. Latency is a pass/fail gate, never a quality ranking.",
+    "wasm": [{ "maxLongSide": 100000, "fail_above": 8000, "warn_above": 6000 }],
+    "webgpu": [{ "maxLongSide": 100000, "fail_above": 2000, "warn_above": 1500 }]
+  }
+}

@@ -147,6 +147,11 @@ if every applicable gate holds. The gates are:
 7. `infer_ms ≤ budget` — per-provider latency ceiling (§5.4).
 8. `verdict ∈ {ok}` for a clean pass; `washed`/`kept`/`empty` are failures.
 
+`accuracy-benchmark.py` writes the applicable values into each row as
+`min_fg_frac`, `min_bimodal_tail`, `min_alpha_max`, `max_speckle_frac` and
+`max_infer_ms`, so a checklist row states the bar it was judged against and the
+row can be read without opening `eval/thresholds.json`.
+
 ### 3.3 Execution success
 
 | Field | Definition |

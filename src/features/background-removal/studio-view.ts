@@ -1,9 +1,9 @@
 // Pure presentation state for the Studio editor, kept out of main.ts so the tab
 // transitions and the console scrubber are unit-testable without a DOM.
 
-export type StudioTab = 'input' | 'processing' | 'result' | 'compare';
+export type StudioTab = 'input' | 'processing' | 'result' | 'compare' | 'library';
 
-export const STUDIO_TABS: readonly StudioTab[] = ['input', 'processing', 'result', 'compare'];
+export const STUDIO_TABS: readonly StudioTab[] = ['input', 'processing', 'result', 'compare', 'library'];
 
 export interface StudioViewState {
   tab: StudioTab;
@@ -71,6 +71,8 @@ export function reduceStudio(state: StudioViewState, ev: StudioEvent): StudioVie
 
 export function tabEnabled(state: StudioViewState, tab: StudioTab): boolean {
   if (tab === 'input') return true;
+  // The session library is always available — it is the user's own history.
+  if (tab === 'library') return true;
   if (tab === 'processing') return state.running;
   // Both 'result' and 'compare' need a finished cut-out.
   return state.hasResult;

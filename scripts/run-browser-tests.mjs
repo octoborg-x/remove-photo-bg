@@ -1509,9 +1509,10 @@ try {
     await page.close();
   }
 
-  // ——— Scenario: studio result sidebar (settings) ———
-  // The gear popover is gone; the engine controls live in a left sidebar in the
-  // result tab that collapses via a chevron and drag-resizes up to 50%.
+  // ——— Scenario: studio engine sidebar (settings) ———
+  // The gear popover is gone; the engine controls live in a left sidebar shared
+  // by every editor tab (Photo/Processing/Result/Compare/Library). It collapses
+  // via a chevron and drag-resizes up to 50% of the workspace.
   {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 900 });
@@ -1527,33 +1528,29 @@ try {
       gearGone: !document.getElementById('settingsGearBtn') && !document.getElementById('advancedMenu'),
       photoTab: document.getElementById('tabInput')?.textContent?.trim(),
       barToggleHiddenOnPhoto: document.getElementById('sidebarToggle')?.hidden,
-      sidebarLeftOfMain: (() => {
+      // The sidebar is a sibling of the tab body (the panel area), always
+      // visible — not nested inside the Result panel as it once was.
+      sidebarLeftOfBody: (() => {
         const sb = document.getElementById('settingsSidebar')?.getBoundingClientRect();
-        const rm = document.querySelector('.resultMain')?.getBoundingClientRect();
-        return !!sb && !!rm && sb.right <= rm.left + 1;
+        const body = document.querySelector('.studioTabBody')?.getBoundingClientRect();
+        return !!sb && !!body && sb.right <= body.left + 1;
+      })(),
+      sidebarVisibleOnPhotoTab: (() => {
+        const sb = document.getElementById('settingsSidebar');
+        return !!sb && sb.offsetParent !== null && sb.getBoundingClientRect().width > 0;
       })(),
     }));
     record('the studio input tab reads "Photo"', markup.photoTab === 'Photo', markup.photoTab);
     record(
-      'the result engine controls are a left sidebar (gear popover removed)',
-      markup.hasSidebar && markup.hasToggle && markup.hasCollapse && markup.hasResize && markup.gearGone && markup.sidebarLeftOfMain,
-      `sidebar ${markup.hasSidebar} toggle ${markup.hasToggle} collapse ${markup.hasCollapse} resize ${markup.hasResize} gearGone ${markup.gearGone} leftOfMain ${markup.sidebarLeftOfMain}`,
+      'the engine controls are a shared left sidebar (gear popover removed)',
+      markup.hasSidebar && markup.hasToggle && markup.hasCollapse && markup.hasResize && markup.gearGone && markup.sidebarLeftOfBody,
+      `sidebar ${markup.hasSidebar} toggle ${markup.hasToggle} collapse ${markup.hasCollapse} resize ${markup.hasResize} gearGone ${markup.gearGone} leftOfBody ${markup.sidebarLeftOfBody}`,
     );
     record(
-      'the settings sidebar show/hide button appears only in the Result tab',
-      markup.barToggleHiddenOnPhoto === true,
-      `hidden on photo tab: ${markup.barToggleHiddenOnPhoto}`,
+      'the settings sidebar is available in every tab (visible on the Photo tab)',
+      markup.barToggleHiddenOnPhoto === false && markup.sidebarVisibleOnPhotoTab === true,
+      `toggle hidden on photo tab: ${markup.barToggleHiddenOnPhoto} sidebar visible: ${markup.sidebarVisibleOnPhotoTab}`,
     );
-
-    // Make the result tab visible (its panel starts hidden until a run finishes).
-    await page.evaluate(() => {
-      const panel = document.getElementById('panelResult');
-      panel.hidden = false;
-      panel.style.display = 'block';
-      document.getElementById('outputSection').hidden = false;
-      document.getElementById('sidebarToggle').hidden = false;
-    });
-    await sleep(250);
 
     // The top-bar show/hide button collapses the sidebar and stays in sync.
     const barToggle = await page.evaluate(async () => {
@@ -1596,7 +1593,7 @@ try {
     // Drag the right edge: grows toward the 50% cap, then shrinks but stays usable.
     const resize = await page.evaluate(async () => {
       const sb = document.getElementById('settingsSidebar');
-      const ws = document.getElementById('resultWorkspace');
+      const ws = document.getElementById('studioWorkspace');
       const h = document.getElementById('sidebarResize');
       const r = h.getBoundingClientRect();
       const x0 = r.left + r.width / 2;

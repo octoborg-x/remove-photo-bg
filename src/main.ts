@@ -33,13 +33,27 @@ import {
   outputAlphaStats,
   classifyOutputAlpha,
   outputAlphaWarning,
+  transitionBandFraction,
   formatOutputAlphaStats,
 } from './features/diagnostics/output-alpha';
 import {
   buildDiagnosticReport,
   formatDiagnosticReport,
 } from './features/diagnostics/diagnostic-report';
-import { cropMaskFloat, alphaToBytes, lumaFromRgba } from './features/background-removal/mask-resize';
+import { cropMaskFloat, alphaToBytes, lumaFromRgba, resizeMaskFloat } from './features/background-removal/mask-resize';
+import {
+  planTiles,
+  TileStitcher,
+  recommendTiling,
+  TILING_MIN_LONG_SIDE,
+  type TileGrid,
+} from './features/background-removal/tiling';
+import {
+  initialSession,
+  reduceSession,
+  activeEntry,
+  type SessionState,
+} from './features/background-removal/session-library';
 import { RefinementRunner } from './features/background-removal/refinement-client';
 import {
   refinementConfigFromParams,
@@ -172,12 +186,14 @@ const tabButtons: Record<StudioTab, HTMLButtonElement> = {
   processing: document.getElementById('tabProcessing')! as HTMLButtonElement,
   result: document.getElementById('tabResult')! as HTMLButtonElement,
   compare: document.getElementById('tabCompare')! as HTMLButtonElement,
+  library: document.getElementById('tabLibrary')! as HTMLButtonElement,
 };
 const tabPanels: Record<StudioTab, HTMLElement> = {
   input: document.getElementById('panelInput')!,
   processing: document.getElementById('panelProcessing')!,
   result: document.getElementById('panelResult')!,
   compare: document.getElementById('panelCompare')!,
+  library: document.getElementById('panelLibrary')!,
 };
 const compareBeforeEl = document.getElementById('compareBefore')! as HTMLImageElement;
 const compareAfterEl = document.getElementById('compareAfter')! as HTMLImageElement;
@@ -206,8 +222,41 @@ const settingsSidebarEl = document.getElementById('settingsSidebar') as HTMLElem
 const sidebarToggleBtn = document.getElementById('sidebarToggle') as HTMLButtonElement | null;
 const sidebarCollapseBtn = document.getElementById('sidebarCollapse') as HTMLButtonElement | null;
 const sidebarResizeEl = document.getElementById('sidebarResize');
-const resultWorkspaceEl = document.getElementById('resultWorkspace');
+// The export (format + download) bar at the foot of the editor, shown once a
+// cut-out exists and toggled from the studio top bar.
+const exportBarEl = document.getElementById('exportBar') as HTMLElement | null;
+const exportToggleBtn = document.getElementById('exportToggle') as HTMLButtonElement | null;
+// Tiled-inference + edge-refinement engine controls (shared sidebar).
+const tilingSelect = document.getElementById('tilingSelect') as HTMLSelectElement | null;
+const tilingValueEl = document.getElementById('tilingValue');
+const tilingHintEl = document.getElementById('tilingHint');
+const tilingAdviceEl = document.getElementById('tilingAdvice');
+const tilingApplyBtn = document.getElementById('tilingApply') as HTMLButtonElement | null;
+const refineToggle = document.getElementById('refineToggle') as HTMLSelectElement | null;
+const refineValueEl = document.getElementById('refineValue');
+const refineFieldEl = document.getElementById('refineField');
+const refineStrengthInput = document.getElementById('refineStrength') as HTMLInputElement | null;
+const refineStrengthValueEl = document.getElementById('refineStrengthValue');
+const refineEdgeSensitivityInput = document.getElementById('refineEdgeSensitivity') as HTMLInputElement | null;
+const refineEdgeSensitivityValueEl = document.getElementById('refineEdgeSensitivityValue');
+// Session library panel.
+const libraryGridEl = document.getElementById('libraryGrid');
+const libraryEmptyEl = document.getElementById('libraryEmpty');
+const libraryClearBtn = document.getElementById('libraryClear') as HTMLButtonElement | null;
+// The workspace whose width bounds the sidebar drag (it is shared by all tabs).
+const resultWorkspaceEl = document.getElementById('studioWorkspace');
+// Whether the export (format + download) bar is expanded. Declared here because
+// renderStudioView() reads it, and that runs at init.
+let exportBarOpen = false;
 let studioView = initialStudioView();
+
+// ——— Session library ———
+// The images processed during this browser session. Pure state lives in
+// session-library.ts; the blobs (for re-opening an entry) and the display name
+// are kept here, on the main thread. Nothing is persisted.
+let session: SessionState = initialSession();
+const libraryBlobs = new Map<number, Blob>();
+let currentImageName = 'Photo';
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
 // markup, so a changed limit never leaves stale copy on the page.
@@ -236,9 +285,15 @@ function renderStudioView(): void {
   // The refinement banner sits over the already-usable preview while the edge
   // stage runs, and disappears the instant the refined result is swapped in.
   refineNoticeEl.hidden = !studioView.refining;
-  // The settings sidebar only exists in the Result tab, so its top-bar show/hide
-  // button appears exactly when that tab is selected.
-  if (sidebarToggleBtn) sidebarToggleBtn.hidden = studioView.tab !== 'result';
+  // The settings sidebar is shared by every editor tab, so its top-bar show/hide
+  // button is always available.
+  if (sidebarToggleBtn) sidebarToggleBtn.hidden = false;
+  // The export bar is meaningful only once a cut-out exists; until then its
+  // top-bar toggle is hidden and the bar itself stays closed.
+  if (exportToggleBtn) {
+    exportToggleBtn.hidden = !studioView.hasResult;
+    if (!studioView.hasResult) setExportBarOpen(false);
+  }
 }
 
 function setStudioTab(tab: StudioTab, force = false): void {
@@ -539,7 +594,11 @@ const TOAST_DEFAULT_MS = 10000;
 
 function showToast(
   message: string,
-  opts: { kind?: ToastKind; title?: string; durationMs?: number } = {},
+  opts: {
+    kind?: ToastKind;
+    title?: string;
+    durationMs?: number;
+  } = {},
 ): void {
   const kind = opts.kind ?? 'info';
   const toast = document.createElement('div');
@@ -710,6 +769,7 @@ function clearOutput(): void {
   compareBeforeEl.removeAttribute('src');
   compareAfterEl.removeAttribute('src');
   outputSection.hidden = true;
+  setExportBarOpen(false);
 }
 
 // ——— Export format ———
@@ -1263,7 +1323,118 @@ function showInputImage(img: HTMLImageElement): void {
   panelInputEl.classList.add('has-preview');
 }
 
-async function loadImageFromFile(file: File): Promise<void> {
+// ——— Session library (render + entry points) ———
+// `applySession` runs a reducer event, revokes the URLs it reports as dropped,
+// and repaints the grid. A blob is kept per entry so an entry can be re-opened
+// (the current photo's object URL is revoked when the next one is chosen).
+function applySession(ev: Parameters<typeof reduceSession>[1]): void {
+  const { state, revoked } = reduceSession(session, ev);
+  session = state;
+  for (const url of revoked) URL.revokeObjectURL(url);
+  if (ev.type === 'remove') libraryBlobs.delete(ev.id);
+  renderLibrary();
+}
+
+function formatDims(w: number, h: number): string {
+  return `${w}×${h}`;
+}
+
+function renderLibrary(): void {
+  if (!libraryGridEl) return;
+  libraryGridEl.innerHTML = '';
+  if (libraryEmptyEl) libraryEmptyEl.hidden = session.entries.length > 0;
+  for (const entry of session.entries) {
+    const card = document.createElement('div');
+    card.className = 'libraryCard';
+    card.dataset.active = String(entry.id === session.activeId);
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', `Open ${entry.name}`);
+
+    const thumb = document.createElement('img');
+    thumb.className = 'libraryThumb';
+    thumb.alt = '';
+    thumb.src = entry.resultUrl ?? entry.originalUrl;
+    card.appendChild(thumb);
+
+    const meta = document.createElement('div');
+    meta.className = 'libraryMeta';
+    const name = document.createElement('span');
+    name.className = 'libraryName';
+    name.textContent = entry.name;
+    const dims = document.createElement('span');
+    dims.className = 'libraryDims';
+    dims.textContent = formatDims(entry.width, entry.height);
+    meta.appendChild(name);
+    meta.appendChild(dims);
+    card.appendChild(meta);
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'libraryRemove';
+    remove.setAttribute('aria-label', `Remove ${entry.name}`);
+    remove.textContent = '×';
+    remove.addEventListener('click', (e) => {
+      e.stopPropagation();
+      applySession({ type: 'remove', id: entry.id });
+    });
+    card.appendChild(remove);
+
+    const open = (): void => void reopenEntry(entry.id);
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open();
+      }
+    });
+    libraryGridEl.appendChild(card);
+  }
+}
+
+// Re-open an earlier entry: load its original blob, re-run the cut-out and jump
+// to the result. Only the entry's own photo is re-run, so the library never
+// fabricates a result the user did not produce.
+async function reopenEntry(id: number): Promise<void> {
+  const entry = session.entries.find((e) => e.id === id);
+  const blob = libraryBlobs.get(id);
+  if (!entry || !blob) return;
+  applySession({ type: 'activate', id });
+  const file = new File([blob], entry.name, { type: blob.type });
+  await loadImageFromFile(file, false);
+}
+
+// The current entry is the one matching the loaded photo; a fresh photo adds a
+// new entry, and a re-open re-activates the existing one.
+function currentEntryId(): number | null {
+  const entry = activeEntry(session);
+  return entry?.id ?? null;
+}
+
+// Record a freshly composited cut-out against the current entry so the library
+// shows the transparent thumbnail, not the original.
+function storeLibraryResult(canvas: HTMLCanvasElement): void {
+  const id = currentEntryId();
+  if (id == null) return;
+  const thumb = document.createElement('canvas');
+  const long = Math.max(canvas.width, canvas.height);
+  const scale = long > 320 ? 320 / long : 1;
+  thumb.width = Math.max(1, Math.round(canvas.width * scale));
+  thumb.height = Math.max(1, Math.round(canvas.height * scale));
+  const tctx = thumb.getContext('2d')!;
+  tctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
+  thumb.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    applySession({ type: 'set-result', id, resultUrl: url });
+  }, 'image/png');
+}
+
+libraryClearBtn?.addEventListener('click', () => {
+  for (const entry of session.entries) applySession({ type: 'remove', id: entry.id });
+});
+
+async function loadImageFromFile(file: File, addToLibrary = true): Promise<void> {
   // Validate the declared type/size before decoding (never trust the extension),
   // then the decoded dimensions after. Reject with a message the user can act on.
   const typeCheck = validateFileTypeAndSize(file);
@@ -1309,6 +1480,22 @@ async function loadImageFromFile(file: File): Promise<void> {
   clearOutput();
   studioSelectImage();
   hideRecovery();
+  // Add the photo to the session library (a re-open of an existing entry passes
+  // addToLibrary=false so it is not duplicated). The library owns its own blob
+  // URL — separate from the preview URL, which is revoked on the next load.
+  if (addToLibrary) {
+    currentImageName = file.name || `Photo ${session.nextId}`;
+    const libUrl = URL.createObjectURL(file);
+    libraryBlobs.set(session.nextId, file);
+    applySession({
+      type: 'add',
+      name: currentImageName,
+      width: canvas.width,
+      height: canvas.height,
+      originalUrl: libUrl,
+      createdAt: Date.now(),
+    });
+  }
   // Clear any previous error text so a successful load after a rejected one does
   // not leave a stale error on the stage line.
   setStage(modelReady ? 'Removing the background…' : 'Photo ready — waiting for the model…');
@@ -1494,7 +1681,9 @@ function handleWorkerMessage(msg: WorkerProgressMessage): void {
     log(`Inference ${timings.length}: ${msg.ms.toFixed(1)} ms`);
     pending.resolve(msg.ms);
   } else if (msg.kind === 'result-ready') {
-    handleResultReady(msg);
+    const tiled = msg.runId !== undefined ? tiledRuns.get(msg.runId) : undefined;
+    if (tiled) handleTiledResultReady(msg, tiled.state, tiled.tileIndex);
+    else handleResultReady(msg);
   } else if (msg.kind === 'error') {
     if (msg.cancelled) {
       // A deliberate stop (the connection became metered). Not a failure: the
@@ -1527,6 +1716,36 @@ let activeJobId = 0;
 let currentRunId = -1;
 const refineConfig: FastRefinementConfig = refinementConfigFromParams(urlParams);
 const refinementRunner = new RefinementRunner();
+
+// ——— Tiled inference ———
+// The tile grid the *next* run uses: 1 = off (a single full-image pass). Read
+// from the sidebar select (and the ?tiles= override). The plan and the stitcher
+// are created fresh per run so a grid change never mixes two runs' tiles.
+let tileGrid: TileGrid = initTileGrid();
+function initTileGrid(): TileGrid {
+  const fromUrl = urlParams.get('tiles');
+  if (fromUrl !== null && /^[1-4]$/.test(fromUrl)) return Number(fromUrl) as TileGrid;
+  const pref = loadPref<number>('remove-bg:tiles', (v): v is number => v === 1 || v === 2 || v === 3 || v === 4);
+  return (pref as TileGrid | null) ?? 1;
+}
+// The tiles of the run in flight, keyed by runId, so a `result-ready` message
+// can be routed to the stitcher rather than the single-image path. One shared
+// state object covers all tiles of a tiled run; `tileIndex` is the tile this
+// particular run id carries.
+interface TiledRunState {
+  plan: ReturnType<typeof planTiles>;
+  stitcher: TileStitcher;
+  /** The tile's own pixels, kept so a GPU-abort retry can re-post the same tile. */
+  tiles: ImageData[];
+  /** Tiles whose result has landed. */
+  done: number;
+  total: number;
+  jobId: number;
+  image: ImageData;
+  size: string;
+  postprocessStart: number;
+}
+const tiledRuns = new Map<number, { state: TiledRunState; tileIndex: number }>();
 // Per-run stage timings, captured for the smoke harness (window.smokeRefineStages).
 let smokeRefineStages: Record<string, unknown> | null = null;
 
@@ -1607,7 +1826,29 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   // background before compositing. See mask-recovery.ts. This runs on the raw
   // model mask so the user's threshold/feather below still applies to the
   // recovered result.
-  const { mask: recoveredMask, recovered } = recoverForegroundMask(image, upscaled);
+  // Keep the cropped float mask: it is the input to refinement (Stages 2-4).
+  const croppedFloat = cropMaskFloat(msg.mask, inputSize, rect);
+  const size = `${image.width}x${image.height}`;
+  compositeAndRefine(jobId, image, upscaled, croppedFloat, rect, size, postprocessStart);
+}
+
+/**
+ * Shared Stage-1 → refinement → composite path, used by both the single-image
+ * run and the tiled run. `fullResMask` is the soft mask at the *original* image
+ * resolution (already upscaled for a single run, stitched for a tiled run);
+ * `croppedFloat` is the same mask in the geometry the refinement stage expects
+ * (the model-input crop for a single run, the whole image for a tiled run).
+ */
+function compositeAndRefine(
+  jobId: number,
+  image: ImageData,
+  fullResMask: Uint8ClampedArray,
+  croppedFloat: Float32Array,
+  rect: { width: number; height: number },
+  size: string,
+  postprocessStart: number,
+): void {
+  const { mask: recoveredMask, recovered } = recoverForegroundMask(image, fullResMask);
   if (recovered) {
     log('Model kept the whole frame; recovered the subject from the background edges.');
   }
@@ -1615,14 +1856,7 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   // Apply the user's mask threshold/feather at full destination resolution (the
   // values are percentages/pixels of the *output* mask).
   const stage1Mask = applyMaskAdjust(recoveredMask, image.width, image.height, maskAdjust);
-  const size = `${image.width}x${image.height}`;
-
-  // Keep the cropped float mask + the recovered 8-bit mask: the float mask is
-  // the input to refinement (Stages 2-4), the 8-bit mask is the fallback when
-  // refinement is disabled or fails.
-  const croppedFloat = cropMaskFloat(msg.mask, inputSize, rect);
   const guide = lumaFromRgba(image.data);
-
   const refineEnabled = refineConfig.enabled;
   composeResult(image, stage1Mask)
     .then(({ canvas, preview }) => {
@@ -1643,6 +1877,118 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
       markJobSettled();
       error(`Could not compose the cut-out: ${err instanceof Error ? err.message : String(err)}`);
     });
+}
+
+// ——— Tiled inference ———
+// The grid is a property of the *image*, not the model, so the plan and stitcher
+// are rebuilt for every tiled run. The tiles are run one after another (a single
+// 512px run at a time, so peak memory stays flat) and each result is stitched in
+// as it lands. When every tile is in, the stitched soft mask flows through the
+// exact same Stage-1 → refinement → composite path as a single run.
+
+/** The mask at the original image size, for one tile, from the worker's mask. */
+function tileMaskToFullRes(
+  plan: ReturnType<typeof planTiles>,
+  tileIndex: number,
+  mask: Float32Array,
+  inputSize: number,
+): Float32Array {
+  const tile = plan.tiles[tileIndex];
+  const rect = letterboxRect(tile.width, tile.height, inputSize);
+  const cropped = cropMaskFloat(mask, inputSize, rect);
+  return resizeMaskFloat(cropped, rect.width, rect.height, tile.width, tile.height, 'bilinear');
+}
+
+function handleTiledResultReady(
+  msg: Extract<WorkerProgressMessage, { kind: 'result-ready' }>,
+  tiled: TiledRunState,
+  tileIndex: number,
+): void {
+  if (msg.runId === undefined) return;
+  if (tiled.jobId !== activeJobId) {
+    tiledRuns.delete(msg.runId);
+    return;
+  }
+  const inputSize = msg.inputSize ?? MODEL_SIZE;
+  const full = tileMaskToFullRes(tiled.plan, tileIndex, msg.mask, inputSize);
+  tiled.stitcher.add(tileIndex, full);
+  tiled.done += 1;
+  tiledRuns.delete(msg.runId);
+  if (tiled.done < tiled.total) return;
+
+  // Every tile is in: stitch to the full-resolution soft mask and hand off.
+  const stitched = tiled.stitcher.result();
+  // The inference is done; the remaining work is mask reconstruction/refinement
+  // and compositing, which have no measurable percentage of their own (mirrors
+  // the single-run path in handleResultReady).
+  beginProcPhase('finalize', phaseExpectedMs('finalize', 0));
+  refreshProcPercent();
+  setConsoleStatus('Building your preview…', true);
+  // There is no single raw model mask for a tiled run, so the report's raw-mask
+  // section reflects the stitched soft mask (which is what the model produced,
+  // combined). Recorded before recovery/threshold/refinement, like the single run.
+  lastRawMaskStats = rawMaskStats(stitched, tiled.image.width, tiled.image.height);
+  log(`Stitched mask: ${formatRawMaskStats(lastRawMaskStats)}.`);
+  // The refinement stage expects the mask in the guide's geometry. For a tiled
+  // run the whole image is the guide, so the stitched mask is already in the
+  // right shape (and no letterbox crop applies).
+  const rect = { width: tiled.image.width, height: tiled.image.height };
+  const stitchedBytes = alphaToBytes(stitched);
+  log(`Tiled mask stitched from ${tiled.total} tiles (${tiled.plan.grid}x${tiled.plan.grid}).`);
+  compositeAndRefine(
+    tiled.jobId,
+    tiled.image,
+    stitchedBytes,
+    stitched,
+    rect,
+    tiled.size,
+    tiled.postprocessStart,
+  );
+}
+
+// Runs a whole tiled inference: one worker run per tile, awaited in order so the
+// worker never holds more than one tile's tensors. The composite happens in
+// handleTiledResultReady once the last tile lands.
+async function runTiledInference(image: ImageData): Promise<void> {
+  const plan = planTiles(image.width, image.height, tileGrid);
+  const stitcher = new TileStitcher(image.width, image.height, plan);
+  const jobId = activeJobId;
+  const postprocessStart = performance.now();
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  const tiles: ImageData[] = [];
+  for (const tile of plan.tiles) {
+    canvas.width = tile.width;
+    canvas.height = tile.height;
+    ctx.drawImage(
+      currentImage!,
+      tile.x, tile.y, tile.width, tile.height,
+      0, 0, tile.width, tile.height,
+    );
+    tiles.push(ctx.getImageData(0, 0, tile.width, tile.height));
+  }
+  const state: TiledRunState = {
+    plan,
+    stitcher,
+    tiles,
+    done: 0,
+    total: plan.tiles.length,
+    jobId,
+    image,
+    size: `${image.width}x${image.height}`,
+    postprocessStart,
+  };
+  log(`Tiled inference: ${plan.grid}x${plan.grid} = ${plan.tiles.length} tiles.`);
+  for (let i = 0; i < plan.tiles.length; i++) {
+    if (jobId !== activeJobId) return;
+    const runId = nextRunId++;
+    currentRunId = runId;
+    tiledRuns.set(runId, { state, tileIndex: i });
+    await new Promise<number>((resolve, reject) => {
+      pendingRuns.set(runId, { resolve, reject });
+      postRunMessage(runId, state.tiles[i]);
+    });
+  }
 }
 
 // Stages 2-4: refine the soft mask and, on success, swap in the sharper result
@@ -1731,6 +2077,8 @@ function finishResult(
   applyFormatUi();
 
   outputSection.hidden = false;
+  // Reveal the export bar with the first cut-out so the download is one click away.
+  if (!exportBarOpen) setExportBarOpen(true);
   // The export dimensions are the original dimensions; refinement never
   // downscales the export.
   if (phase === 'final') {
@@ -1747,6 +2095,8 @@ function finishResult(
   // reveals the re-process button.
   resultSettingsKey = engineSettingsKey();
   updateReprocessButton();
+  // Show the transparent cut-out as the entry's library thumbnail.
+  storeLibraryResult(canvas);
 
   const pct = (alpha.opaqueFraction * 100).toFixed(1);
   // A valid, displayable result exists now. The client de-duplicates, so the
@@ -1759,6 +2109,41 @@ function finishResult(
   // silently — and the ghost is no longer mislabelled "fully transparent".
   const warning = outputAlphaWarning(verdict);
   if (warning) log(`WARNING: ${warning}`);
+  // Advise tiling when it would sharpen THIS image (a wide, soft edge on a photo
+  // the model must upscale a lot) and the user has not already enabled it. The
+  // advice is shown in the sidebar, never as a toast.
+  if (phase === 'final') maybeRecommendTiling(transitionBandFraction(data, 4, 3));
+}
+
+// The tiling recommendation for the photo on screen, kept so the sidebar hint can
+// show it. Recomputed on every final result; null when tiling is not advised (or
+// already on), which is what hides the hint.
+let tilingAdvice: { reason: string; grid: TileGrid } | null = null;
+// The photo the advice belongs to. A new photo clears the advice, so a stale
+// recommendation from the previous image never lingers in the panel.
+let tilingAdviceFor: string | null = null;
+
+// Decide whether tiling would sharpen the current photo, and record it for the
+// sidebar hint. Deliberately NOT a toast: an interruption on every large photo
+// would nag, so the advice lives in the tiling field's own info panel, where a
+// user who wants it will look. `softEdgeShare` is the measured soft-edge fraction
+// of the first mask — the one signal that separates "this edge is blurry" from
+// "this edge is already crisp", so it is what keeps the advice from firing on
+// every image.
+function maybeRecommendTiling(softEdgeShare: number): void {
+  if (!currentImageData || tileGrid > 1) {
+    tilingAdvice = null;
+    return;
+  }
+  const rec = recommendTiling({
+    imageWidth: currentImageData.width,
+    imageHeight: currentImageData.height,
+    softEdgeShare,
+  });
+  tilingAdviceFor = `${currentImageData.width}x${currentImageData.height}`;
+  tilingAdvice = rec.recommended ? { reason: rec.reason, grid: rec.suggestedGrid } : null;
+  applyTilingUi();
+  if (rec.recommended) log(`Tiling suggestion: ${rec.reason}`);
 }
 
 function setSelectorsDisabled(disabled: boolean): void {
@@ -1959,7 +2344,15 @@ let resultSettingsKey: string | null = null;
 const reprocessBtn = document.getElementById('reprocessBtn') as HTMLButtonElement | null;
 
 function engineSettingsKey(): string {
-  return `${selectedProvider}|${maskAdjust.threshold}|${maskAdjust.feather}`;
+  return [
+    selectedProvider,
+    maskAdjust.threshold,
+    maskAdjust.feather,
+    tileGrid,
+    refineConfig.enabled ? 1 : 0,
+    refineConfig.edgeRefinement.strength,
+    refineConfig.edgeRefinement.edgeSensitivity,
+  ].join('|');
 }
 
 function updateReprocessButton(): void {
@@ -2087,6 +2480,140 @@ sidebarCollapseBtn?.addEventListener('click', () => {
   setSidebarCollapsed(!collapsed);
 });
 
+// ——— Export bar ———
+// The bar holds the output format picker + download link. It is toggled from the
+// studio top bar (and opened automatically the first time a result exists, so the
+// download is never hidden behind an extra click).
+function setExportBarOpen(open: boolean): void {
+  exportBarOpen = open;
+  if (exportBarEl) exportBarEl.hidden = !open;
+  if (exportToggleBtn) {
+    exportToggleBtn.setAttribute('aria-pressed', String(open));
+    exportToggleBtn.setAttribute('aria-label', open ? 'Hide export bar' : 'Show export bar');
+  }
+}
+exportToggleBtn?.addEventListener('click', () => setExportBarOpen(!exportBarOpen));
+
+// ——— Info bubbles ———
+// Each "?" toggles the explanation panel it controls. Only one panel is open at a
+// time, so the sidebar does not grow by several blocks at once.
+const infoBubbles = Array.from(document.querySelectorAll<HTMLButtonElement>('.infoBubble'));
+function closeInfoPanels(except?: HTMLElement | null): void {
+  for (const bubble of infoBubbles) {
+    const target = document.getElementById(bubble.dataset.infoTarget ?? '');
+    if (target && target !== except) {
+      target.hidden = true;
+      bubble.setAttribute('aria-expanded', 'false');
+    }
+  }
+}
+for (const bubble of infoBubbles) {
+  bubble.addEventListener('click', () => {
+    const target = document.getElementById(bubble.dataset.infoTarget ?? '');
+    if (!target) return;
+    const willOpen = target.hidden;
+    closeInfoPanels(target);
+    target.hidden = !willOpen;
+    bubble.setAttribute('aria-expanded', String(willOpen));
+  });
+}
+
+// ——— Tiled inference control ———
+function tilingLabel(grid: TileGrid): string {
+  return grid === 1 ? 'Off' : `${grid} × ${grid}`;
+}
+function applyTilingUi(): void {
+  if (tilingSelect) tilingSelect.value = tileGrid === 1 ? 'off' : String(tileGrid);
+  if (tilingValueEl) tilingValueEl.textContent = tilingLabel(tileGrid);
+  // Explain why tiling is unavailable for a small photo, so the option never
+  // silently does nothing.
+  const img = currentImageData;
+  if (tilingHintEl) {
+    tilingHintEl.hidden = !img;
+    if (img) {
+      const longSide = Math.max(img.width, img.height);
+      tilingHintEl.textContent =
+        longSide < TILING_MIN_LONG_SIDE
+          ? `This photo is ${longSide}px on its longest side — below the ${TILING_MIN_LONG_SIDE}px minimum, so a single pass is used.`
+          : `Runs the model on overlapping tiles and crossfades the masks. ${tileGrid > 1 ? `Currently ${tileGrid} × ${tileGrid} = ${tileGrid * tileGrid} passes.` : 'Best for large photos whose mask is upscaled a lot.'}`;
+    }
+  }
+  // The per-photo recommendation, shown inside the info panel (never a toast).
+  // Hidden when tiling is already on or not advised for this photo. A new photo
+  // (different size key) clears any advice left over from the previous image.
+  if (img && tilingAdvice && tilingAdviceFor !== `${img.width}x${img.height}`) {
+    tilingAdvice = null;
+  }
+  if (tilingAdviceEl) {
+    tilingAdviceEl.hidden = !tilingAdvice;
+    tilingAdviceEl.textContent = tilingAdvice ? `Recommended for this photo: ${tilingAdvice.reason}` : '';
+  }
+  if (tilingApplyBtn) {
+    tilingApplyBtn.hidden = !tilingAdvice;
+    if (tilingAdvice) tilingApplyBtn.textContent = `Run ${tilingAdvice.grid} × ${tilingAdvice.grid} tiles`;
+  }
+}
+tilingSelect?.addEventListener('change', () => {
+  const v = Number(tilingSelect.value);
+  tileGrid = (v === 2 || v === 3 || v === 4 ? v : 1) as TileGrid;
+  savePref('remove-bg:tiles', tileGrid);
+  applyTilingUi();
+  log(`Tiled inference: ${tileGrid === 1 ? 'off' : `${tileGrid}x${tileGrid}`}`);
+  updateReprocessButton();
+});
+// The recommendation's one-click apply, inside the info panel. Re-runs with the
+// suggested grid, like the old toast action did.
+tilingApplyBtn?.addEventListener('click', () => {
+  if (!tilingAdvice) return;
+  tileGrid = tilingAdvice.grid;
+  savePref('remove-bg:tiles', tileGrid);
+  tilingAdvice = null;
+  applyTilingUi();
+  if (currentImageData) {
+    setStudioTab('processing', true);
+    void runSmoke();
+  }
+});
+
+// ——— Edge refinement controls ———
+// The product previously exposed refinement only through URL params. The sidebar
+// now surfaces the two knobs that matter (on/off and strength/sensitivity), each
+// mapping onto the same config the URL params resolve to.
+function applyRefineUi(): void {
+  if (refineToggle) refineToggle.value = refineConfig.enabled ? 'on' : 'off';
+  if (refineValueEl) refineValueEl.textContent = refineConfig.enabled ? 'On' : 'Off';
+  if (refineStrengthInput) refineStrengthInput.value = String(Math.round(refineConfig.edgeRefinement.strength * 100));
+  if (refineStrengthValueEl) refineStrengthValueEl.textContent = refineConfig.edgeRefinement.strength.toFixed(2);
+  if (refineEdgeSensitivityInput) {
+    refineEdgeSensitivityInput.value = String(Math.round(refineConfig.edgeRefinement.edgeSensitivity * 100));
+  }
+  if (refineEdgeSensitivityValueEl) {
+    refineEdgeSensitivityValueEl.textContent = refineConfig.edgeRefinement.edgeSensitivity.toFixed(2);
+  }
+  // The two sliders only matter when the stage is on.
+  if (refineFieldEl) refineFieldEl.dataset.disabled = String(!refineConfig.enabled);
+}
+refineToggle?.addEventListener('change', () => {
+  refineConfig.enabled = refineToggle.value !== 'off';
+  applyRefineUi();
+  log(`Edge refinement: ${refineConfig.enabled ? 'on' : 'off'}`);
+  updateReprocessButton();
+});
+refineStrengthInput?.addEventListener('input', () => {
+  const v = Math.max(0, Math.min(100, Number(refineStrengthInput.value))) / 100;
+  refineConfig.edgeRefinement.strength = v;
+  if (refineStrengthValueEl) refineStrengthValueEl.textContent = v.toFixed(2);
+  updateReprocessButton();
+});
+refineEdgeSensitivityInput?.addEventListener('input', () => {
+  const v = Math.max(5, Math.min(400, Number(refineEdgeSensitivityInput.value))) / 100;
+  refineConfig.edgeRefinement.edgeSensitivity = v;
+  if (refineEdgeSensitivityValueEl) refineEdgeSensitivityValueEl.textContent = v.toFixed(2);
+  updateReprocessButton();
+});
+applyTilingUi();
+applyRefineUi();
+
 // Re-run inference with the current engine settings, then jump to the Processing
 // tab so the user sees the run they asked for.
 reprocessBtn?.addEventListener('click', () => {
@@ -2182,9 +2709,12 @@ async function restartOnFreshWorker(msg: {
   // loading; only re-run it if it is still pending, or its caller would hang.
   if (!pendingRuns.has(msg.runId) || !currentImageData) return;
   // Re-run the failed inference on the fresh worker, reusing its run id so its
-  // pending promise settles when this run finishes.
+  // pending promise settles when this run finishes. For a tiled run the failed
+  // inference was one tile, so re-post that tile's pixels, not the whole image.
+  const tiled = tiledRuns.get(msg.runId);
   setConsoleStatus('Removing background…', true);
-  postRunMessage(msg.runId, currentImageData);
+  if (tiled) postRunMessage(msg.runId, tiled.state.tiles[tiled.tileIndex]);
+  else postRunMessage(msg.runId, currentImageData);
 }
 
 function finishedRun(): void {
@@ -2325,16 +2855,27 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
   trackProcessingStarted();
   timings.length = 0;
   lastJobSettled = false;
-  for (let i = 0; i < runs; i++) {
-    try {
-      await runOneInference();
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      endProcPhase();
-      studioError();
-      error(message, classifyError(message));
-      return null;
+  // Tiled inference runs one worker pass per tile; below the minimum long side
+  // the model already sees the photo at ~1x, so tiling only adds cost.
+  const longSide = currentImageData ? Math.max(currentImageData.width, currentImageData.height) : 0;
+  const useTiling = tileGrid > 1 && longSide >= TILING_MIN_LONG_SIDE;
+  if (tileGrid > 1 && !useTiling) {
+    log(`Tiling skipped: ${longSide}px is below the ${TILING_MIN_LONG_SIDE}px minimum; running a single pass.`);
+  }
+  try {
+    if (useTiling) {
+      await runTiledInference(currentImageData!);
+    } else {
+      for (let i = 0; i < runs; i++) {
+        await runOneInference();
+      }
     }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    endProcPhase();
+    studioError();
+    error(message, classifyError(message));
+    return null;
   }
   // The inference resolves when the mask is back; the cut-out (and its edge
   // refinement, when enabled) is composited afterwards. Wait for the final

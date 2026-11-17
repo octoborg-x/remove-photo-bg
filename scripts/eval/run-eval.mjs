@@ -17,6 +17,11 @@
 //        --model model_512_int8_fp16 --out eval-results/wasm
 //   RUN_GPU=1 node scripts/eval/run-eval.mjs --url ... --provider webgpu ...
 //
+// While a run is in flight it prints the current operation on an interval (the
+// app's live stage line + newest Console line), so a stall is visible. Tune the
+// cadence with EVAL_PROGRESS_MS (default 10000 ms) or silence it with --quiet /
+// EVAL_QUIET=1.
+//
 // Requires: images downloaded (`python3 scripts/eval/build-eval-set.py --download`),
 // a built/previewed site, and Chromium (CHROME_BIN or /usr/bin/chromium).
 import puppeteer from 'puppeteer-core';
@@ -125,19 +130,6 @@ async function chooseFile(page, filePath) {
   throw new Error(`could not open the file chooser for ${filePath}`);
 }
 
-async function waitForServer(target, timeoutMs = 60000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const res = await fetch(target, { method: 'HEAD' });
-      if (res.ok || res.status === 404) return;
-    } catch {
-      /* not up yet */
-    }
-    await sleep(300);
-  }
-  throw new Error(`server did not start at ${target} within ${timeoutMs} ms`);
-}
 function stopServer() {
   if (!server) return;
   try {
@@ -147,8 +139,103 @@ function stopServer() {
   }
 }
 
+// ——— Live progress ———
+// A run can stall for minutes in places that used to be silent: the preview
+// server coming up, the first model load (download + session build), and each
+// image's inference. Every long wait now prints the app's *current* operation on
+// an interval — the pinned stage line plus the newest Console line, the same
+// text the UI shows — so a stuck run says where it is instead of sitting mute
+// until a 15-minute timeout. `--quiet` (or EVAL_QUIET=1) silences the heartbeat;
+// EVAL_PROGRESS_MS sets the interval (default 10000 ms).
+const PROGRESS_MS = Number(process.env.EVAL_PROGRESS_MS || 10000);
+const QUIET = process.argv.includes('--quiet') || process.env.EVAL_QUIET === '1';
+
+function elapsedLabel(startMs) {
+  const s = Math.round((Date.now() - startMs) / 1000);
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s`;
+}
+
+// Waits for the preview server, printing a heartbeat so a server that never
+// comes up is visible rather than a silent 60 s hang.
+async function waitForServer(target, timeoutMs = 60000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(target, { method: 'HEAD' });
+      if (res.ok || res.status === 404) return;
+    } catch {
+      /* not up yet */
+    }
+    if (!QUIET && Date.now() - start >= PROGRESS_MS && (Date.now() - start) % PROGRESS_MS < 300) {
+      console.log(`[wait] preview server ${target} (${elapsedLabel(start)})`);
+    }
+    await sleep(300);
+  }
+  throw new Error(`server did not start at ${target} within ${timeoutMs} ms`);
+}
+
+// Reads the app's live status: the stage line, the newest Console row, and
+// whether the page has already surfaced a terminal error ("Error: …"). Never
+// throws — a navigation in flight just reads as empty.
+async function readAppState(page) {
+  try {
+    return await page.evaluate(() => {
+      const stage = (document.getElementById('processingLabel')?.textContent ?? '').trim();
+      const lines = document.querySelectorAll('#consoleOutput .consoleLine');
+      const last = (lines[lines.length - 1]?.textContent ?? '').trim();
+      return { stage, last, failed: stage.startsWith('Error:') };
+    });
+  } catch {
+    return { stage: '', last: '', failed: false };
+  }
+}
+
+// Runs `work()` (a long page wait) while printing the current operation every
+// PROGRESS_MS. The interval is cleared as soon as the wait settles.
+async function withProgress(label, page, work) {
+  if (!QUIET) console.log(`[wait] ${label} …`);
+  const start = Date.now();
+  let busy = false;
+  const timer = QUIET
+    ? null
+    : setInterval(() => {
+        if (busy) return;
+        busy = true;
+        void readAppState(page)
+          .then(({ stage, last }) => {
+            const where = [stage, last].filter(Boolean).join('  |  ') || 'starting…';
+            console.log(`[wait] ${label} — ${where} (${elapsedLabel(start)})`);
+          })
+          .finally(() => {
+            busy = false;
+          });
+      }, PROGRESS_MS);
+  try {
+    return await work();
+  } finally {
+    if (timer) clearInterval(timer);
+  }
+}
+
+// Waits for the model to load, stopping early when the page reports a terminal
+// error so a "Backend not found" fails in seconds instead of after 15 minutes.
+async function waitForModelReady(page, label) {
+  await withProgress(label, page, () =>
+    page.waitForFunction(
+      () =>
+        window.smokeModelReady === true ||
+        (document.getElementById('processingLabel')?.textContent ?? '').trim().startsWith('Error:'),
+      { timeout: 900000, polling: 1000 },
+    ),
+  );
+  const { stage, failed } = await readAppState(page);
+  if (failed) throw new Error(`the app reported an error before the model was ready: ${stage}`);
+}
+
 const manifest = JSON.parse(readFileSync(resolve(ROOT, 'eval/manifest.json'), 'utf8'));
 const IMAGE_DIR = resolve(ROOT, 'eval/images');
+const totalImages = manifest.categories.reduce((n, c) => n + c.images.length, 0);
+let imageNo = 0;
 
 // Resolve each manifest entry to a local file (any extension).
 function localPath(id) {
@@ -162,7 +249,27 @@ function localPath(id) {
 const args = ['--no-sandbox', '--disable-dev-shm-usage', '--enable-precise-memory-info'];
 if (process.env.RUN_GPU !== '1') args.push('--disable-gpu', '--disable-webgpu');
 
+// A `--provider webgpu` run needs a real GPU. Without RUN_GPU=1 the Chromium
+// flags above disable WebGPU outright, so the forced-WebGPU path can only fail
+// with "no available backend found. ERR: [webgpu] backend not found" — the app's
+// hard `?provider=webgpu` override has no WASM fallback. Say so before the run
+// spends minutes downloading the model. (`--provider wasm` is always safe.)
+if (provider === 'webgpu' && process.env.RUN_GPU !== '1') {
+  console.warn(
+    '[warn] --provider webgpu with RUN_GPU unset: this Chromium disables WebGPU, so the ' +
+      'forced GPU path will fail ("backend not found"). Re-run with RUN_GPU=1 on a host ' +
+      'that has a real GPU (e.g. Colab T4), or use --provider wasm.',
+  );
+}
+
 if (server) await waitForServer(url);
+
+// A single line up front so the run's shape is visible: what, where, and how the
+// progress heartbeat is configured.
+console.log(
+  `[run] provider=${provider}${model ? ` model=${model}` : ''} runs/image=${runs} ` +
+    `images=${totalImages} out=${outDir}${QUIET ? ' (progress: off)' : ` (progress every ${PROGRESS_MS} ms)`}`,
+);
 
 // A single browser instance cannot survive the whole 64-image sweep: after ~50
 // full-resolution inferences headless Chromium's renderer dies and every later
@@ -257,8 +364,7 @@ let loadedModel = null;
   const p = await newPage();
   p.on('pageerror', () => {});
   await p.goto(pageUrl(), { waitUntil: 'load', timeout: 180000 });
-  const ready = await p
-    .waitForFunction('window.smokeModelReady === true', { timeout: 900000 })
+  const ready = await waitForModelReady(p, 'loading model (first page)')
     .then(() => true)
     .catch(() => false);
   if (!ready) {
@@ -311,18 +417,22 @@ for (const cat of manifest.categories) {
     try {
       p = await newPage();
       p.on('pageerror', () => {});
+      imageNo += 1;
+      const label = `${img.id} [${img.category}] ${imageNo}/${totalImages}`;
       await p.goto(pageUrl(), { waitUntil: 'load', timeout: 180000 });
-      await p.waitForFunction('window.smokeModelReady === true', { timeout: 900000 });
+      await waitForModelReady(p, `${label}: model ready`);
 
       // Drive the genuine customer path: choose a file, which auto-starts the run.
       // `runSmoke` re-runs inference on the already-loaded image, so `--runs`
       // measures warm repeats (the first run carries the cold cost).
-      await openStudio(p);
-      await chooseFile(p, file);
-      await p.waitForFunction(
-        () => /^(Done|Error|No output)/.test(document.getElementById('processingLabel')?.textContent ?? ''),
-        { timeout: 900000, polling: 300 },
-      );
+      await withProgress(`${label}: upload + inference`, p, async () => {
+        await openStudio(p);
+        await chooseFile(p, file);
+        await p.waitForFunction(
+          () => /^(Done|Error|No output)/.test(document.getElementById('processingLabel')?.textContent ?? ''),
+          { timeout: 900000, polling: 300 },
+        );
+      });
 
       const perRunMs = [];
       let state = null;
@@ -333,7 +443,9 @@ for (const cat of manifest.categories) {
           // Warm repeat: run again on the already-loaded image and wait on the
           // run's own promise (the stage is already "Done", so polling it would
           // return immediately and record a bogus timing).
-          await p.evaluate(() => window.runSmoke());
+          await withProgress(`${label}: warm run ${run + 1}/${runs}`, p, () =>
+            p.evaluate(() => window.runSmoke()),
+          );
         }
         done = await p
           .waitForFunction(

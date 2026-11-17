@@ -80,9 +80,16 @@ output PNGs remains the authority for "is the mask right".
 npm run build
 npm run eval:run -- --provider wasm --out eval-results/wasm
 npm run eval:analyze
-# WebGPU, on a machine that has it:
+# WebGPU, on a machine that has it (a real GPU):
 RUN_GPU=1 npm run eval:run -- --provider webgpu --out eval-results/webgpu
 ```
+
+`run-eval.mjs` prints the current operation on an interval (the app's live stage
+line + newest Console line) while it waits on the model or an image, so a stall
+says where it is. `EVAL_PROGRESS_MS` sets the cadence; `--quiet` (or
+`EVAL_QUIET=1`) turns the heartbeat off. Running `--provider webgpu` without
+`RUN_GPU=1` prints a warning, because the default Chromium flags disable WebGPU
+and the forced GPU path has no WASM fallback (it fails with `backend not found`).
 
 ## Baseline — WASM, `model_512_int8_fp16` (2026-11-04)
 

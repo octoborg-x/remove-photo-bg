@@ -111,7 +111,7 @@ For DOM work, use `puppeteer-core` — and run throwaway scripts **from the repo
 
 ```js
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: '/usr/bin/chromium', headless: 'shell',
+const b = await puppeteer.launch({ executablePath: process.env.CHROME_BIN || '/usr/bin/chromium', headless: 'shell',
   args: ['--no-sandbox', '--disable-gpu'] });
 const p = await b.newPage();
 await p.goto('file:///tmp/img/on_white.png');

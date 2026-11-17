@@ -366,7 +366,7 @@ npm run eval:analyze
 npm run eval:checklist
 # Scored: fills the §3 measurements and applies the §5 gates → §6 verdicts.
 npm run eval:benchmark -- eval-results/wasm
-# WebGPU on a machine that has it:
+# WebGPU on a machine that has it (a real GPU; NOT the sandbox):
 RUN_GPU=1 npm run eval:run -- --provider webgpu --out eval-results/webgpu
 # Provider parity (§3.9): per-image mask flips between the two runs.
 npm run eval:benchmark -- eval-results/wasm --parity eval-results/webgpu
@@ -388,6 +388,14 @@ Chromium's renderer dies and every later `newPage()` throws `Session with given 
 not found`; the harness relaunches the browser (reusing a temp-dir profile so the
 model stays cached) and contains any per-image crash, so all 64 images are scored
 instead of the run aborting partway.
+
+While it waits on the model or an image it prints the current operation on an
+interval (the app's live stage line + newest Console line), so a stalled run
+shows where it is; `EVAL_PROGRESS_MS` sets the cadence and `--quiet` /
+`EVAL_QUIET=1` turns the heartbeat off. A `--provider webgpu` run without
+`RUN_GPU=1` warns immediately — the default Chromium flags disable WebGPU and the
+app's hard `?provider=` override has no fallback, so it would fail with
+`no available backend found. ERR: [webgpu] backend not found`.
 
 ## 8. Open items (the work this spec unblocks)
 

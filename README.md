@@ -331,9 +331,16 @@ npm run build
 npm run eval:run -- --provider wasm --out eval-results/wasm
 npm run eval:analyze                   # or: python3 scripts/eval/analyze-eval.py eval-results/wasm
 npm run eval:benchmark -- eval-results/wasm   # per-image checklist + verdicts
-# WebGPU, on a machine that has it:
+# WebGPU, on a machine that has it (a real GPU; NOT this sandbox):
 RUN_GPU=1 npm run eval:run -- --provider webgpu --out eval-results/webgpu
 ```
+
+`eval:run` prints the current operation on an interval — the app's live stage
+line plus the newest Console line — while it waits on the model or an image, so a
+stall shows where it is. Tune the cadence with `EVAL_PROGRESS_MS` (ms) or silence
+it with `--quiet` (or `EVAL_QUIET=1`). A `--provider webgpu` run without
+`RUN_GPU=1` warns up front: this Chromium disables WebGPU, so the forced GPU path
+would fail with `backend not found`.
 
 The metrics are descriptive, not accuracy scores (there is no ground-truth mask
 for these images). Use them for regression comparison and review

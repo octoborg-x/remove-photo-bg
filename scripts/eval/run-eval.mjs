@@ -32,6 +32,7 @@ import { execSync } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { tmpdir } from 'node:os';
+import { browserArgs, headlessMode, gpuRequested, assertHardwareGpu } from '../lib/gpu-browser.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..', '..');
@@ -246,15 +247,14 @@ function localPath(id) {
   return null;
 }
 
-const args = ['--no-sandbox', '--disable-dev-shm-usage', '--enable-precise-memory-info'];
-if (process.env.RUN_GPU !== '1') args.push('--disable-gpu', '--disable-webgpu');
+const args = browserArgs(process.env, ['--enable-precise-memory-info']);
 
 // A `--provider webgpu` run needs a real GPU. Without RUN_GPU=1 the Chromium
 // flags above disable WebGPU outright, so the forced-WebGPU path can only fail
 // with "no available backend found. ERR: [webgpu] backend not found" — the app's
 // hard `?provider=webgpu` override has no WASM fallback. Say so before the run
 // spends minutes downloading the model. (`--provider wasm` is always safe.)
-if (provider === 'webgpu' && process.env.RUN_GPU !== '1') {
+if (provider === 'webgpu' && !gpuRequested()) {
   console.warn(
     '[warn] --provider webgpu with RUN_GPU unset: this Chromium disables WebGPU, so the ' +
       'forced GPU path will fail ("backend not found"). Re-run with RUN_GPU=1 on a host ' +
@@ -278,7 +278,7 @@ console.log(
 async function launchBrowser() {
   return puppeteer.launch({
     executablePath: CHROME,
-    headless: 'shell',
+    headless: headlessMode(),
     // A stable profile keeps the model in the HTTP cache across a relaunch, so
     // recovering from a renderer crash does not re-download the weights. It lives
     // in the OS temp dir, never the repo, so it cannot pollute lint/build output.
@@ -364,6 +364,21 @@ let loadedModel = null;
   const p = await newPage();
   p.on('pageerror', () => {});
   await p.goto(pageUrl(), { waitUntil: 'load', timeout: 180000 });
+  // On a GPU host, confirm the adapter is real hardware before spending minutes
+  // on the sweep. A software renderer (SwiftShader/llvmpipe) means the flags or
+  // drivers are wrong, and every WebGPU timing would be a lie. Fail cleanly
+  // (close the browser and preview server) instead of dumping a stack trace.
+  if (gpuRequested()) {
+    try {
+      const { label } = await assertHardwareGpu(p);
+      console.log(`[gpu] WebGPU adapter: ${label}`);
+    } catch (err) {
+      console.error(`\n${err instanceof Error ? err.message : String(err)}`);
+      await browser.close().catch(() => {});
+      stopServer();
+      process.exit(1);
+    }
+  }
   const ready = await waitForModelReady(p, 'loading model (first page)')
     .then(() => true)
     .catch(() => false);

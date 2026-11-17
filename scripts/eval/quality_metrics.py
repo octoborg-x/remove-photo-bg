@@ -86,28 +86,68 @@ def classify_output_alpha(stats: dict) -> str:
 def label_components(mask: np.ndarray) -> np.ndarray:
     """8-connected label image for a boolean mask (0 = background).
 
-    A pure-numpy flood fill: no scipy, deterministic, and fast enough for the
-    few-megapixel images this harness sees. Returns int32 labels.
+    A run-length + union-find pass: runs are extracted per row with numpy and
+    linked between adjacent rows, so the cost scales with the number of runs
+    rather than the pixel count. (A per-pixel Python flood fill took ~4 s on a
+    2879x1280 image and ran twice per image — minutes per sweep; this is
+    milliseconds.) No scipy, deterministic. Returns int32 labels.
     """
     h, w = mask.shape
     labels = np.zeros((h, w), dtype=np.int32)
-    current = 0
-    for y0 in range(h):
-        row = mask[y0]
-        for x0 in range(w):
-            if not row[x0] or labels[y0, x0]:
-                continue
-            current += 1
-            stack = [(y0, x0)]
-            labels[y0, x0] = current
-            while stack:
-                y, x = stack.pop()
-                for dy in (-1, 0, 1):
-                    for dx in (-1, 0, 1):
-                        ny, nx = y + dy, x + dx
-                        if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and not labels[ny, nx]:
-                            labels[ny, nx] = current
-                            stack.append((ny, nx))
+    if not mask.any():
+        return labels
+
+    parent: list[int] = []
+
+    def find(x: int) -> int:
+        root = x
+        while parent[root] != root:
+            root = parent[root]
+        while parent[x] != root:
+            parent[x], x = root, parent[x]
+        return root
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+
+    rows: list[tuple[int, np.ndarray, np.ndarray, np.ndarray]] = []
+    prev = None  # (starts, ends, ids)
+    run_id = 0
+    for y in range(h):
+        row = mask[y]
+        edges = np.flatnonzero(np.diff(np.concatenate(([False], row, [False]))))
+        starts, ends = edges[0::2], edges[1::2]
+        ids = np.arange(run_id, run_id + starts.size, dtype=np.int64)
+        parent.extend(ids.tolist())
+        run_id += starts.size
+        if prev is not None and prev[2].size and starts.size:
+            ps, pe, pids = prev
+            # 8-connectivity: runs connect when they overlap or touch by one
+            # column; a run in the row below can touch two runs above, so union
+            # every overlapping pair (the two-pointer walk keeps this linear).
+            i = 0
+            for j in range(starts.size):
+                while i < ps.size and pe[i] + 1 <= starts[j]:
+                    i += 1
+                k = i
+                while k < ps.size and ps[k] <= ends[j]:
+                    union(int(pids[k]), int(ids[j]))
+                    k += 1
+        rows.append((y, starts, ends, ids))
+        prev = (starts, ends, ids)
+
+    # Paint each run with its root's label, numbering in first-seen order.
+    root_label: dict[int, int] = {}
+    for y, starts, ends, ids in rows:
+        for s, e, rid in zip(starts, ends, ids):
+            root = find(int(rid))
+            label = root_label.get(root)
+            if label is None:
+                label = len(root_label) + 1
+                root_label[root] = label
+            labels[y, s:e] = label
     return labels
 
 

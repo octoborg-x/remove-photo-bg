@@ -380,6 +380,15 @@ The metrics and gate logic are checked offline in CI
 (`python3 scripts/eval/accuracy-benchmark.py --self-test`), so a broken gate fails
 the build without a model or a browser.
 
+`run-eval.mjs` drives the app's real upload path, so it has to track the UI: it
+opens the Studio layer before touching `#dropZone`, and reads the export from the
+download link (`#downloadImage`), not the ≤450 px `#outputBox` preview. The sweep
+also survives a headless renderer crash — after ~55 full-resolution inferences
+Chromium's renderer dies and every later `newPage()` throws `Session with given id
+not found`; the harness relaunches the browser (reusing a temp-dir profile so the
+model stays cached) and contains any per-image crash, so all 64 images are scored
+instead of the run aborting partway.
+
 ## 8. Open items (the work this spec unblocks)
 
 1. **Build the Tier-B synthetic set builder** — composite the known-alpha

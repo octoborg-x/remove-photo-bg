@@ -38,8 +38,11 @@ from quality_metrics import (  # noqa: E402
     NEAR_OPAQUE_ALPHA,
     WASHED_MIN_COVERAGE,
     accuracy_metrics,
+    component_stats,
     descriptive_metrics,
     flips,
+    hole_stats,
+    label_components,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -154,6 +157,34 @@ def timing_budget(long_side: int, provider: str, thresholds: dict) -> dict | Non
     return None
 
 
+def _selftest_components() -> list[str]:
+    """Assert the run-length labeler's connectivity on tiny hand-built masks."""
+    errors = []
+    # Two 1-px squares touching only at a corner are one region under
+    # 8-connectivity and two under 4; the labeler is 8-connected.
+    diag = np.zeros((2, 2), dtype=bool)
+    diag[0, 0] = diag[1, 1] = True
+    if int(label_components(diag).max()) != 1:
+        errors.append("8-connectivity: diagonal pixels not one region")
+    # Two separate squares are two regions, with the smaller as speckle.
+    two = np.zeros((3, 5), dtype=bool)
+    two[1, 0] = True
+    two[1, 3] = two[1, 4] = True
+    stats = component_stats(two)
+    if stats["components"] != 2:
+        errors.append(f"expected 2 components, got {stats['components']}")
+    # A ring (hole) is one foreground region enclosing one background region.
+    ring = np.ones((5, 5), dtype=bool)
+    ring[1:4, 1:4] = False
+    holes = hole_stats(ring)
+    if holes["holes"] != 1 or holes["hole_area_frac"] <= 0:
+        errors.append(f"ring hole not detected: {holes}")
+    # A solid block has no hole.
+    if hole_stats(np.ones((4, 4), dtype=bool))["holes"] != 0:
+        errors.append("solid block reported a hole")
+    return errors
+
+
 def _selftest_constants() -> list[str]:
     """Assert the mirrored app constants still match their TypeScript source."""
     errors = []
@@ -184,7 +215,7 @@ def self_test() -> int:
     import io
     import tempfile
 
-    errors = _selftest_constants()
+    errors = _selftest_constants() + _selftest_components()
 
     with tempfile.TemporaryDirectory() as tmp:
         run = Path(tmp) / "run"

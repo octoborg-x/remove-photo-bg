@@ -8,6 +8,7 @@ import { execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
 
+const CHROME = process.env.CHROME_BIN || '/usr/bin/chromium';
 const IMAGE = process.argv[2] || 'glass-wine.jpg';
 const OUT = `smoke-results/measurements/browser-memory-${IMAGE.replace(/\W/g, '_')}.json`;
 
@@ -46,7 +47,7 @@ function treeRssKb(rootPid) {
 }
 
 const browser = await puppeteer.launch({
-  executablePath: '/usr/bin/chromium',
+  executablePath: CHROME,
   headless: 'shell',
   args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-precise-memory-info'],
   protocolTimeout: 300000,

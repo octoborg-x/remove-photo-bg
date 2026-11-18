@@ -256,31 +256,49 @@ Outputs to `--out`:
 
 ## WebGPU on a real GPU (Google Colab, free T4)
 
-The sandbox and CI have no GPU, so the app's WebGPU path could never be
-exercised against the real product — until now. Google's official
-headless-Chrome-with-Vulkan recipe runs on a free Colab T4, opens the deployed
-app, forces `?provider=webgpu`, and asserts the provider
-comes back as `webgpu` (plus logs timings, the adapter report, and every network
-request for the privacy check). Cost: $0. `scripts/run-smoke.mjs` is the
-supported driver — run it with `RUN_GPU=1` on a host that has a real GPU.
+The sandbox and CI have no GPU, so the app's WebGPU path cannot be exercised
+there. Google's official headless-Chrome-with-Vulkan recipe runs on a free Colab
+T4; cost: $0.
 
-The GPU path needs the host to serve the WebGPU-capable ORT bundle. Fetch it
-before starting the local preview server:
+**A tunnel from a GPU-less machine cannot test WebGPU.** WebGPU uses the
+*browser's* local GPU, so the browser must run on the machine that owns the GPU —
+the tunnel only moves bytes, not GPU access. Run the whole test **on Colab**
+(the app is built and served there too):
 
 ```bash
-npm run fetch-models -- --webgpu   # also copies ort.all.min.js + jsep wasm
-npm run build                      # or: vite preview after fetch-models --webgpu
-npx vite preview --port 4173 &
-npx cloudflared tunnel --url http://localhost:4173   # gives the run a HTTPS URL
+# In a Colab cell with Runtime → Change runtime type → T4 GPU:
+!git clone <repo> && cd <repo> && bash scripts/colab-webgpu.sh
 ```
 
-Then point the smoke driver at the returned URL:
+`scripts/colab-webgpu.sh` does the whole thing — GPU/driver check, the NVIDIA
+driver + Vulkan install, Chrome install, `npm ci`, `fetch-models --webgpu`,
+`build`, then `RUN_GPU=1 npm run eval:run -- --provider webgpu` against a local
+`vite preview` server. Narrow it with `--only <category>` / `--provider wasm`.
+
+**Two traps the flags and the driver install exist to avoid** (both documented by
+Chrome's guide, <https://developer.chrome.com/blog/supercharge-web-ai-testing>):
+
+1. Headless Chrome disables the GPU by default and gates WebGPU behind flags on
+   Linux. With `RUN_GPU=1` the harness uses the new headless mode and adds
+   `--use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface
+   --enable-unsafe-webgpu` (see `scripts/lib/gpu-browser.mjs`). Without them
+   `chrome://gpu` reports WebGPU as *disabled* or *software only*.
+2. Colab's default userspace GL driver makes Chrome fall back to **SwiftShader**,
+   where WebGPU is "available" but software — a timing there is not a GPU
+   timing. The script installs `libnvidia-gl-<major>` + `vulkan-tools` so
+   `vulkaninfo --summary` names the real GPU.
+
+The harness refuses to run on a software adapter: `assertHardwareGpu()` throws
+with the driver-fix hint rather than recording a fake WebGPU result.
+
+To drive a **deployed** URL instead (browser on Colab → Vercel), skip the build
+and point the smoke driver at it:
 
 ```bash
 RUN_GPU=1 node scripts/run-smoke.mjs <page-url> --provider webgpu --runs 5
 ```
 
-`RUN_GPU=1` is the supported path for a local or Colab GPU (it drops the
+`RUN_GPU=1` is the supported path for any host with a real GPU (it also drops the
 `--disable-gpu`/`--disable-webgpu` flags the sandbox needs).
 
 ## Reference inference (native CPU, fast)
@@ -331,7 +349,9 @@ npm run build
 npm run eval:run -- --provider wasm --out eval-results/wasm
 npm run eval:analyze                   # or: python3 scripts/eval/analyze-eval.py eval-results/wasm
 npm run eval:benchmark -- eval-results/wasm   # per-image checklist + verdicts
-# WebGPU, on a machine that has it (a real GPU; NOT this sandbox):
+# WebGPU, on a machine that has it (a real GPU; NOT this sandbox).
+# On Colab, scripts/colab-webgpu.sh does the driver + flags + run in one step:
+#   bash scripts/colab-webgpu.sh            # see "WebGPU on a real GPU" above
 RUN_GPU=1 npm run eval:run -- --provider webgpu --out eval-results/webgpu
 ```
 

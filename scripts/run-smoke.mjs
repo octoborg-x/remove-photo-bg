@@ -12,6 +12,7 @@
 // the output PNG data URL (saved to <out>/), and a log of network requests made
 // during processing (to verify no image pixels leave the page).
 import puppeteer from 'puppeteer-core';
+import { browserArgs, headlessMode, gpuRequested, assertHardwareGpu } from './lib/gpu-browser.mjs';
 
 const argUrl = process.argv[2];
 if (!argUrl) {
@@ -48,14 +49,13 @@ function injectOverrides(url) {
 const CHROME = process.env.CHROME_BIN || '/usr/bin/chromium';
 
 // Default: run CPU-only (sandbox/CI Chromium has no GPU). Set RUN_GPU=1 when the
-// browser really has a usable GPU (the Colab T4 headless recipe) to drop the
-// disable flags and let WebGPU engage.
-const args = ['--no-sandbox', '--disable-dev-shm-usage', '--enable-logging=stderr'];
-if (process.env.RUN_GPU !== '1') args.push('--disable-gpu', '--disable-webgpu');
+// browser really has a usable GPU (the Colab T4 headless recipe): that switches
+// to the new headless mode and the Vulkan/WebGPU flags the GPU path needs.
+const args = browserArgs(process.env, ['--enable-logging=stderr']);
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,
-  headless: 'shell' /* new headless supports WebGPU; shell is resize-able but no WebGPU */,
+  headless: headlessMode(),
   args,
   protocolTimeout: 3600000,
   timeout: 3600000,
@@ -84,6 +84,20 @@ const results = {};
 page.on('dialog', async (d) => d.dismiss());
 
 await page.goto(injectOverrides(argUrl), { waitUntil: 'load', timeout: 120000 });
+
+// On a GPU host, confirm the adapter is real hardware before the run: a software
+// renderer (SwiftShader/llvmpipe) means the flags or drivers are wrong and any
+// "webgpu" timing would be a lie. Fail cleanly instead of dumping a stack trace.
+if (gpuRequested()) {
+  try {
+    const { label } = await assertHardwareGpu(page);
+    console.log('WebGPU adapter:', label);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    await browser.close().catch(() => {});
+    process.exit(1);
+  }
+}
 
 // Wait for the model to be ready (poll; the model download + WASM init can take
 // several minutes on first load).

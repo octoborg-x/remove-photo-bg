@@ -71,8 +71,8 @@ button on the page.
    a GPU the default run is therefore the **WebGPU probe**. To rule the GPU out
    explicitly (CPU/WASM probe), append `?provider=wasm`. To force the GPU on a
    machine where it was detected but not defaulted, append `?provider=webgpu`.
-   Headless CI always exercises the WASM path (`run-smoke.mjs` forces
-   software rendering).
+   Headless CI runs the WASM path (`run-smoke.mjs` forces software rendering
+   unless `RUN_GPU=1`).
 
 **Privacy:** the harness never uploads anything. `run-smoke.mjs` additionally
 records every network request and fails the summary if any is non-first-party;
@@ -86,9 +86,24 @@ node scripts/run-smoke.mjs "https://work-1-aybthnpldbthpfgf.prod-runtime.all-han
 ```
 
 That writes provider, timings, the output PNG, and `requests.json` (privacy:
-all requests must stay first-party). Note: `run-smoke.mjs` forces WASM/software
-rendering — it is the *class-2* probe. WebGPU probing must be done by opening
-the page in a graphical browser (steps 1–4).
+all requests must stay first-party). Without `RUN_GPU=1` it is the *class-2*
+probe (software rendering).
+
+**Automated WebGPU probe (Colab T4, scripted).** WebGPU uses the browser's
+*local* GPU, so a tunnel from a GPU-less machine cannot exercise it — the
+browser must run where the GPU is. On a Colab T4 runtime the whole class-1 probe
+is scripted:
+
+```bash
+bash scripts/colab-webgpu.sh --only accessory   # drivers + build + RUN_GPU=1 eval
+```
+
+`RUN_GPU=1` switches to the new headless mode and adds the Vulkan/WebGPU flags
+(`scripts/lib/gpu-browser.mjs`); the harness **fails** if the adapter is a
+software renderer (SwiftShader/llvmpipe) instead of real hardware, so a
+"webgpu" result is never a software result. See README "WebGPU on a real GPU"
+and the driver trap documented by Chrome's guide
+(<https://developer.chrome.com/blog/supercharge-web-ai-testing>).
 
 **What to paste back into the report:** the provider line, the warm timings,
 and the device/OS/GPU name from `chrome://gpu` — or, for a scripted run, the

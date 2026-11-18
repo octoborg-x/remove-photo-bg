@@ -372,6 +372,10 @@ the descriptive metrics into an actual accuracy score, add reference masks under
 `eval/ground-truth/` and re-run `eval:benchmark` — see
 [`docs/accuracy-benchmark.md`](./docs/accuracy-benchmark.md).
 
+To pull a run off a GitHub Codespace (results are gitignored, so they stay on the
+runtime): `bash scripts/codespace-download-results.sh [run-dir]` zips the dir and
+prints a `gh codespace cp` one-liner; add `--serve` for a browser link.
+
 ## Commands
 
 | Command | Purpose |
@@ -391,6 +395,7 @@ the descriptive metrics into an actual accuracy score, add reference masks under
 | `npm run fetch-models` | download + verify model/WASM artifacts (also prepares `public/wasm/` for local dev) |
 | `npm run license:audit` | dependency licence audit (all permissive; see `LICENSE_AUDIT.md`) |
 | `node scripts/run-smoke.mjs <url> [--image …] [--runs n] [--out dir]` | headless browser smoke test |
+| `bash scripts/codespace-download-results.sh [run-dir] [--serve]` | zip an eval run and download it from a Codespace |
 
 ## Deployment
 

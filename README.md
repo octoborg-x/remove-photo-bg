@@ -372,6 +372,20 @@ the descriptive metrics into an actual accuracy score, add reference masks under
 `eval/ground-truth/` and re-run `eval:benchmark` — see
 [`docs/accuracy-benchmark.md`](./docs/accuracy-benchmark.md).
 
+### Evaluation gallery (WASM vs WebGPU, all 64 images)
+
+`npm run eval:gallery` builds a static, self-contained comparison page at
+`public/eval-gallery/`: for every one of the 64 evaluation images it shows the
+**original | WASM (CPU) cut-out | WebGPU cut-out** side by side, on a
+checkerboard so the transparency is visible, with per-image inference times and
+category filters. It reads the two runs from `eval-results/wasm/` and
+`eval-results/webgpu/` (override with `--wasm <dir>` / `--gpu <dir>`), downscales
+each PNG to WebP in a headless browser, and writes `gallery.json`. The eval PNGs
+are ~3 MB each (192 MB total), so the committed gallery is ~15 MB — the same
+approach as `build-demo`. Serve the folder over HTTP to view it
+(`python3 -m http.server -d public/eval-gallery`) — it fetches `gallery.json`,
+so opening the file directly will not work.
+
 ## Commands
 
 | Command | Purpose |
@@ -387,6 +401,7 @@ the descriptive metrics into an actual accuracy score, add reference masks under
 | `npm run eval:run` | run the deployed pipeline over the evaluation set (WASM; `RUN_GPU=1` for WebGPU) |
 | `npm run eval:analyze` | edge-character metrics from an evaluation run's output PNGs |
 | `npm run eval:benchmark -- <run-dir>` | per-image accuracy checklist + PASS/REVIEW/FAIL verdicts (+ IoU/Dice with ground truth) |
+| `npm run eval:gallery` | build the static 3-up (original/WASM/WebGPU) gallery for all 64 eval images |
 | `npm run verify` | lint + typecheck + unit tests + build |
 | `npm run fetch-models` | download + verify model/WASM artifacts (also prepares `public/wasm/` for local dev) |
 | `npm run license:audit` | dependency licence audit (all permissive; see `LICENSE_AUDIT.md`) |

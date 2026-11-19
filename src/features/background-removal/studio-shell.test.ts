@@ -98,4 +98,23 @@ describe('studio shell wiring (main.ts + index.html)', () => {
   it('falls back to a single pass below the tiling minimum long side', () => {
     expect(MAIN).toMatch(/tileGrid > 1 && longSide >= TILING_MIN_LONG_SIDE/);
   });
+
+  it('refines the recovered mask, not the raw mask, when flood recovery fires', () => {
+    // Stage 1 may replace a flooded model mask with a border-flood recovery. The
+    // refinement stage (Stages 2-4) rebuilds the final alpha, so it must receive
+    // the recovered mask — feeding it the raw `croppedFloat` silently discards
+    // the recovery and the exported cut-out keeps the background attached
+    // (the large-04 regression).
+    const refine = MAIN.slice(
+      MAIN.indexOf('function compositeAndRefine('),
+      MAIN.indexOf('async function refineAndFinalize('),
+    );
+    expect(refine).toMatch(/recoverForegroundMask\(image, fullResMask\)/);
+    // The refine input branches on `recovered`: the recovered full-resolution
+    // mask, or the letterbox-cropped raw float mask.
+    expect(refine).toMatch(/recovered\s*\?\s*\{ mask: bytesToAlpha\(recoveredMask\)/);
+    expect(refine).toMatch(/mask: croppedFloat, width: rect\.width, height: rect\.height/);
+    // The refine call passes the chosen mask together with its own dimensions.
+    expect(refine).toMatch(/refineAndFinalize\(jobId, image, refineInput\.mask, refineInput\.width, refineInput\.height/);
+  });
 });

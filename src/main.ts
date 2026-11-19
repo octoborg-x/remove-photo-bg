@@ -21,7 +21,7 @@ import {
   type MaskAdjust,
 } from './features/background-removal/mask-postprocess';
 import { composeResult } from './features/background-removal/composite';
-import { recoverForegroundMask } from './features/background-removal/mask-recovery';
+import { recoverForegroundMask, despeckleRecoveredMask } from './features/background-removal/mask-recovery';
 import {
   rawMaskStats,
   formatRawMaskStats,
@@ -1877,7 +1877,7 @@ function compositeAndRefine(
       // disabled, it is the settled result.
       finishResult(canvas, preview, size, refineEnabled ? 'preview' : 'final');
       if (!refineEnabled) return;
-      return refineAndFinalize(jobId, image, refineInput.mask, refineInput.width, refineInput.height, guide, size, postprocessStart);
+      return refineAndFinalize(jobId, image, refineInput.mask, refineInput.width, refineInput.height, guide, size, postprocessStart, recovered);
     })
     .catch((err) => {
       if (jobId !== activeJobId) return;
@@ -2010,6 +2010,7 @@ async function refineAndFinalize(
   guide: Float32Array,
   size: string,
   postprocessStart: number,
+  despeckleAfterRefine: boolean,
 ): Promise<void> {
   setConsoleStatus('Refining edges…', true);
   const t0 = performance.now();
@@ -2030,7 +2031,13 @@ async function refineAndFinalize(
     // threshold/feather, then composite. The flood-fill recovery guard was
     // already applied to the input mask (see compositeAndRefine), so the refined
     // alpha is derived from the recovered mask and is not re-run here.
-    const refinedMask = applyMaskAdjust(alphaToBytes(outcome.alpha), image.width, image.height, maskAdjust);
+    let refinedMask = applyMaskAdjust(alphaToBytes(outcome.alpha), image.width, image.height, maskAdjust);
+    // Refinement re-grows small islands from the soft alpha, so the recovery's
+    // despeckle has to run again on its output — and only for a recovery, so a
+    // model mask is never altered.
+    if (despeckleAfterRefine) {
+      refinedMask = despeckleRecoveredMask(refinedMask, image.width, image.height);
+    }
     const { canvas, preview } = await composeResult(image, refinedMask);
     if (jobId !== activeJobId) return;
     refinementSucceeded = true;

@@ -21,7 +21,7 @@ import {
   type MaskAdjust,
 } from './features/background-removal/mask-postprocess';
 import { composeResult } from './features/background-removal/composite';
-import { recoverForegroundMask } from './features/background-removal/mask-recovery';
+import { recoverForegroundMask, despeckleRecoveredMask } from './features/background-removal/mask-recovery';
 import {
   rawMaskStats,
   formatRawMaskStats,
@@ -40,7 +40,7 @@ import {
   buildDiagnosticReport,
   formatDiagnosticReport,
 } from './features/diagnostics/diagnostic-report';
-import { cropMaskFloat, alphaToBytes, lumaFromRgba, resizeMaskFloat } from './features/background-removal/mask-resize';
+import { cropMaskFloat, alphaToBytes, bytesToAlpha, lumaFromRgba, resizeMaskFloat } from './features/background-removal/mask-resize';
 import {
   planTiles,
   TileStitcher,
@@ -1858,6 +1858,14 @@ function compositeAndRefine(
   const stage1Mask = applyMaskAdjust(recoveredMask, image.width, image.height, maskAdjust);
   const guide = lumaFromRgba(image.data);
   const refineEnabled = refineConfig.enabled;
+  // Refinement must operate on the same mask Stage 1 painted, so a flood-fill
+  // recovery is not silently discarded when the final result is rebuilt. The
+  // recovered mask is at the *original* resolution (whole-image geometry), so
+  // feed it as the refine input directly; otherwise keep the letterbox-cropped
+  // float mask, which the refinement stage resizes up to the original size.
+  const refineInput = recovered
+    ? { mask: bytesToAlpha(recoveredMask), width: image.width, height: image.height }
+    : { mask: croppedFloat, width: rect.width, height: rect.height };
   composeResult(image, stage1Mask)
     .then(({ canvas, preview }) => {
       if (jobId !== activeJobId) return;
@@ -1869,7 +1877,7 @@ function compositeAndRefine(
       // disabled, it is the settled result.
       finishResult(canvas, preview, size, refineEnabled ? 'preview' : 'final');
       if (!refineEnabled) return;
-      return refineAndFinalize(jobId, image, croppedFloat, rect, guide, size, postprocessStart);
+      return refineAndFinalize(jobId, image, refineInput.mask, refineInput.width, refineInput.height, guide, size, postprocessStart, recovered);
     })
     .catch((err) => {
       if (jobId !== activeJobId) return;
@@ -1996,11 +2004,13 @@ async function runTiledInference(image: ImageData): Promise<void> {
 async function refineAndFinalize(
   jobId: number,
   image: ImageData,
-  croppedFloat: Float32Array,
-  rect: { width: number; height: number },
+  refineMaskFloat: Float32Array,
+  refineMaskWidth: number,
+  refineMaskHeight: number,
   guide: Float32Array,
   size: string,
   postprocessStart: number,
+  despeckleAfterRefine: boolean,
 ): Promise<void> {
   setConsoleStatus('Refining edges…', true);
   const t0 = performance.now();
@@ -2008,9 +2018,9 @@ async function refineAndFinalize(
     const outcome = await refinementRunner.refine({
       jobId,
       guide,
-      mask: croppedFloat,
-      maskWidth: rect.width,
-      maskHeight: rect.height,
+      mask: refineMaskFloat,
+      maskWidth: refineMaskWidth,
+      maskHeight: refineMaskHeight,
       width: image.width,
       height: image.height,
       config: refineConfig,
@@ -2019,9 +2029,15 @@ async function refineAndFinalize(
     if ('cancelled' in outcome) return; // a newer job owns the UI now
     // The refinement returns a soft float alpha; apply the user's
     // threshold/feather, then composite. The flood-fill recovery guard was
-    // already applied to the Stage-1 mask and the refined alpha is derived from
-    // the same soft mask, so it is not re-run here.
-    const refinedMask = applyMaskAdjust(alphaToBytes(outcome.alpha), image.width, image.height, maskAdjust);
+    // already applied to the input mask (see compositeAndRefine), so the refined
+    // alpha is derived from the recovered mask and is not re-run here.
+    let refinedMask = applyMaskAdjust(alphaToBytes(outcome.alpha), image.width, image.height, maskAdjust);
+    // Refinement re-grows small islands from the soft alpha, so the recovery's
+    // despeckle has to run again on its output — and only for a recovery, so a
+    // model mask is never altered.
+    if (despeckleAfterRefine) {
+      refinedMask = despeckleRecoveredMask(refinedMask, image.width, image.height);
+    }
     const { canvas, preview } = await composeResult(image, refinedMask);
     if (jobId !== activeJobId) return;
     refinementSucceeded = true;

@@ -98,4 +98,40 @@ describe('studio shell wiring (main.ts + index.html)', () => {
   it('falls back to a single pass below the tiling minimum long side', () => {
     expect(MAIN).toMatch(/tileGrid > 1 && longSide >= TILING_MIN_LONG_SIDE/);
   });
+
+  it('refines the recovered mask, not the raw mask, when flood recovery fires', () => {
+    // Stage 1 may replace a flooded model mask with a border-flood recovery. The
+    // refinement stage (Stages 2-4) rebuilds the final alpha, so it must receive
+    // the recovered mask — feeding it the raw `croppedFloat` silently discards
+    // the recovery and the exported cut-out keeps the background attached
+    // (the large-04 regression).
+    const refine = MAIN.slice(
+      MAIN.indexOf('function compositeAndRefine('),
+      MAIN.indexOf('async function refineAndFinalize('),
+    );
+    expect(refine).toMatch(/recoverForegroundMask\(image, fullResMask\)/);
+    // The refine input branches on `recovered`: the recovered full-resolution
+    // mask, or the letterbox-cropped raw float mask.
+    expect(refine).toMatch(/recovered\s*\?\s*\{ mask: bytesToAlpha\(recoveredMask\)/);
+    expect(refine).toMatch(/mask: croppedFloat, width: rect\.width, height: rect\.height/);
+    // The refine call passes the chosen mask together with its own dimensions.
+    expect(refine).toMatch(/refineAndFinalize\(jobId, image, refineInput\.mask, refineInput\.width, refineInput\.height/);
+    // ...and flags whether this was a recovery, so the despeckle below runs only
+    // on recovered masks and never alters a model mask.
+    expect(refine).toMatch(/postprocessStart, recovered\)/);
+  });
+
+  it('re-despeckles after refinement, because refinement re-grows the islands', () => {
+    // The recovery despeckles the flood-fill output, but Stages 2-4 rebuild the
+    // alpha from the soft mask and re-grow small islands, so the speckle returns
+    // (large-04: 78 components, ordinary-product-08: 267). The final alpha must
+    // be despeckled again, gated on the recovery flag.
+    const refine = MAIN.slice(MAIN.indexOf('async function refineAndFinalize('));
+    expect(refine).toMatch(/if \(despeckleAfterRefine\) \{/);
+    expect(refine).toMatch(/refinedMask = despeckleRecoveredMask\(refinedMask, image\.width, image\.height\)/);
+    // The despeckle must land before the composite that paints the result.
+    expect(refine.indexOf('despeckleRecoveredMask(refinedMask')).toBeLessThan(
+      refine.indexOf('composeResult(image, refinedMask)'),
+    );
+  });
 });

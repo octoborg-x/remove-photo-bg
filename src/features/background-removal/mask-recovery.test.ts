@@ -5,6 +5,7 @@ import {
   isFloodedMask,
   floodFillForeground,
   recoverForegroundMask,
+  despeckleRecoveredMask,
   DEFAULT_RECOVERY_OPTIONS,
 } from './mask-recovery';
 
@@ -158,5 +159,52 @@ describe('recoverForegroundMask', () => {
   it('uses the documented default thresholds', () => {
     expect(DEFAULT_RECOVERY_OPTIONS.floodFraction).toBe(0.75);
     expect(DEFAULT_RECOVERY_OPTIONS.borderFraction).toBe(0.7);
+  });
+});
+
+describe('despeckleRecoveredMask', () => {
+  it('drops tiny isolated islands and keeps a large connected subject', () => {
+    const w = 100;
+    const h = 100;
+    const mask = maskOf(w, h, 0);
+    // Large subject: 40x40 block = 1600 px, far above 5e-4 * 10000 = 5 px.
+    for (let y = 30; y < 70; y++) for (let x = 30; x < 70; x++) mask[y * w + x] = 255;
+    // Three 1-px speckles.
+    mask[5 * w + 5] = 255;
+    mask[10 * w + 90] = 255;
+    mask[95 * w + 50] = 255;
+    const out = despeckleRecoveredMask(mask, w, h);
+    expect(foregroundFraction(out)).toBeCloseTo(0.16, 4);
+    expect(out[5 * w + 5]).toBe(0);
+    expect(out[10 * w + 90]).toBe(0);
+    expect(out[95 * w + 50]).toBe(0);
+    expect(out[50 * w + 50]).toBe(255);
+  });
+
+  it('keeps a genuinely multi-part subject (several large islands)', () => {
+    const w = 100;
+    const h = 100;
+    const mask = maskOf(w, h, 0);
+    for (let y = 10; y < 30; y++) for (let x = 10; x < 30; x++) mask[y * w + x] = 255;
+    for (let y = 60; y < 90; y++) for (let x = 60; x < 90; x++) mask[y * w + x] = 255;
+    const out = despeckleRecoveredMask(mask, w, h);
+    expect(foregroundFraction(out)).toBeCloseTo(foregroundFraction(mask), 6);
+  });
+
+  it('preserves the alpha of kept pixels rather than flattening to 255', () => {
+    const w = 50;
+    const h = 50;
+    const mask = maskOf(w, h, 0);
+    for (let y = 10; y < 40; y++) for (let x = 10; x < 40; x++) mask[y * w + x] = 200;
+    const out = despeckleRecoveredMask(mask, w, h);
+    expect(out[25 * w + 25]).toBe(200);
+  });
+
+  it('is a no-op on an already-clean mask', () => {
+    const w = 60;
+    const h = 60;
+    const mask = maskOf(w, h, 0);
+    for (let y = 15; y < 45; y++) for (let x = 15; x < 45; x++) mask[y * w + x] = 255;
+    expect(despeckleRecoveredMask(mask, w, h)).toEqual(mask);
   });
 });

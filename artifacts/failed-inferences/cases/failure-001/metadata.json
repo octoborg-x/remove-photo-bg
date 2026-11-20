@@ -43,6 +43,28 @@
   },
   "observedProblem": "The model returned a fully transparent mask: nothing of the subject survives. Every pixel is alpha 0.",
   "suspectedCause": "A black-and-white, low-contrast frame (a pale horse on a pale river bank). With no colour cue and little luminance separation between subject and background, the model finds no confident foreground.",
+  "investigation": [
+    {
+      "lever": "Raw model output",
+      "finding": "min 0.000 / mean 0.000 / max 0.000 \u2014 a hard zero, not a low-confidence mask."
+    },
+    {
+      "lever": "Model precision",
+      "finding": "The fp16 variant (model_512_int0_fp16.onnx) also returns empty, so this is not an int8 quantisation artefact."
+    },
+    {
+      "lever": "Input contrast stretch",
+      "finding": "Per-channel histogram stretch before inference leaves the mask max unchanged."
+    },
+    {
+      "lever": "2x2 tiled inference",
+      "finding": "All four tiles return exactly 0.000 \u2014 a closer view does not help."
+    },
+    {
+      "lever": "Post-inference knobs",
+      "finding": "Threshold, feather and the refinement config all operate on a zero mask and cannot raise it."
+    }
+  ],
   "fix": {
     "implemented": false,
     "description": null,

@@ -43,6 +43,7 @@
   },
   "observedProblem": "Near-empty output: only 0.77% of pixels are kept, so the subject (a person in a forest) is almost entirely removed.",
   "suspectedCause": "The subject is a small, low-contrast figure against a tall-tree forest, a background with strong vertical texture that the model prefers over the thin human figure.",
+  "investigation": [],
   "fix": {
     "implemented": false,
     "description": null,

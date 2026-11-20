@@ -43,6 +43,7 @@
   },
   "observedProblem": "Borderline: 5.0% of pixels kept for a scent bottle. Most of the subject is removed.",
   "suspectedCause": "A small, translucent glass bottle; transparent subjects have little solid area for the model to lock onto.",
+  "investigation": [],
   "fix": {
     "implemented": false,
     "description": null,

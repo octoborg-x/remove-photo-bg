@@ -43,6 +43,7 @@
   },
   "observedProblem": "Borderline: only 3.8% of pixels are kept. Much of the subject is removed; a small fragment survives.",
   "suspectedCause": "A street-scene advertisement pillar with several figures; the model keeps one small region and discards the rest.",
+  "investigation": [],
   "fix": {
     "implemented": false,
     "description": null,

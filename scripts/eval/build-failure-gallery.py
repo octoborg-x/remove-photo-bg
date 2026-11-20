@@ -48,6 +48,10 @@ MODEL_FILE = "models/model_512_int8_fp16.onnx"
 # severity: high | medium | low
 # category: empty-output | near-empty-output | partial-subject-removal |
 #           washed-out-ghost
+#
+# `investigation` records what was actually tried against the failure and what it
+# measured, so a future reader does not repeat a dead end. Each entry is
+# (lever, finding). Only measured results belong here — no hypotheses.
 CASE_SPECS = [
     dict(
         caseId="failure-001", image="hair-fur-07", category="empty-output",
@@ -58,6 +62,18 @@ CASE_SPECS = [
               "river bank). With no colour cue and little luminance separation "
               "between subject and background, the model finds no confident "
               "foreground.",
+        investigation=[
+            ("Raw model output", "min 0.000 / mean 0.000 / max 0.000 — a hard "
+             "zero, not a low-confidence mask."),
+            ("Model precision", "The fp16 variant (model_512_int0_fp16.onnx) "
+             "also returns empty, so this is not an int8 quantisation artefact."),
+            ("Input contrast stretch", "Per-channel histogram stretch before "
+             "inference leaves the mask max unchanged."),
+            ("2x2 tiled inference", "All four tiles return exactly 0.000 — a "
+             "closer view does not help."),
+            ("Post-inference knobs", "Threshold, feather and the refinement "
+             "config all operate on a zero mask and cannot raise it."),
+        ],
         fixImplemented=False,
     ),
     dict(
@@ -67,6 +83,14 @@ CASE_SPECS = [
         cause="A very dark, historic black-and-white photograph (mean luminance "
               "68/255). The subject is barely separated from an almost-black "
               "background, so the mask collapses to empty.",
+        investigation=[
+            ("Raw model output", "min 0.000 / mean 0.00001 / max 0.00005 — "
+             "effectively a hard zero."),
+            ("Model precision", "fp16 also empty — not a quantisation artefact."),
+            ("Input contrast stretch", "No effect on the mask max."),
+            ("2x2 tiled inference", "All four tiles return exactly 0.000."),
+            ("Post-inference knobs", "Cannot raise a zero mask."),
+        ],
         fixImplemented=False,
     ),
     dict(
@@ -76,6 +100,14 @@ CASE_SPECS = [
                  "background.",
         cause="A crowded night scene with no single dominant subject. The model "
               "has no clear figure to latch onto and returns an empty mask.",
+        investigation=[
+            ("Raw model output", "min 0.000 / mean 0.00001 / max 0.00006 — "
+             "effectively a hard zero."),
+            ("Model precision", "fp16 also empty — not a quantisation artefact."),
+            ("Input contrast stretch", "No effect on the mask max."),
+            ("2x2 tiled inference", "All four tiles return exactly 0.000."),
+            ("Post-inference knobs", "Cannot raise a zero mask."),
+        ],
         fixImplemented=False,
     ),
     dict(
@@ -85,6 +117,23 @@ CASE_SPECS = [
         cause="Thin metal structures with specular highlights and very low "
               "foreground area, in a dark wooden tray. Thin, low-area subjects "
               "are the documented hardest class for this model.",
+        investigation=[
+            ("Raw model output", "min 0.000 / mean 0.000 / max 0.000 — a hard "
+             "zero."),
+            ("Model precision", "fp16 also empty — not a quantisation artefact."),
+            ("Input contrast stretch", "No effect on the mask max."),
+            ("2x2 tiled inference",
+             "MEASURED FALSE POSITIVE — do not ship this. Three of the four "
+             "tiles return exactly 0.000; the fourth floods (fg 0.794, median "
+             "0.992) instead of detecting anything. The stitched mask equals "
+             "that single tile's mask multiplied by its crossfade weight field "
+             "(max abs error 0.00000, correlation 1.00000), so it encodes the "
+             "TILE GEOMETRY, not the image: IoU against the metal cutlery is "
+             "0.11 and it keeps 13.5% of the dark tray background. Its boundary "
+             "gradient contrast is 1.75, versus 8.7–15.0 for real cut-outs. "
+             "Scores REVIEW instead of FAIL(empty) only because a mask exists."),
+            ("Post-inference knobs", "Cannot raise a zero mask."),
+        ],
         fixImplemented=False,
     ),
     dict(
@@ -332,6 +381,10 @@ def build_case(sess, spec: dict, out_root: Path, command: str) -> dict:
         },
         "observedProblem": spec["observed"],
         "suspectedCause": spec["cause"],
+        "investigation": [
+            {"lever": lever, "finding": finding}
+            for lever, finding in spec.get("investigation", [])
+        ],
         "fix": {"implemented": spec["fixImplemented"], "description": None, "passesAfterFix": None},
     }
     (case_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
@@ -598,6 +651,8 @@ def write_readme(out_root: Path, cases: list[dict], summary: dict) -> None:
         lines.append(f"| Reproduction status | `{c['reproduction']['status']}` |")
         lines.append(f"| Observed problem | {c['observedProblem']} |")
         lines.append(f"| Suspected cause | {c['suspectedCause']} |")
+        for item in c.get("investigation", []):
+            lines.append(f"| Tested: {item['lever']} | {item['finding']} |")
         fix = c["fix"]
         lines.append(f"| Fix implemented | {'yes' if fix['implemented'] else 'no'} |")
         passes = fix["passesAfterFix"]

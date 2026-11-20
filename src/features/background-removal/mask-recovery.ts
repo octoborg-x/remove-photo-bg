@@ -91,7 +91,10 @@ export function isFloodedMask(
 /** Smallest isolated island kept by the flood-recovery despeckle, as a fraction
  *  of the image. Below this a foreground island is background texture the fill
  *  could not reach (grain, reflections, gaps between product parts), not subject.
- *  5e-4 is the same bar the accuracy benchmark's speckle gate uses. */
+ *  Same number as `MIN_ISLAND_FRACTION` (refine-mask.ts) and the accuracy
+ *  benchmark's `SPECKLE_ISLAND_FRACTION` (quality_metrics.py); the three are
+ *  asserted equal by `--self-test` and threshold-sync.test.ts. See
+ *  `docs/accuracy-benchmark.md` §5.1.1. */
 export const MIN_RECOVERY_ISLAND_FRACTION = 5e-4;
 
 /** Drops foreground islands smaller than `minFraction` of the image, keeping the

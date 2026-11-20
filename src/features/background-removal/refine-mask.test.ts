@@ -216,11 +216,41 @@ describe('removeTinyIslands', () => {
     expect(removed).toBe(0);
     expect(alpha[10 * w + 10]).toBe(1);
   });
+
+  it('keeps a legitimately multi-part subject at the real threshold', () => {
+    // Several separated blobs, each above the (larger, 5e-4) bar — a bouquet or
+    // a cutlery set. Only the one genuinely sub-threshold speck is dropped.
+    const w = 200;
+    const h = 200;
+    const bar = minIslandArea(w, h);
+    expect(bar).toBe(20); // 200 * 200 * 5e-4
+    const alpha = new Float32Array(w * h);
+    const blobs: Array<[number, number]> = [[10, 10], [80, 20], [30, 120], [140, 150]];
+    for (const [bx, by] of blobs) {
+      for (let y = by; y < by + 6; y++) for (let x = bx; x < bx + 5; x++) alpha[y * w + x] = 1;
+    }
+    // One 3x3 = 9 px speck, below the bar.
+    for (let y = 190; y < 193; y++) for (let x = 190; x < 193; x++) alpha[y * w + x] = 1;
+
+    const removed = removeTinyIslands(alpha, w, h, bar);
+    expect(removed).toBe(1);
+    for (const [bx, by] of blobs) expect(alpha[(by + 2) * w + bx + 2]).toBe(1);
+    expect(alpha[191 * w + 191]).toBe(0);
+  });
 });
 
 describe('minIslandArea', () => {
-  it('scales with image size and has a floor', () => {
+  it('uses the 5e-4 fraction with a 16 px floor', () => {
     expect(minIslandArea(100, 100)).toBe(16);
-    expect(minIslandArea(4000, 4000)).toBe(Math.round(4000 * 4000 * 2e-5));
+    expect(minIslandArea(4000, 4000)).toBe(8000);
+  });
+
+  it('is resolution-invariant when cleanup runs on a downscaled copy', () => {
+    // A 4000x4000 output refined at 1000x1000: the bar must be the same
+    // *fraction* of the work grid, not the output pixel count.
+    const outputArea = 4000 * 4000;
+    expect(minIslandArea(1000, 1000, outputArea)).toBe(500);
+    expect(minIslandArea(1000, 1000, outputArea) / (1000 * 1000)).toBeCloseTo(5e-4, 12);
+    expect(minIslandArea(4000, 4000, outputArea) / outputArea).toBeCloseTo(5e-4, 12);
   });
 });

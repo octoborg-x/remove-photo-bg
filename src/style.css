@@ -242,6 +242,11 @@
     display: block;
     width: 100%;
     height: auto;
+    /* The stage owns the pointer gesture; letting the <img> take it starts a
+       native image drag, which cancels the pointer stream mid-drag. */
+    pointer-events: none;
+    -webkit-user-drag: none;
+    user-select: none;
   }
   .compareAfter {
     position: absolute;

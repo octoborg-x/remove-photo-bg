@@ -1,5 +1,11 @@
 // Renders the before/after gallery from ./gallery.json (written by
 // scripts/build-eval-gallery.mjs --run <dir>). Static page: no build step.
+//
+// Each card is the landing page's comparison slider (src/features/compare-slider.ts
+// plus the `.compareStage` rules in src/style.css): both images stacked, the
+// cut-out clipped at `--pos`, and a divider the pointer can drag. The range
+// input is the single source of truth, so arrow keys and screen readers work
+// without a pointer.
 const grid = document.getElementById('grid');
 const metaEl = document.getElementById('meta');
 const filtersEl = document.getElementById('filters');
@@ -20,15 +26,6 @@ const family = (v) => {
   return m ? (m[2] === 'empty' ? 'empty' : m[1]) : String(v).trim();
 };
 
-function pane(label, file, note, ok) {
-  const speed = note ? `<span class="ms">${esc(note)}</span>` : '';
-  return `
-    <div class="pane ${ok === false ? 'bad' : ok === true ? 'ok' : ''}">
-      <div class="tag"><span class="dot"></span>${esc(label)}${speed}</div>
-      <div class="frame"><img loading="lazy" src="./${esc(file)}" alt="${esc(label)} — ${esc(file)}" /></div>
-    </div>`;
-}
-
 function card(c) {
   const fam = family(c.verdict);
   const badge = c.verdict ? `<span class="verdict ${fam ? fam.toLowerCase() : ''}">${esc(c.verdict)}</span>` : '';
@@ -43,11 +40,73 @@ function card(c) {
         ${badge}
         <span class="title">${esc(c.title)}${c.source ? ` · <a href="${esc(c.source)}" target="_blank" rel="noopener">source</a>` : ''}</span>
       </div>
-      <div class="duo">
-        ${pane('Original', `${c.id}-original.webp`, null, null)}
-        ${pane('Cut-out', `${c.id}-cutout.webp`, note, c.ok)}
-      </div>
+      <figure class="compare" data-compare data-pos="50">
+        <div class="compareStage" style="--ar: ${c.width} / ${c.height}">
+          <img class="compareImg compareBefore" draggable="false" loading="lazy" src="./${esc(c.id)}-original.webp" alt="Original photo — ${esc(c.id)}" />
+          <img class="compareImg compareAfter" draggable="false" loading="lazy" src="./${esc(c.id)}-cutout.webp" alt="Background removed — ${esc(c.id)}" />
+          <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+          <span class="compareTag before">Original</span>
+          <span class="compareTag after${c.ok ? '' : ' bad'}">Cut-out · ${esc(note)}</span>
+        </div>
+        <input
+          class="compareRange"
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          value="50"
+          aria-label="Reveal the cut-out for ${esc(c.id)}: left is the original, right is the background removed"
+        />
+      </figure>
     </article>`;
+}
+
+const clamp = (v) => (Number.isNaN(v) ? 50 : Math.max(0, Math.min(100, v)));
+
+/** Wires every comparison figure: the range drives `--pos`, dragging the stage drives the range. */
+function initCompare(root) {
+  for (const figure of root.querySelectorAll('[data-compare]')) {
+    const range = figure.querySelector('.compareRange');
+    const stage = figure.querySelector('.compareStage');
+    if (!range || !stage) continue;
+
+    const apply = (value) => figure.style.setProperty('--pos', `${clamp(value)}%`);
+    const initial = Number(figure.dataset.pos);
+    range.value = String(Number.isFinite(initial) ? initial : 50);
+    apply(Number(range.value));
+
+    range.addEventListener('input', () => apply(Number(range.value)));
+
+    const setFromPointer = (clientX) => {
+      const rect = stage.getBoundingClientRect();
+      if (rect.width === 0) return;
+      const pct = clamp(((clientX - rect.left) / rect.width) * 100);
+      range.value = String(Math.round(pct));
+      apply(pct);
+    };
+    // `dragging` as well as pointer capture: a cancelled gesture (native image
+    // drag, a scroll taking over) drops the capture, and a drag must not silently
+    // stop halfway.
+    let dragging = false;
+    const stop = () => {
+      dragging = false;
+    };
+    stage.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      dragging = true;
+      try {
+        stage.setPointerCapture(e.pointerId);
+      } catch {
+        // Capture is an optimisation; `dragging` alone keeps the drag working.
+      }
+      setFromPointer(e.clientX);
+    });
+    stage.addEventListener('pointermove', (e) => {
+      if (dragging || stage.hasPointerCapture(e.pointerId)) setFromPointer(e.clientX);
+    });
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+  }
 }
 
 function visible() {
@@ -60,6 +119,7 @@ function visible() {
 
 function render() {
   grid.innerHTML = visible().map(card).join('');
+  initCompare(grid);
 }
 
 function chips(el, label, pairs, key) {
@@ -95,8 +155,10 @@ fetch('./gallery.json')
       (data.run ? ` · run <code>${esc(data.run)}</code>` : '') +
       ` · mean inference <b>${ms(s.meanMs)}</b>` +
       verdictLine;
-    document.body.classList.toggle('checker', checkerEl.checked);
-    checkerEl.addEventListener('change', () => document.body.classList.toggle('checker', checkerEl.checked));
+
+    const syncChecker = () => document.body.classList.toggle('no-checker', !checkerEl.checked);
+    syncChecker();
+    checkerEl.addEventListener('change', syncChecker);
 
     const cats = new Map();
     for (const c of data.cases) cats.set(c.category, (cats.get(c.category) || 0) + 1);

@@ -896,7 +896,8 @@
                         <option value="4">4 × 4 tiles — extreme detail (~16× slower)</option>
                       </select>
                       <div id="tilingInfo" class="infoPanel" hidden>
-                        <p><strong>Why it helps.</strong> The model always works at 512 × 512, so a big photo produces a mask that must be stretched to full size. Running 2 × 2 overlapping tiles makes each mask stretch about half as far, so fine edges (hair, glass, thin structures) come out crisper.</p>
+                        <p><strong>Why it helps.</strong> The model always works at 512 × 512, so a big photo produces a mask that must be stretched to full size. Running 2 × 2 overlapping tiles makes each mask stretch about half as far, so the edges of a subject the model already found come out crisper — finer hair, cleaner glass rims.</p>
+                        <p><strong>What it cannot do.</strong> Tiling only sharpens an edge; it does not find a subject the model missed. If the single pass returns an empty cut-out, tiling will not recover it — on a cutlery close-up it produced a plausible-looking but wrong mask built from one flooded tile.</p>
                         <p><strong>Cost.</strong> Each tile is a full 512px run, so 2 × 2 is about four times slower and 3 × 3 about nine times. Tiles are processed one at a time and stitched in a stream, so memory stays flat.</p>
                         <p><strong>Stitching.</strong> Neighbouring tiles overlap by 25% and are blended with a linear crossfade whose weights sum to one, so there is no visible seam.</p>
                         <p><strong>Tip.</strong> Below ~1024px on the long side the model already sees the photo at about 1×, so tiling adds cost with little gain.</p>

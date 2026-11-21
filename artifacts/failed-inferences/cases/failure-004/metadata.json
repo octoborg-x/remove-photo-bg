@@ -43,6 +43,28 @@
   },
   "observedProblem": "Fully transparent output for a close-up of cutlery in a tray.",
   "suspectedCause": "Thin metal structures with specular highlights and very low foreground area, in a dark wooden tray. Thin, low-area subjects are the documented hardest class for this model.",
+  "investigation": [
+    {
+      "lever": "Raw model output",
+      "finding": "min 0.000 / mean 0.000 / max 0.000 \u2014 a hard zero."
+    },
+    {
+      "lever": "Model precision",
+      "finding": "fp16 also empty \u2014 not a quantisation artefact."
+    },
+    {
+      "lever": "Input contrast stretch",
+      "finding": "No effect on the mask max."
+    },
+    {
+      "lever": "2x2 tiled inference",
+      "finding": "MEASURED FALSE POSITIVE \u2014 do not ship this. Three of the four tiles return exactly 0.000; the fourth floods (fg 0.794, median 0.992) instead of detecting anything. The stitched mask equals that single tile's mask multiplied by its crossfade weight field (max abs error 0.00000, correlation 1.00000), so it encodes the TILE GEOMETRY, not the image: IoU against the metal cutlery is 0.11 and it keeps 13.5% of the dark tray background. Its boundary gradient contrast is 1.75, versus 8.7\u201315.0 for real cut-outs. Scores REVIEW instead of FAIL(empty) only because a mask exists."
+    },
+    {
+      "lever": "Post-inference knobs",
+      "finding": "Cannot raise a zero mask."
+    }
+  ],
   "fix": {
     "implemented": false,
     "description": null,

@@ -43,6 +43,28 @@
   },
   "observedProblem": "Fully transparent output. The subject is removed entirely.",
   "suspectedCause": "A very dark, historic black-and-white photograph (mean luminance 68/255). The subject is barely separated from an almost-black background, so the mask collapses to empty.",
+  "investigation": [
+    {
+      "lever": "Raw model output",
+      "finding": "min 0.000 / mean 0.00001 / max 0.00005 \u2014 effectively a hard zero."
+    },
+    {
+      "lever": "Model precision",
+      "finding": "fp16 also empty \u2014 not a quantisation artefact."
+    },
+    {
+      "lever": "Input contrast stretch",
+      "finding": "No effect on the mask max."
+    },
+    {
+      "lever": "2x2 tiled inference",
+      "finding": "All four tiles return exactly 0.000."
+    },
+    {
+      "lever": "Post-inference knobs",
+      "finding": "Cannot raise a zero mask."
+    }
+  ],
   "fix": {
     "implemented": false,
     "description": null,

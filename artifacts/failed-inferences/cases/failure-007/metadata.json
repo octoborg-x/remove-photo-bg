@@ -43,6 +43,7 @@
   },
   "observedProblem": "Borderline: 5.3% of pixels kept. The main subject is largely removed, leaving only fragments.",
   "suspectedCause": "A herd of wild horses in a dusty, low-contrast setting; the animals blend into the background.",
+  "investigation": [],
   "fix": {
     "implemented": false,
     "description": null,

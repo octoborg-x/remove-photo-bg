@@ -72,6 +72,11 @@ Regenerating rewrites every case folder and the manifest/summary below, so the J
 | Reproduction status | `reproduced` |
 | Observed problem | The model returned a fully transparent mask: nothing of the subject survives. Every pixel is alpha 0. |
 | Suspected cause | A black-and-white, low-contrast frame (a pale horse on a pale river bank). With no colour cue and little luminance separation between subject and background, the model finds no confident foreground. |
+| Tested: Raw model output | min 0.000 / mean 0.000 / max 0.000 — a hard zero, not a low-confidence mask. |
+| Tested: Model precision | The fp16 variant (model_512_int0_fp16.onnx) also returns empty, so this is not an int8 quantisation artefact. |
+| Tested: Input contrast stretch | Per-channel histogram stretch before inference leaves the mask max unchanged. |
+| Tested: 2x2 tiled inference | All four tiles return exactly 0.000 — a closer view does not help. |
+| Tested: Post-inference knobs | Threshold, feather and the refinement config all operate on a zero mask and cannot raise it. |
 | Fix implemented | no |
 | Passes after fix | n/a — no fix |
 
@@ -94,6 +99,11 @@ Assets: [`input.png`](cases/failure-001/input.png) · [`output.png`](cases/failu
 | Reproduction status | `reproduced` |
 | Observed problem | Fully transparent output. The subject is removed entirely. |
 | Suspected cause | A very dark, historic black-and-white photograph (mean luminance 68/255). The subject is barely separated from an almost-black background, so the mask collapses to empty. |
+| Tested: Raw model output | min 0.000 / mean 0.00001 / max 0.00005 — effectively a hard zero. |
+| Tested: Model precision | fp16 also empty — not a quantisation artefact. |
+| Tested: Input contrast stretch | No effect on the mask max. |
+| Tested: 2x2 tiled inference | All four tiles return exactly 0.000. |
+| Tested: Post-inference knobs | Cannot raise a zero mask. |
 | Fix implemented | no |
 | Passes after fix | n/a — no fix |
 
@@ -116,6 +126,11 @@ Assets: [`input.png`](cases/failure-002/input.png) · [`output.png`](cases/failu
 | Reproduction status | `reproduced` |
 | Observed problem | Fully transparent output against a cluttered, multi-subject background. |
 | Suspected cause | A crowded night scene with no single dominant subject. The model has no clear figure to latch onto and returns an empty mask. |
+| Tested: Raw model output | min 0.000 / mean 0.00001 / max 0.00006 — effectively a hard zero. |
+| Tested: Model precision | fp16 also empty — not a quantisation artefact. |
+| Tested: Input contrast stretch | No effect on the mask max. |
+| Tested: 2x2 tiled inference | All four tiles return exactly 0.000. |
+| Tested: Post-inference knobs | Cannot raise a zero mask. |
 | Fix implemented | no |
 | Passes after fix | n/a — no fix |
 
@@ -138,6 +153,11 @@ Assets: [`input.png`](cases/failure-003/input.png) · [`output.png`](cases/failu
 | Reproduction status | `reproduced` |
 | Observed problem | Fully transparent output for a close-up of cutlery in a tray. |
 | Suspected cause | Thin metal structures with specular highlights and very low foreground area, in a dark wooden tray. Thin, low-area subjects are the documented hardest class for this model. |
+| Tested: Raw model output | min 0.000 / mean 0.000 / max 0.000 — a hard zero. |
+| Tested: Model precision | fp16 also empty — not a quantisation artefact. |
+| Tested: Input contrast stretch | No effect on the mask max. |
+| Tested: 2x2 tiled inference | MEASURED FALSE POSITIVE — do not ship this. Three of the four tiles return exactly 0.000; the fourth floods (fg 0.794, median 0.992) instead of detecting anything. The stitched mask equals that single tile's mask multiplied by its crossfade weight field (max abs error 0.00000, correlation 1.00000), so it encodes the TILE GEOMETRY, not the image: IoU against the metal cutlery is 0.11 and it keeps 13.5% of the dark tray background. Its boundary gradient contrast is 1.75, versus 8.7–15.0 for real cut-outs. Scores REVIEW instead of FAIL(empty) only because a mask exists. |
+| Tested: Post-inference knobs | Cannot raise a zero mask. |
 | Fix implemented | no |
 | Passes after fix | n/a — no fix |
 

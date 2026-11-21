@@ -181,6 +181,7 @@ const toastHost = document.getElementById('toastHost')!;
 const studioEl = document.getElementById('studio')!;
 const studioLaunchBtn = document.getElementById('studioLaunch')! as HTMLButtonElement;
 const studioCloseBtn = document.getElementById('studioClose')! as HTMLButtonElement;
+const studioSplashEl = document.getElementById('studioSplash');
 const procPctEl = document.getElementById('procPct')!;
 const procStageLabelEl = document.getElementById('procStageLabel')!;
 const tabButtons: Record<StudioTab, HTMLButtonElement> = {
@@ -368,6 +369,41 @@ function setBackgroundInert(on: boolean): void {
   }
 }
 
+const STUDIO_SPLASH_MS = 1000;
+const STUDIO_SPLASH_FADE_MS = 400;
+let studioSplashTimer: number | null = null;
+let studioSplashFadeTimer: number | null = null;
+
+function playStudioSplash(): void {
+  const splash = studioSplashEl;
+  if (!splash) return;
+  if (studioSplashTimer != null) window.clearTimeout(studioSplashTimer);
+  if (studioSplashFadeTimer != null) window.clearTimeout(studioSplashFadeTimer);
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  splash.hidden = false;
+  splash.classList.remove('is-hidden');
+  // Restart the sheen and spin animations on every open.
+  splash.getBoundingClientRect();
+  studioSplashTimer = window.setTimeout(() => {
+    splash.classList.add('is-hidden');
+    studioSplashFadeTimer = window.setTimeout(() => {
+      splash.hidden = true;
+      studioSplashFadeTimer = null;
+    }, reduced ? 0 : STUDIO_SPLASH_FADE_MS);
+    studioSplashTimer = null;
+  }, reduced ? 0 : STUDIO_SPLASH_MS);
+}
+
+function hideStudioSplash(): void {
+  if (studioSplashTimer != null) window.clearTimeout(studioSplashTimer);
+  if (studioSplashFadeTimer != null) window.clearTimeout(studioSplashFadeTimer);
+  studioSplashTimer = null;
+  studioSplashFadeTimer = null;
+  if (!studioSplashEl) return;
+  studioSplashEl.classList.add('is-hidden');
+  studioSplashEl.hidden = true;
+}
+
 function openStudio(): void {
   closeMenu();
   studioEl.classList.add('is-open');
@@ -376,6 +412,7 @@ function openStudio(): void {
   setBackgroundInert(true);
   studioEl.scrollTop = 0;
   renderStudioView();
+  playStudioSplash();
   // The workspace has a size again, so a dragged console height can be re-clamped.
   if (consoleHeightPx != null) applyConsoleHeight(consoleHeightPx);
   // A terminal opens on its newest line.
@@ -389,6 +426,7 @@ function closeStudio(): void {
   studioEl.setAttribute('aria-hidden', 'true');
   document.body.classList.remove('studio-open');
   setBackgroundInert(false);
+  hideStudioSplash();
   studioLaunchBtn.focus();
 }
 
@@ -403,7 +441,7 @@ for (const tab of STUDIO_TABS) {
 
 // ——— Console column: show/hide, close, and drag-resize ———
 // The console drags between 20% and 50% of the workspace height; its resting
-// default is the 35% track in CSS. `null` means "use that default"; a number is
+// default is the 20% track in CSS. `null` means "use that default"; a number is
 // an explicit, clamped pixel height.
 const CONSOLE_MAX_FRACTION = 0.5;
 const CONSOLE_MIN_FRACTION = 0.2;
@@ -423,7 +461,7 @@ function setConsoleVisible(visible: boolean): void {
 }
 
 // Pins the console to an explicit pixel height (or back to the default) so a
-// drag can shrink it. The value is always clamped to the 35% cap.
+// drag can resize it. The value is clamped to the 20%–50% range.
 function applyConsoleHeight(px: number | null): void {
   const gridH = studioGridEl.getBoundingClientRect().height;
   if (!gridH) return;
@@ -855,7 +893,7 @@ function renderFormatOptions(): void {
     input.disabled = !available;
     input.addEventListener('change', () => {
       if (!input.checked) return;
-      setExportFormat(format.id);
+      chooseExportFormat(format.id);
     });
     label.appendChild(input);
     label.appendChild(document.createTextNode(format.label));
@@ -875,6 +913,32 @@ function setExportFormat(format: ExportFormat): void {
   savePref(LS_EXPORT_FORMAT, format);
   applyFormatUi();
   log(`Export format: ${exportFormatInfo(format).label}`);
+}
+
+/**
+ * Drops a fully opaque background when an alpha-capable format is chosen.
+ *
+ * PNG/WebP exist to carry transparency, so selecting one is a request for a
+ * transparent cut-out. A solid colour paints over that alpha and the file is
+ * opaque even though the format supports alpha — the "PNG/WebP have no alpha"
+ * report. A see-through colour (alpha < 100) already carries alpha, so it is
+ * kept. Returns true when the background changed.
+ */
+function dropOpaqueBackgroundForAlpha(format: ExportFormat): boolean {
+  if (!exportFormatInfo(format).supportsAlpha) return false;
+  if (background.kind !== 'color' || background.alpha < 100) return false;
+  background = { ...DEFAULT_BACKGROUND };
+  saveBackground();
+  return true;
+}
+
+/** The format radio is the user's explicit choice, so it may clear a colour. */
+function chooseExportFormat(format: ExportFormat): void {
+  if (dropOpaqueBackgroundForAlpha(format)) {
+    updateBackgroundUi();
+    renderResultPreview();
+  }
+  setExportFormat(format);
 }
 
 // Repoint the single download link at the current format, re-encoding the stored
@@ -982,11 +1046,18 @@ function updateBackgroundUi(): void {
   const color = background.kind === 'color';
   bgTransparentBtn.setAttribute('aria-pressed', String(isTransparent(background)));
   bgCurrentEl.textContent = describeChoice(background);
+  // The alpha slider refines a chosen colour and is inert for a transparent
+  // background. Leaving it live let a stray drag paint an opaque white
+  // background, which silently flattened PNG/WebP exports.
+  bgAlphaInput.disabled = !color;
   if (color) {
     bgColorPicker.value = background.hex;
     bgColorSwatch.style.setProperty('--picked', background.hex);
     bgAlphaInput.value = String(background.alpha);
     bgAlphaValue.textContent = `${background.alpha}%`;
+  } else {
+    bgAlphaInput.value = '100';
+    bgAlphaValue.textContent = '—';
   }
 }
 
@@ -1009,14 +1080,16 @@ function setBackground(choice: BackgroundChoice): void {
 bgTransparentBtn.addEventListener('click', () =>
   setBackground({ kind: 'transparent', hex: background.hex, alpha: 100 }),
 );
+/** Alpha for a newly picked colour: keep the current colour's alpha, else 100. */
+function colourPickAlpha(): number {
+  return background.kind === 'color' ? Number(bgAlphaInput.value) : 100;
+}
 bgColorPicker.addEventListener('input', () =>
-  setBackground({ kind: 'color', hex: bgColorPicker.value, alpha: Number(bgAlphaInput.value) }),
+  setBackground({ kind: 'color', hex: bgColorPicker.value, alpha: colourPickAlpha() }),
 );
 bgAlphaInput.addEventListener('input', () => {
-  // The alpha slider only refines the current colour (it has no meaning for a
-  // fully transparent background).
-  const hex = background.kind === 'color' ? background.hex : bgColorPicker.value;
-  setBackground({ kind: 'color', hex, alpha: Number(bgAlphaInput.value) });
+  if (background.kind !== 'color') return;
+  setBackground({ kind: 'color', hex: background.hex, alpha: Number(bgAlphaInput.value) });
 });
 // Screen eyedropper: sample any pixel on the display. The button is disabled
 // when the browser has no EyeDropper API, so it never looks broken.
@@ -1027,8 +1100,14 @@ if (!supportsScreenPicker()) {
 bgEyeDropperBtn.addEventListener('click', async () => {
   const picked = await pickColorFromScreen();
   if (!picked) return;
-  setBackground({ kind: 'color', hex: picked, alpha: Number(bgAlphaInput.value) });
+  setBackground({ kind: 'color', hex: picked, alpha: colourPickAlpha() });
 });
+
+// Restore consistency after a reload: an alpha-capable persisted format means
+// the cut-out should load transparent, so a persisted opaque colour must not
+// flatten it. This is the same rule the format radio applies in-session. An
+// explicit ?bg= is the user's ask, so it is left alone.
+if (!urlParams.has('bg')) dropOpaqueBackgroundForAlpha(exportFormat);
 
 updateBackgroundUi();
 
@@ -2631,9 +2710,9 @@ bindMaskControl(maskFeatherInput, maskFeatherValue, 'feather');
 
 // ——— Result tab: engine settings sidebar ———
 // The advanced engine controls live in a sidebar in the result workspace. It
-// collapses via the chevron in its header (or the top-bar show/hide button) and
-// drag-resizes up to 50% of the workspace width (the clamp mirrors the
-// console's). `null` means the CSS default track width.
+// collapses to a floating icon rail via the header button (or the top-bar
+// show/hide button) and drag-resizes up to 50% of the workspace width (the
+// clamp mirrors the console's). `null` means the CSS default track width.
 const SIDEBAR_MAX_FRACTION = 0.5;
 const SIDEBAR_MIN_PX = 200;
 let sidebarWidthPx: number | null = null;
@@ -2651,10 +2730,12 @@ function renderSidebarToggle(): void {
 function setSidebarCollapsed(collapsed: boolean): void {
   if (!settingsSidebarEl) return;
   settingsSidebarEl.dataset.collapsed = collapsed ? 'true' : 'false';
-  sidebarCollapseBtn?.setAttribute('aria-pressed', String(!collapsed));
-  const collapseLabel = collapsed ? 'Expand settings sidebar' : 'Collapse settings sidebar';
-  sidebarCollapseBtn?.setAttribute('aria-label', collapseLabel);
-  sidebarCollapseBtn?.setAttribute('title', collapseLabel);
+  if (sidebarCollapseBtn) {
+    sidebarCollapseBtn.setAttribute('aria-pressed', String(!collapsed));
+    const label = collapsed ? 'Expand settings sidebar' : 'Collapse settings sidebar';
+    sidebarCollapseBtn.setAttribute('aria-label', label);
+    sidebarCollapseBtn.setAttribute('title', label);
+  }
   renderSidebarToggle();
   if (!collapsed) applySidebarWidth(sidebarWidthPx);
 }
@@ -2714,8 +2795,8 @@ window.addEventListener('resize', () => {
   if (sidebarWidthPx != null) applySidebarWidth(sidebarWidthPx);
 });
 
-// The top-bar button shows/hides the sidebar; the in-sidebar chevron collapses
-// it. Both drive the same state, so they stay in sync.
+// The top-bar button shows/hides the sidebar; the in-sidebar button collapses
+// it to its floating icon rail. Both drive the same state, so they stay in sync.
 sidebarToggleBtn?.addEventListener('click', () => {
   const collapsed = settingsSidebarEl?.dataset.collapsed === 'true';
   setSidebarCollapsed(!collapsed);

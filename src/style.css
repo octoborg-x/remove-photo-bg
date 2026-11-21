@@ -295,18 +295,16 @@
     accent-color: var(--color-blue-600);
   }
 
-  /* ——— Showcase gallery: one comparison at a time + a vertical thumb rail ———
+  /* ——— Showcase gallery: one comparison at a time + a thumb rail ———
      The examples are all in the DOM; only the selected panel is visible, so the
-     rail is a vertical tablist and the stage can never overflow the card. The
-     rail sits on the right on wide screens and becomes a scrollable row below
-     the stage on narrow ones. */
+     stage can never overflow the card. The rail is a horizontally scrollable
+     tablist below the stage, which keeps nine examples one row tall. */
   .showcaseGallery {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
+    flex-direction: column;
     gap: 1.25rem;
-    align-items: start;
-    /* The samples are portrait, so a full-width stage would tower off-screen;
-       keep the whole gallery a comfortable, centered size instead. */
+    /* The samples vary from landscape to portrait; keep the gallery a
+       comfortable, centered size instead of stretching to the full width. */
     max-width: 44rem;
     margin-inline: auto;
   }
@@ -316,14 +314,26 @@
   .showcasePanel[hidden] {
     display: none;
   }
+  /* Narrow sources (a cropped phone, a full-body jogger) would blur if stretched
+     to the full stage width, so they keep a compact, centered stage. */
+  .showcasePanel--compact .compareStage,
+  .showcasePanel--compact .compareRange {
+    max-width: 20rem;
+    margin-inline: auto;
+  }
   .showcaseRail {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 0.6rem;
+    overflow-x: auto;
+    padding-bottom: 0.35rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-300) transparent;
   }
   .showcaseThumb {
     position: relative;
-    width: 5.75rem;
+    flex: 0 0 auto;
+    width: 6rem;
     padding: 0;
     border: 2px solid var(--color-slate-200);
     border-radius: 0.9rem;
@@ -363,17 +373,8 @@
   }
 
   @media (max-width: 767px) {
-    .showcaseGallery {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .showcaseRail {
-      flex-direction: row;
-      overflow-x: auto;
-      padding-bottom: 0.25rem;
-    }
     .showcaseThumb {
-      flex: 0 0 auto;
-      width: 6rem;
+      width: 5.5rem;
     }
   }
 
@@ -612,6 +613,13 @@
   .paletteAlpha input[type='range'] {
     width: 7rem;
     accent-color: var(--color-blue-600);
+  }
+  /* Inert until a colour is picked: the slider refines a background colour, it
+     is not a second transparency control. */
+  .paletteAlpha input[type='range']:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    accent-color: var(--color-slate-400);
   }
 
   /* ——— Format options ——— */
@@ -1049,9 +1057,74 @@
     overflow: hidden;
   }
 
-  /* ——— Studio layout: compact top bar, full-width grid, fixed 65/35 split ———
+  /* ——— Studio opening scene ———
+     A one-second branded splash: "Studio" with a moving gradient sheen and a
+     spinner. It fades out and is removed from the layer once the workspace is
+     ready; it never receives pointer events. */
+  .studioSplash {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-slate-50);
+    opacity: 1;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+  }
+  .studioSplash.is-hidden {
+    opacity: 0;
+  }
+  .studioSplash[hidden] {
+    display: none;
+  }
+  .studioSplashInner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.1rem;
+  }
+  .studioSplashTitle {
+    font-size: clamp(2.5rem, 9vw, 4.5rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    background: linear-gradient(
+      100deg,
+      var(--color-blue-600) 0%,
+      var(--color-indigo-600) 22%,
+      var(--color-cyan-400) 42%,
+      var(--color-blue-600) 62%,
+      var(--color-indigo-600) 82%,
+      var(--color-cyan-400) 100%
+    );
+    background-size: 240% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: studioSplashSheen 1.1s linear infinite;
+  }
+  .studioSplashSpinner {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 9999px;
+    border: 3px solid color-mix(in oklab, var(--color-blue-600) 18%, transparent);
+    border-top-color: var(--color-blue-600);
+    box-shadow: 0 0 18px color-mix(in oklab, var(--color-blue-600) 35%, transparent);
+    animation: studioSplashSpin 0.8s linear infinite;
+  }
+  @keyframes studioSplashSheen {
+    from { background-position: 0% 50%; }
+    to { background-position: 240% 50%; }
+  }
+  @keyframes studioSplashSpin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* ——— Studio layout: compact top bar, full-width grid, fixed 80/20 split ———
      The studio is a fixed-height shell: the top bar and the tab bar keep their
-     size, the editor takes 65% of what is left and the console the other 35%.
+     size, the editor takes 80% of what is left and the console the other 20%.
      Every panel scrolls inside its own column, so the shell itself never does. */
   .studioTopBar {
     display: flex;
@@ -1114,14 +1187,14 @@
     flex-direction: column;
     padding: 0.9rem 1rem 1rem;
   }
-  /* Full-width stack: the editor takes the rest, the console 35% by default.
+  /* Full-width stack: the editor takes the rest, the console 20% by default.
      `--console-h` (set on drag) overrides that with a capped pixel height. */
   .studioGrid {
     flex: 1;
     min-height: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(0, var(--console-h, 35%));
+    grid-template-rows: minmax(0, 1fr) minmax(0, var(--console-h, 20%));
     gap: 0.75rem;
     align-items: stretch;
   }
@@ -1206,7 +1279,16 @@
     justify-content: center;
     border-radius: 0.9rem;
     overflow: hidden;
-    background: var(--color-slate-50);
+    /* A transparent PNG/WebP upload must read as transparent instead of a flat
+       slate box that looks like its alpha was dropped. */
+    background-color: var(--checker-b);
+    background-image:
+      linear-gradient(45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--checker-a) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--checker-a) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
     border: 1px solid var(--color-slate-200);
     cursor: pointer;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -1396,8 +1478,8 @@
     height: 0.95rem;
   }
   /* ——— Studio workspace: engine settings sidebar (left) + active panel (right).
-     The sidebar is shared by every editor tab; it collapses to a thin rail via
-     the chevron in its header, and its right edge drag-resizes up to 50% of the
+     The sidebar is shared by every editor tab; it collapses to a floating icon
+     rail over the image block, and its right edge drag-resizes up to 50% of the
      workspace (clamp in main.ts). */
   .studioWorkspace {
     flex: 1;
@@ -1426,9 +1508,21 @@
     overflow: hidden;
     transition: width 0.18s ease;
   }
+  /* Collapsed: the sidebar leaves the layout entirely and becomes a floating
+     icon rail over the image block, so the editor keeps the full width. */
   .settingsSidebar[data-collapsed='true'] {
-    width: 3rem;
-    min-width: 3rem;
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+    z-index: 6;
+    pointer-events: none;
+    transition: none;
   }
   .settingsSidebarBody {
     flex: 1;
@@ -1441,9 +1535,27 @@
   }
   .settingsSidebar[data-collapsed='true'] .sidebarHead {
     justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    pointer-events: auto;
   }
   .settingsSidebar[data-collapsed='true'] .sidebarHeadTitle {
     display: none;
+  }
+  .settingsSidebar[data-collapsed='true'] .sidebarToggle {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.75rem;
+    background: color-mix(in oklab, var(--color-white) 92%, transparent);
+    border: 1px solid var(--color-slate-200);
+    color: var(--color-slate-600);
+    box-shadow: 0 6px 16px rgb(15 23 42 / 0.12);
+    backdrop-filter: blur(6px);
+  }
+  .settingsSidebar[data-collapsed='true'] .sidebarToggle:hover {
+    background: var(--color-white);
+    color: var(--color-slate-900);
   }
   .sidebarHead {
     display: flex;
@@ -1497,9 +1609,9 @@
     height: 1rem;
     transition: transform 0.18s ease;
   }
-  /* Point the chevron outward once the rail is collapsed, so it reads "expand". */
+  /* The collapsed rail reuses the top-bar sidebar glyph, so it must not mirror. */
   .settingsSidebar[data-collapsed='true'] .sidebarToggle svg {
-    transform: rotate(180deg);
+    transform: none;
   }
   /* Drag handle on the sidebar's right edge (col-resize). */
   .sidebarResize {
@@ -2140,7 +2252,7 @@
 
   /* ——— Console: compact strip, categorised log, privacy toggle ——— */
   /* Drag handle on the console's top edge. The console drags between 20% and
-     50% of the workspace height (the clamp lives in main.ts); 35% is the
+     50% of the workspace height (the clamp lives in main.ts); 20% is the
      resting default (the CSS grid track). */
   .consoleResize {
     flex: none;
@@ -2652,8 +2764,9 @@
      Side-by-side leaves the panel too narrow to show a cut-out (the result
      image shrank to a thumbnail while the format and download controls stayed
      full width). Stacking gives the editor the full width; the sidebar is
-     collapsed to its header by default on first open (main.ts), so the result
-     gets the height too. The tab body keeps its own vertical scrollbar. */
+     collapsed to its floating icon rail by default on first open (main.ts), so
+     the result gets the height too. The tab body keeps its own vertical
+     scrollbar. */
   @media (max-width: 767px) {
     .studioWorkspace {
       flex-direction: column;
@@ -2665,8 +2778,9 @@
       max-height: 42%;
     }
     .settingsSidebar[data-collapsed='true'] {
-      width: 100%;
+      width: auto !important;
       min-width: 0;
+      max-width: none;
       max-height: none;
     }
     .settingsSidebar[data-collapsed='true'] .sidebarHead {
@@ -2740,8 +2854,13 @@
   .procSpinnerArc,
   .procSpinnerIcon,
   .procStatusDot,
-  .heroTaglineTrack {
+  .heroTaglineTrack,
+  .studioSplashTitle,
+  .studioSplashSpinner {
     animation: none;
+  }
+  .studioSplash {
+    transition: opacity 0.01s linear;
   }
   .consoleStatusText.working {
     animation: none;

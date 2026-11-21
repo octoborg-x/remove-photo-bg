@@ -372,44 +372,45 @@ the descriptive metrics into an actual accuracy score, add reference masks under
 `eval/ground-truth/` and re-run `eval:benchmark` — see
 [`docs/accuracy-benchmark.md`](./docs/accuracy-benchmark.md).
 
-### Evaluation gallery (WASM vs WebGPU, all 64 images)
+### Evaluation gallery (original, before and after — all 64 images)
 
-`npm run eval:gallery` builds a static, self-contained comparison page at
-`public/eval-gallery/`: for every one of the 64 evaluation images it shows the
-**original | WASM (CPU) cut-out | WebGPU cut-out** side by side, on a
-checkerboard so the transparency is visible, with per-image inference times and
-category filters. It reads the two runs from `eval-results/wasm/` and
-`eval-results/webgpu/` (override with `--wasm <dir>` / `--gpu <dir>`), downscales
-each PNG to WebP in a headless browser, and writes `gallery.json`. The eval PNGs
-are ~3 MB each (192 MB total), so the committed gallery is ~15 MB — the same
-approach as `build-demo`. Serve the folder over HTTP to view it
-(`python3 -m http.server -d public/eval-gallery`) — it fetches `gallery.json`,
-so opening the file directly will not work.
+`public/eval-gallery/` is a static, self-contained page covering all 64 evaluation
+images. Every card stacks **three layers**:
 
-### Before / after gallery (original vs cut-out, all 64 images)
+| Layer | Image | Revealed by |
+|---|---|---|
+| 0 (bottom) | the older pipeline's cut-out | always visible on the left of the vertical bar |
+| 1 (middle) | the newer pipeline's cut-out | the horizontal bar (`--x`) wipes it in from the right |
+| 2 (top) | the source photo | the vertical bar (`--y`) reveals it from the top |
 
-`npm run eval:gallery:2up` builds a second static page at
-`public/eval-gallery-2up/`: the same 64 evaluation images, one run at a time, each
-card a **before/after slider** — the landing page's comparison control (drag the
-divider, or focus the range input and use the arrow keys) wiping between the
-source photo and the cut-out. Every card is badged with that image's
-accuracy-benchmark verdict (`PASS` / `REVIEW` / `FAIL(gate)` / `FAIL(empty)`)
-when the run directory has a `benchmark.json` beside its `report.json`. It reads
-`eval-results/wasm/` by default; point it at any run with `--run`:
+So the same card shows the source photo, and lets you wipe the old cut-out against
+the new one — the before/after of a pipeline change (the committed copy compares the
+`eval-results/wasm` run with the `eval-results/after-145` run from issue #145).
+Both bars have a grip to drag, and each axis has a range input underneath so the
+comparison works with the keyboard and screen readers. Cards are badged with the
+newer run's accuracy-benchmark verdict (`PASS` / `REVIEW` / `FAIL(gate)` /
+`FAIL(empty)`) and filterable by category and verdict.
+
+The gallery is built in two steps, both writing WebP (the eval PNGs are ~3 MB each,
+192 MB total) with a headless browser — the same approach as `build-demo`:
 
 ```bash
-npm run eval:run -- --provider wasm --out eval-results/after-145
-npm run eval:benchmark -- eval-results/after-145
-node scripts/build-eval-gallery.mjs --run eval-results/after-145
+# 1. one gallery per run, into scratch dirs under eval-results/ (gitignored)
+node scripts/build-eval-gallery.mjs --wasm eval-results/wasm --gpu eval-results/webgpu   # -> eval-results/gallery-backends
+node scripts/build-eval-gallery.mjs --run eval-results/after-145                        # -> eval-results/gallery-2up
+
+# 2. merge them into the committed page (copies the WebP files, no re-encode)
+node scripts/merge-eval-galleries.mjs \
+  --first eval-results/gallery-backends --second eval-results/gallery-2up \
+  --out public/eval-gallery
 ```
 
-That writes `public/eval-gallery-2up/<id>-original.webp`, `<id>-cutout.webp` and
-`gallery.json` (128 WebP files, ~10 MB — the same downscale-and-re-encode
-approach as the three-up gallery). Serve `public/`
-(`python3 -m http.server -d public`) and open `/eval-gallery-2up/`; the page
-fetches `gallery.json`, so opening the file directly will not work. Cards can be
-filtered by category and by verdict. The committed copy was built from the
-`eval-results/after-145` run (issue #145, island/speckle threshold alignment).
+`--first-layer` / `--second-layer` pick which WebP suffix each source contributes
+(`wasm` / `cutout` by default). The merged page is 192 WebP files, ~15 MB; the two
+galleries it replaces were ~26 MB. Serve it over HTTP
+(`python3 -m http.server -d public`) and open `/eval-gallery/` — the page fetches
+`gallery.json`, so opening the file directly will not work. `gallery.json` records
+both sources in its `sources` array so the provenance of each layer stays visible.
 
 ## Commands
 
@@ -426,7 +427,9 @@ filtered by category and by verdict. The committed copy was built from the
 | `npm run eval:run` | run the deployed pipeline over the evaluation set (WASM; `RUN_GPU=1` for WebGPU) |
 | `npm run eval:analyze` | edge-character metrics from an evaluation run's output PNGs |
 | `npm run eval:benchmark -- <run-dir>` | per-image accuracy checklist + PASS/REVIEW/FAIL verdicts (+ IoU/Dice with ground truth) |
-| `npm run eval:gallery` | build the static 3-up (original/WASM/WebGPU) gallery for all 64 eval images |
+| `npm run eval:gallery:backends` | build the scratch original/WASM/WebGPU gallery for all 64 eval images |
+| `npm run eval:gallery:single` | build the scratch original-vs-cut-out gallery for one run |
+| `npm run eval:gallery:merge` | merge two galleries into the committed `public/eval-gallery/` page |
 | `npm run verify` | lint + typecheck + unit tests + build |
 | `npm run fetch-models` | download + verify model/WASM artifacts (also prepares `public/wasm/` for local dev) |
 | `npm run license:audit` | dependency licence audit (all permissive; see `LICENSE_AUDIT.md`) |

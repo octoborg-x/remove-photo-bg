@@ -17,8 +17,12 @@
     <script src="./theme-init.js"></script>
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-blue-500/15 selection:text-blue-900">
-    <!-- Floating notifications host -->
-    <div id="toastHost" class="toastHost" aria-live="polite" aria-atomic="false"></div>
+    <!-- Floating notifications host. Toasts and the error recovery panel stack
+         here: fixed to the top-right corner, outside the page flow, so a
+         notification never pushes the studio content down. -->
+    <div id="toastHost" class="toastHost" aria-live="polite" aria-atomic="false">
+      <div id="recovery" class="recovery rounded-2xl p-4 bg-red-50 border border-red-200 text-red-900 text-sm" hidden></div>
+    </div>
 
     <!-- Analytics consent banner. Shown only while no decision is recorded and
          only when an analytics endpoint is configured (see main.ts). The choice
@@ -1587,7 +1591,6 @@
               </div>
               </div>
               </div>
-              <div id="recovery" class="recovery rounded-2xl p-4 bg-red-50 border border-red-200 text-red-900 text-sm" hidden></div>
             </div>
 
             <!-- Recovery Fallback UI -->

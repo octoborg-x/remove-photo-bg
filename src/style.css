@@ -73,6 +73,9 @@
   --color-purple-50: light-dark(#faf5ff, #241a3f);
   --color-purple-600: light-dark(#9333ea, #c084fc);
   --color-green-50: light-dark(#f0fdf4, #0e2a1b);
+  --color-green-600: light-dark(#16a34a, #4ade80);
+  --color-green-700: light-dark(#15803d, #86efac);
+  --color-green-900: light-dark(#14532d, #bbf7d0);
 }
 
 /* Explicit override: force one mode regardless of the operating system. */
@@ -659,21 +662,23 @@
   }
 
   /* ——— Toasts ——— */
-  /* Fixed to the viewport's top-right corner. The host itself is the scroll
-     container: a long error or a stack of notices scrolls inside the corner
-     instead of running off the screen (a phone in landscape is only ~350 px
-     tall). `pointer-events: none` keeps the empty column click-through; each
-     toast re-enables pointer events so a wheel/touch drag over it scrolls. */
+  /* Every notification (info, success, warning, error) lives here: fixed to the
+     viewport's top-right corner, above the page and outside the flow, so it
+     overlays content instead of pushing it. The host itself is the scroll
+     container, so a long error or a stack of notices scrolls inside the corner
+     instead of running off a short phone screen. Long messages wrap inside the
+     card rather than widening it or spilling off-screen. */
   .toastHost {
     position: fixed;
-    top: 1.25rem;
-    right: 1.25rem;
+    top: max(1.25rem, env(safe-area-inset-top));
+    right: max(1.25rem, env(safe-area-inset-right));
     z-index: 1000;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 0.6rem;
     width: min(380px, calc(100vw - 2.5rem));
+    max-width: calc(100vw - 2.5rem);
     max-height: calc(100dvh - 2.5rem);
     overflow-x: hidden;
     overflow-y: auto;
@@ -681,11 +686,15 @@
     pointer-events: none;
   }
   .toast {
-    pointer-events: auto;
+    /* The notification overlays the page, but its body must not swallow clicks
+       meant for the header or the editor underneath. Only its close button is
+       interactive. */
+    pointer-events: none;
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
     flex: none;
+    width: 100%;
     max-width: 100%;
     overflow-wrap: anywhere;
     background: var(--color-white);
@@ -696,9 +705,27 @@
     box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.1);
     animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
+  .toast.info {
+    border-left-color: var(--color-blue-600);
+    background: var(--color-white);
+  }
   .toast.warn {
     border-left-color: var(--color-amber-500);
     background: var(--color-amber-50);
+  }
+  .toast.success {
+    border-left-color: var(--color-green-600);
+    background: var(--color-green-50);
+  }
+  .toast.success .toastBody,
+  .toast.success .toastTitle {
+    color: var(--color-green-900);
+  }
+  .toast.success .toastClose {
+    color: var(--color-green-700);
+  }
+  .toast.success .toastClose:hover {
+    color: var(--color-green-900);
   }
   .toast.error {
     border-left-color: var(--color-red-500);
@@ -729,6 +756,7 @@
     color: var(--color-slate-900);
   }
   .toast .toastClose {
+    pointer-events: auto;
     border: 0;
     background: transparent;
     cursor: pointer;
@@ -750,7 +778,28 @@
     }
   }
   /* ——— Recovery panel ——— */
+  /* The error panel is a notification too: it stacks inside the fixed top-right
+     host, overlays the page, and wraps long error text instead of widening. */
+  .recovery {
+    /* Only the action row takes clicks; the rest of the panel is an overlay. */
+    pointer-events: none;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+  }
+  .recovery[hidden] {
+    display: none;
+  }
+  /* A boot failure can show the recovery panel while the studio is still
+     closed. Keep it out of the landing header then: the toast still announces
+     the error, and the panel appears when the studio opens. */
+  body:not(.studio-open) .recovery:not([hidden]) {
+    display: none;
+  }
   .recovery .actions {
+    pointer-events: auto;
     display: flex;
     flex-wrap: wrap;
     gap: 0.6rem;
@@ -2768,19 +2817,25 @@
   }
 
   /* ——— Metered-connection preflight warning ——— */
-  /* A floating notice in the same top-right corner as the toasts, not an inline
-     banner: on a short phone viewport it must stay reachable and scroll its own
-     text instead of pushing the workspace (or being clipped by it). */
+  /* A notification, not an inline banner: fixed to the top-right corner so it
+     overlays the studio instead of shrinking the workspace. Long copy wraps and
+     scrolls inside the card. It stays inside the studio layer, so it is only
+     visible while the studio is open. */
   .netWarn {
+    /* The prompt overlays the editor so a photo can still be picked underneath;
+       only its buttons take the click. */
+    pointer-events: none;
     position: fixed;
-    top: 3.5rem;
-    right: 1.25rem;
-    z-index: 1001;
+    top: max(1.25rem, env(safe-area-inset-top));
+    right: max(1.25rem, env(safe-area-inset-right));
+    z-index: 1100;
     width: min(380px, calc(100vw - 2.5rem));
-    max-height: calc(100dvh - 4.75rem);
+    max-width: calc(100vw - 2.5rem);
+    max-height: calc(100dvh - 2.5rem);
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
+    overflow-wrap: anywhere;
     margin: 0;
     padding: 0.9rem;
     border-radius: 0.9rem;
@@ -2788,18 +2843,33 @@
     border: 1px solid var(--color-amber-100);
     color: var(--color-amber-900);
     font-size: 0.85rem;
-    overflow-wrap: anywhere;
-    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+    box-shadow: 0 18px 40px -12px rgb(15 23 42 / 0.28);
+    animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .netWarn[hidden] {
     display: none;
   }
+  .netWarn button {
+    pointer-events: auto;
+  }
   @media (max-width: 767px) {
     .netWarn {
-      top: 3.25rem;
-      right: 0.75rem;
+      top: max(0.75rem, env(safe-area-inset-top));
+      right: max(0.75rem, env(safe-area-inset-right));
       width: min(380px, calc(100vw - 1.5rem));
-      max-height: calc(100dvh - 4rem);
+      max-height: calc(100dvh - 1.5rem);
+    }
+  }
+
+  /* Phones: toasts stay anchored to the top-right corner and fixed over the
+     page, with a little more of the width available for long copy. */
+  @media (max-width: 640px) {
+    .toastHost {
+      top: max(0.75rem, env(safe-area-inset-top));
+      right: max(0.75rem, env(safe-area-inset-right));
+      width: min(380px, calc(100vw - 1.5rem));
+      max-width: calc(100vw - 1.5rem);
+      max-height: calc(100dvh - 1.5rem);
     }
   }
 

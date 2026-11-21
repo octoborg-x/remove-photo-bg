@@ -65,3 +65,69 @@ export function summarize(cases, model) {
     meanGpuMs: Math.round(cases.reduce((s, c) => s + c.gpuMs, 0) / n),
   };
 }
+
+/**
+ * Benchmark verdict families. `empty` is a *subset* of `FAIL` — the benchmark
+ * counts an empty output in its FAIL total and again in its empty count.
+ */
+export const VERDICT_FAMILIES = ['PASS', 'REVIEW', 'FAIL', 'empty'];
+
+/** `FAIL(gate)` -> `FAIL`, `FAIL(empty)` -> `empty`, `PASS` -> `PASS`. */
+export function verdictFamily(verdict) {
+  if (!verdict) return null;
+  const m = String(verdict).match(/^(\w+)(?:\((\w+)\))?$/);
+  if (!m) return String(verdict).trim();
+  return m[2] === 'empty' ? 'empty' : m[1];
+}
+
+/**
+ * Builds the two-up (original | cut-out) case list for a single eval run.
+ * `benchmark` is the run's `benchmark.json` (optional): its per-image verdicts
+ * are attached so the gallery can badge the same images the gate flags.
+ * Returns { cases, skipped } — skipped ids are missing an original or a cut-out.
+ */
+export function buildPairs(report, benchmark, { hasOutput, hasOriginal } = {}) {
+  const bench = new Map((benchmark?.perImage || []).map((r) => [r.id, r]));
+  const cases = [];
+  const skipped = [];
+
+  for (const row of report.rows || []) {
+    const { id } = row;
+    if ((hasOriginal && !hasOriginal(id)) || (hasOutput && !hasOutput(id))) {
+      skipped.push(id);
+      continue;
+    }
+    const b = bench.get(id);
+    cases.push({
+      id,
+      category: row.category,
+      title: row.title,
+      source: row.source,
+      license: row.license,
+      ms: Math.round(row.avgMs),
+      ok: row.ok === true,
+      opaqueFrac: row.output?.opaqueFrac ?? null,
+      verdict: b?.verdict ?? null,
+      speckleFrac: b?.speckle_frac ?? null,
+      fgFrac: b?.fg_frac ?? null,
+    });
+  }
+  return { cases, skipped };
+}
+
+/** Aggregate header stats for the two-up manifest (timing + verdict counts). */
+export function summarizeRun(cases, model) {
+  const n = cases.length || 1;
+  const verdicts = Object.fromEntries(VERDICT_FAMILIES.map((f) => [f, 0]));
+  for (const c of cases) {
+    const family = verdictFamily(c.verdict);
+    if (family && family in verdicts) verdicts[family] += 1;
+  }
+  return {
+    model,
+    total: cases.length,
+    categories: [...new Set(cases.map((c) => c.category))].sort(),
+    meanMs: Math.round(cases.reduce((s, c) => s + c.ms, 0) / n),
+    verdicts,
+  };
+}

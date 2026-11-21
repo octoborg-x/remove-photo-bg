@@ -1,45 +1,44 @@
-// Builds the static evaluation gallery: for each of the 64 eval images, a
-// three-up card (original | WASM/CPU cut-out | WebGPU cut-out).
+// Builds a static evaluation gallery from local eval runs. Two modes:
+//
+//   trio (default) — original | WASM/CPU cut-out | WebGPU cut-out, two runs.
+//     node scripts/build-eval-gallery.mjs [--wasm <dir>] [--gpu <dir>] [--out <dir>]
+//
+//   duo (--run) — original | cut-out for ONE run, each card badged with that
+//   run's benchmark verdict when `benchmark.json` sits beside `report.json`.
+//     node scripts/build-eval-gallery.mjs --run eval-results/after-145
 //
 // Sources (all local, none committed to the gallery as-is):
 //   - originals:  eval/images/<id>.{jpg,JPG,png}   (tracked in the repo)
-//   - WASM run:   eval-results/wasm/outputs/<id>.png   + report.json
-//   - WebGPU run: eval-results/webgpu/outputs/<id>.png + report.json
+//   - a run dir:  <run>/outputs/<id>.png + report.json [+ benchmark.json]
 //
-// Output (committed, served at /eval-gallery/):
-//   public/eval-gallery/<id>-original.webp
-//   public/eval-gallery/<id>-wasm.webp
-//   public/eval-gallery/<id>-gpu.webp
-//   public/eval-gallery/gallery.json
+// Output (committed, served from public/):
+//   public/eval-gallery/      <id>-original.webp <id>-wasm.webp <id>-gpu.webp gallery.json
+//   public/eval-gallery-2up/  <id>-original.webp <id>-cutout.webp gallery.json
 //
 // The eval PNGs are ~3 MB each (192 MB total), so everything is downscaled and
 // re-encoded to WebP in a headless browser — the same approach as
 // scripts/build-demo-assets.mjs. Cut-outs keep their alpha channel.
-//
-// Usage: node scripts/build-eval-gallery.mjs [--wasm <dir>] [--gpu <dir>]
 import puppeteer from 'puppeteer-core';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findOriginal, buildCases, summarize } from './lib/eval-gallery.mjs';
+import { findOriginal, buildCases, summarize, buildPairs, summarizeRun } from './lib/eval-gallery.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHROME = process.env.CHROME_BIN || '/usr/bin/chromium';
-const OUT = resolve(ROOT, 'public', 'eval-gallery');
 const MAX_W = 768;
 const QUALITY = 0.88;
 
 const arg = (name, fallback) => {
-  const i = process.argv.indexOf(name);
+  const i = process.argv.lastIndexOf(name);
   return i >= 0 ? process.argv[i + 1] : fallback;
 };
-const WASM_DIR = resolve(ROOT, arg('--wasm', 'eval-results/wasm'));
-const GPU_DIR = resolve(ROOT, arg('--gpu', 'eval-results/webgpu'));
+const RUN_DIR = arg('--run', null) && resolve(ROOT, arg('--run', null));
+const OUT = resolve(ROOT, arg('--out', RUN_DIR ? 'public/eval-gallery-2up' : 'public/eval-gallery'));
+const rel = (p) => p.replace(`${ROOT}/`, '');
 
 const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
-
-const wasmReport = readJson(resolve(WASM_DIR, 'report.json'));
-const gpuReport = readJson(resolve(GPU_DIR, 'report.json'));
+const pngPath = (dir, id) => resolve(dir, 'outputs', `${id}.png`);
 
 mkdirSync(OUT, { recursive: true });
 
@@ -87,37 +86,87 @@ async function writeWebp(srcPath, destName) {
   return { w, h };
 }
 
-const pngPath = (dir, id) => resolve(dir, 'outputs', `${id}.png`);
-const { cases, skipped } = buildCases(wasmReport, gpuReport, {
-  hasOriginal: (id) => findOriginal(ROOT, id) !== null,
-  hasOutput: (id, backend) => existsSync(pngPath(backend === 'wasm' ? WASM_DIR : GPU_DIR, id)),
-});
-
-const enriched = [];
-for (const c of cases) {
-  const original = findOriginal(ROOT, c.id);
-  const orig = await writeWebp(original, `${c.id}-original.webp`);
-  const wasm = await writeWebp(pngPath(WASM_DIR, c.id), `${c.id}-wasm.webp`);
-  const gpu = await writeWebp(pngPath(GPU_DIR, c.id), `${c.id}-gpu.webp`);
-  enriched.push({ ...c, width: orig.w, height: orig.h, dims: { wasm, gpu } });
-  console.log(`OK  ${c.id}  ${orig.w}x${orig.h}`);
+function reportTotals(enriched, skipped, files) {
+  const bytes = readdirSync(OUT)
+    .filter((f) => f.endsWith('.webp'))
+    .reduce((s, f) => s + readFileSync(resolve(OUT, f)).length, 0);
+  console.log(`\n${enriched.length} cases (${skipped.length} skipped) -> ${rel(OUT)}/`);
+  console.log(`  ${enriched.length * files} webp files, ${(bytes / 1e6).toFixed(1)} MB`);
 }
 
+/** Default mode: original | WASM | WebGPU, from two backend runs. */
+async function buildBackendGallery() {
+  const WASM_DIR = resolve(ROOT, arg('--wasm', 'eval-results/wasm'));
+  const GPU_DIR = resolve(ROOT, arg('--gpu', 'eval-results/webgpu'));
+  const wasmReport = readJson(resolve(WASM_DIR, 'report.json'));
+  const gpuReport = readJson(resolve(GPU_DIR, 'report.json'));
+
+  const { cases, skipped } = buildCases(wasmReport, gpuReport, {
+    hasOriginal: (id) => findOriginal(ROOT, id) !== null,
+    hasOutput: (id, backend) => existsSync(pngPath(backend === 'wasm' ? WASM_DIR : GPU_DIR, id)),
+  });
+
+  const enriched = [];
+  for (const c of cases) {
+    const orig = await writeWebp(findOriginal(ROOT, c.id), `${c.id}-original.webp`);
+    const wasm = await writeWebp(pngPath(WASM_DIR, c.id), `${c.id}-wasm.webp`);
+    const gpu = await writeWebp(pngPath(GPU_DIR, c.id), `${c.id}-gpu.webp`);
+    enriched.push({ ...c, width: orig.w, height: orig.h, dims: { wasm, gpu } });
+    console.log(`OK  ${c.id}  ${orig.w}x${orig.h}`);
+  }
+
+  for (const id of skipped) console.warn(`skip ${id}: missing original or cut-out`);
+  const gallery = {
+    generatedAt: new Date().toISOString(),
+    model: wasmReport.model,
+    summary: summarize(enriched),
+    cases: enriched,
+  };
+  writeFileSync(resolve(OUT, 'gallery.json'), JSON.stringify(gallery, null, 2));
+
+  reportTotals(enriched, skipped, 3);
+  console.log(`  mean inference: wasm ${gallery.summary.meanWasmMs} ms, webgpu ${gallery.summary.meanGpuMs} ms`);
+}
+
+/** Two-up mode: original | cut-out for one run, badged with its benchmark verdicts. */
+async function buildTwoUpGallery() {
+  const report = readJson(resolve(RUN_DIR, 'report.json'));
+  const benchPath = resolve(RUN_DIR, 'benchmark.json');
+  const benchmark = existsSync(benchPath) ? readJson(benchPath) : null;
+
+  const { cases, skipped } = buildPairs(report, benchmark, {
+    hasOriginal: (id) => findOriginal(ROOT, id) !== null,
+    hasOutput: (id) => existsSync(pngPath(RUN_DIR, id)),
+  });
+
+  const enriched = [];
+  for (const c of cases) {
+    const orig = await writeWebp(findOriginal(ROOT, c.id), `${c.id}-original.webp`);
+    const cutout = await writeWebp(pngPath(RUN_DIR, c.id), `${c.id}-cutout.webp`);
+    enriched.push({ ...c, width: orig.w, height: orig.h, cutout });
+    console.log(`OK  ${c.id}  ${orig.w}x${orig.h}${c.verdict ? `  ${c.verdict}` : ''}`);
+  }
+
+  for (const id of skipped) console.warn(`skip ${id}: missing original or cut-out`);
+  const gallery = {
+    generatedAt: new Date().toISOString(),
+    mode: 'original-vs-cutout',
+    model: report.model,
+    run: rel(RUN_DIR),
+    benchmark: benchmark !== null,
+    summary: summarizeRun(enriched, report.model),
+    cases: enriched,
+  };
+  writeFileSync(resolve(OUT, 'gallery.json'), JSON.stringify(gallery, null, 2));
+
+  reportTotals(enriched, skipped, 2);
+  console.log(`  mean inference: ${gallery.summary.meanMs} ms (${gallery.run})`);
+  if (benchmark) {
+    const v = gallery.summary.verdicts;
+    console.log(`  benchmark verdicts: PASS ${v.PASS}, REVIEW ${v.REVIEW}, FAIL ${v.FAIL}, empty ${v.empty}`);
+  }
+}
+
+if (RUN_DIR) await buildTwoUpGallery();
+else await buildBackendGallery();
 await browser.close();
-
-for (const id of skipped) console.warn(`skip ${id}: missing original or cut-out`);
-
-const gallery = {
-  generatedAt: new Date().toISOString(),
-  model: wasmReport.model,
-  summary: summarize(enriched),
-  cases: enriched,
-};
-writeFileSync(resolve(OUT, 'gallery.json'), JSON.stringify(gallery, null, 2));
-
-const bytes = readdirSync(OUT)
-  .filter((f) => f.endsWith('.webp'))
-  .reduce((s, f) => s + readFileSync(resolve(OUT, f)).length, 0);
-console.log(`\n${enriched.length} cases (${skipped.length} skipped) -> public/eval-gallery/`);
-console.log(`  ${enriched.length * 3} webp files, ${(bytes / 1e6).toFixed(1)} MB`);
-console.log(`  mean inference: wasm ${gallery.summary.meanWasmMs} ms, webgpu ${gallery.summary.meanGpuMs} ms`);

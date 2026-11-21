@@ -133,10 +133,26 @@ import {
   initialStudioView,
   reduceStudio,
   scrubConsoleLine,
+  stepPhase,
+  stepTitle,
   STUDIO_TABS,
   tabEnabled,
   type StudioTab,
 } from './features/background-removal/studio-view';
+import {
+  BULK_LIMIT,
+  addBulkItem,
+  bulkCapacity,
+  bulkDoneCount,
+  bulkPendingCount,
+  initialBulkState,
+  removeBulkItem,
+  selectBulkItem,
+  selectedBulkItem,
+  updateBulkItem,
+  type BulkItem,
+  type BulkState,
+} from './features/background-removal/bulk-batch';
 import { classifyLogLine } from './features/background-removal/console-log';
 import {
   pickColorFromScreen,
@@ -185,25 +201,22 @@ const studioSplashEl = document.getElementById('studioSplash');
 const procPctEl = document.getElementById('procPct')!;
 const procStageLabelEl = document.getElementById('procStageLabel')!;
 const tabButtons: Record<StudioTab, HTMLButtonElement> = {
-  input: document.getElementById('tabInput')! as HTMLButtonElement,
-  processing: document.getElementById('tabProcessing')! as HTMLButtonElement,
-  result: document.getElementById('tabResult')! as HTMLButtonElement,
-  compare: document.getElementById('tabCompare')! as HTMLButtonElement,
+  step: document.getElementById('tabStep')! as HTMLButtonElement,
+  bulk: document.getElementById('tabBulk')! as HTMLButtonElement,
   library: document.getElementById('tabLibrary')! as HTMLButtonElement,
 };
 const tabPanels: Record<StudioTab, HTMLElement> = {
-  input: document.getElementById('panelInput')!,
-  processing: document.getElementById('panelProcessing')!,
-  result: document.getElementById('panelResult')!,
-  compare: document.getElementById('panelCompare')!,
+  step: document.getElementById('panelStep')!,
+  bulk: document.getElementById('panelBulk')!,
   library: document.getElementById('panelLibrary')!,
 };
-const compareBeforeEl = document.getElementById('compareBefore')! as HTMLImageElement;
-const compareAfterEl = document.getElementById('compareAfter')! as HTMLImageElement;
 const resultCompareToggleBtn = document.getElementById('resultCompareToggle') as HTMLButtonElement | null;
+const stepInputEl = document.getElementById('stepInput')!;
+const stepProcessingEl = document.getElementById('stepProcessing')!;
+const stepResultEl = document.getElementById('stepResult')!;
+const newPhotoBtn = document.getElementById('newPhotoBtn') as HTMLButtonElement | null;
 const inputPreviewEl = document.getElementById('inputPreview')!;
 const inputPreviewImg = document.getElementById('inputPreviewImg')! as HTMLImageElement;
-const panelInputEl = document.getElementById('panelInput')!;
 const bgTransparentBtn = document.getElementById('bgTransparentBtn')! as HTMLButtonElement;
 const bgColorPicker = document.getElementById('bgColorPicker')! as HTMLInputElement;
 const bgColorSwatch = document.getElementById('bgColorSwatch')!;
@@ -226,11 +239,25 @@ const settingsSidebarEl = document.getElementById('settingsSidebar') as HTMLElem
 const sidebarToggleBtn = document.getElementById('sidebarToggle') as HTMLButtonElement | null;
 const sidebarCollapseBtn = document.getElementById('sidebarCollapse') as HTMLButtonElement | null;
 const sidebarResizeEl = document.getElementById('sidebarResize');
-// The export (format + download) bar at the foot of the editor, shown once a
-// cut-out exists and toggled from the studio top bar.
+// The export (background + format + download) section, placed to the right of
+// the settings sidebar inside the active tab body.
 const exportBarEl = document.getElementById('exportBar') as HTMLElement | null;
-const exportToggleBtn = document.getElementById('exportToggle') as HTMLButtonElement | null;
-const bottomBarCollapseBtn = document.getElementById('bottomBarCollapse') as HTMLButtonElement | null;
+// Bulk queue: up to five photos processed one after another.
+const bulkPickBtn = document.getElementById('bulkPick') as HTMLButtonElement | null;
+const bulkProcessBtn = document.getElementById('bulkProcess') as HTMLButtonElement | null;
+const bulkGridEl = document.getElementById('bulkGrid');
+const bulkEmptyEl = document.getElementById('bulkEmpty');
+const bulkCountEl = document.getElementById('bulkCount');
+const bulkStatusEl = document.getElementById('bulkStatus');
+const bulkDownloadAllBtn = document.getElementById('bulkDownloadAll') as HTMLButtonElement | null;
+// Session library controls.
+const libraryGridEl = document.getElementById('libraryGrid');
+const libraryEmptyEl = document.getElementById('libraryEmpty');
+const libraryClearBtn = document.getElementById('libraryClear') as HTMLButtonElement | null;
+const librarySaveToggleEl = document.getElementById('librarySaveToggle') as HTMLButtonElement | null;
+const librarySaveHintEl = document.getElementById('librarySaveHint');
+// The workspace whose width bounds the sidebar drag (it is shared by all tabs).
+const resultWorkspaceEl = document.getElementById('studioWorkspace');
 // Tiled-inference + edge-refinement engine controls (shared sidebar).
 const tilingSelect = document.getElementById('tilingSelect') as HTMLSelectElement | null;
 const tilingValueEl = document.getElementById('tilingValue');
@@ -244,16 +271,18 @@ const refineStrengthInput = document.getElementById('refineStrength') as HTMLInp
 const refineStrengthValueEl = document.getElementById('refineStrengthValue');
 const refineEdgeSensitivityInput = document.getElementById('refineEdgeSensitivity') as HTMLInputElement | null;
 const refineEdgeSensitivityValueEl = document.getElementById('refineEdgeSensitivityValue');
-// Session library panel.
-const libraryGridEl = document.getElementById('libraryGrid');
-const libraryEmptyEl = document.getElementById('libraryEmpty');
-const libraryClearBtn = document.getElementById('libraryClear') as HTMLButtonElement | null;
-// The workspace whose width bounds the sidebar drag (it is shared by all tabs).
-const resultWorkspaceEl = document.getElementById('studioWorkspace');
-// Whether the export (format + download) bar is expanded. Declared here because
-// renderStudioView() reads it, and that runs at init.
-let exportBarOpen = false;
 let studioView = initialStudioView();
+
+// ——— Bulk queue ———
+// The source blobs and full-resolution cut-outs are kept here, keyed by the ids
+// the pure bulk state assigns. Object URLs live on the state entries.
+let bulkState: BulkState = initialBulkState();
+const bulkBlobs = new Map<number, Blob>();
+const bulkResults = new Map<number, HTMLCanvasElement>();
+let bulkBatchRunning = false;
+// While a batch owns the engine its progress stays visible; clicking another tab
+// releases this pin so the user is never yanked back.
+let bulkTabPinned = false;
 
 // ——— Session library ———
 // The images processed during this browser session. Pure state lives in
@@ -271,6 +300,12 @@ let currentRunStoredEntryId: number | null = null;
 // Guards against a slow PNG encode from an older run landing after a newer run
 // has started (the queue is serial, the token is the run identity).
 let libraryRunToken = 0;
+// When off, new cut-outs are neither added to the library nor written into it.
+// The preference is kept so a user who turned saving off is not re-enrolled by a
+// reload (the library itself is still session-only and cleared on reload).
+const LS_LIBRARY_SAVE = 'remove-bg:library-save';
+let librarySavingEnabled =
+  loadPref<boolean>(LS_LIBRARY_SAVE, (v): v is boolean => typeof v === 'boolean') ?? true;
 let currentImageName = 'Photo';
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
@@ -280,8 +315,8 @@ limitSideEl.textContent = String(DEFAULT_UPLOAD_LIMITS.maxLongestSide);
 
 // ——— Studio layer + editor tabs ———
 // The studio opens as a full-page layer (its own top bar + workspace) launched
-// from the header. The editor shows exactly one tab: input by default, the
-// animated processing wallpaper while running, and the result when finished.
+// from the header. The editor has one step tab whose label follows the current
+// step (Photo → Processing → Result), plus the Bulk queue and the Library.
 function renderStudioView(): void {
   for (const tab of STUDIO_TABS) {
     const selected = studioView.tab === tab;
@@ -289,6 +324,11 @@ function renderStudioView(): void {
     tabButtons[tab].disabled = !tabEnabled(studioView, tab) && !selected;
     tabPanels[tab].hidden = !selected;
   }
+  const phase = stepPhase(studioView);
+  tabButtons.step.textContent = stepTitle(studioView);
+  stepInputEl.hidden = phase !== 'input';
+  stepProcessingEl.hidden = phase !== 'processing';
+  stepResultEl.hidden = phase !== 'result';
   if (studioView.percent === null) {
     procPctEl.textContent = '—';
   } else {
@@ -303,24 +343,23 @@ function renderStudioView(): void {
   // The settings sidebar is shared by every editor tab, so its top-bar show/hide
   // button is always available.
   if (sidebarToggleBtn) sidebarToggleBtn.hidden = false;
-  // The export bar is meaningful only once a cut-out exists; until then its
-  // top-bar toggle is hidden and the bar itself stays closed.
-  if (exportToggleBtn) {
-    exportToggleBtn.hidden = !studioView.hasResult;
-    if (!studioView.hasResult) setExportBarOpen(false);
-  }
+  updateExportBarVisibility();
+  updateBulkStatus();
 }
 
 function setStudioTab(tab: StudioTab, force = false): void {
   if (!force && !tabEnabled(studioView, tab)) return;
+  if (bulkBatchRunning && tab !== 'bulk') bulkTabPinned = false;
   studioView = { ...studioView, tab };
   renderStudioView();
+  if (tab === 'bulk') renderBulk();
 }
 
 // The re-process button's visibility depends on the studio's running/result
 // state, so it is refreshed alongside every view transition (the helper itself
 // is declared below, with the mask controls it also depends on).
 function applyStudioView(): void {
+  if (bulkBatchRunning && bulkTabPinned) studioView = { ...studioView, tab: 'bulk' };
   renderStudioView();
   updateReprocessButton();
 }
@@ -718,6 +757,9 @@ function savePref(key: string, value: unknown): void {
 let currentImage: HTMLImageElement | null = null;
 let currentImageData: ImageData | null = null;
 let currentObjectUrl: string | null = null;
+// The step photo's object URL while a bulk batch swaps images through the same
+// loader; the batch restores it when it finishes.
+let protectedObjectUrl: string | null = null;
 let worker: Worker | null = null;
 let modelReady = false;
 let modelError: string | null = null;
@@ -827,18 +869,19 @@ function clearOutput(): void {
   downloadImageBtn.removeAttribute('href');
   lastResultCanvas = null;
   lastPreviewCanvas = null;
-  compareBeforeEl.removeAttribute('src');
-  compareAfterEl.removeAttribute('src');
   setResultCompare(false);
   if (resultCompareToggleBtn) resultCompareToggleBtn.hidden = true;
   outputSection.hidden = true;
-  setExportBarOpen(false);
+  updateExportBarVisibility();
 }
 
 // ——— Export format ———
 // The composited cut-out is kept so changing the format (or the background)
 // re-encodes without re-running inference.
 let lastResultCanvas: HTMLCanvasElement | null = null;
+// Bumped whenever a new cut-out is painted, so the export cache can never serve
+// an encoding of a canvas that was repainted in place.
+let resultRevision = 0;
 // The on-screen preview, at most ≤450 px on its longest side, so switching the
 // background or format never re-encodes a full-resolution PNG just to repaint
 // the display. Rebuilt whenever a new result is composited.
@@ -941,19 +984,69 @@ function chooseExportFormat(format: ExportFormat): void {
   setExportFormat(format);
 }
 
-// Repoint the single download link at the current format, re-encoding the stored
-// result when one exists.
+// Repoint the download action at the current context: the step result on the
+// step tab, or the selected bulk cut-out on the Bulk tab.
 function applyFormatUi(): void {
-  const info = exportFormatInfo(exportFormat);
-  downloadImageBtn.textContent = `Download ${info.label}`;
-  if (lastResultCanvas) {
-    const { width, height } = lastResultCanvas;
-    const href = canvasToDataUrl(lastResultCanvas, exportFormat, background);
-    downloadImageBtn.href = href;
-    downloadImageBtn.download = `background-removed-${width}x${height}.${info.extension}`;
-    downloadImageBtn.hidden = false;
-  }
   renderFormatOptions();
+  refreshExportActions();
+}
+
+function bulkDownloadName(item: BulkItem, extension: string): string {
+  const base = item.name.replace(/\.[^.]+$/, '') || `photo-${item.id}`;
+  return `${base}-background-removed-${item.width}x${item.height}.${extension}`;
+}
+
+// Encoding a full-resolution canvas is expensive, and the progress ticks repaint
+// the view many times. Cache the encoded data URL per canvas + format + background.
+let exportCache: { canvas: HTMLCanvasElement; revision: number; format: ExportFormat; bg: string; href: string } | null = null;
+
+function refreshExportActions(): void {
+  const info = exportFormatInfo(exportFormat);
+  const onBulk = studioView.tab === 'bulk';
+  const bulkItem = onBulk ? selectedBulkItem(bulkState) : null;
+  const canvas = onBulk ? (bulkItem ? bulkResults.get(bulkItem.id) ?? null : null) : lastResultCanvas;
+  if (canvas) {
+    const bgKey = `${background.kind}|${background.hex}|${background.alpha}`;
+    const cached =
+      exportCache &&
+      exportCache.canvas === canvas &&
+      exportCache.revision === resultRevision &&
+      exportCache.format === exportFormat &&
+      exportCache.bg === bgKey
+        ? exportCache.href
+        : null;
+    const href = cached ?? canvasToDataUrl(canvas, exportFormat, background);
+    exportCache = { canvas, revision: resultRevision, format: exportFormat, bg: bgKey, href };
+    downloadImageBtn.textContent = `Download ${info.label}`;
+    downloadImageBtn.href = href;
+    downloadImageBtn.download = bulkItem
+      ? bulkDownloadName(bulkItem, info.extension)
+      : `background-removed-${canvas.width}x${canvas.height}.${info.extension}`;
+    downloadImageBtn.hidden = false;
+  } else {
+    downloadImageBtn.hidden = true;
+    downloadImageBtn.removeAttribute('href');
+  }
+  if (bulkDownloadAllBtn) {
+    const done = bulkDoneCount(bulkState);
+    bulkDownloadAllBtn.hidden = !onBulk || done === 0;
+    bulkDownloadAllBtn.textContent = `Download all (${done})`;
+    bulkDownloadAllBtn.disabled = done === 0;
+  }
+}
+
+// The background & export section is meaningful only where there is something
+// to export: the step result, or a Bulk batch with at least one cut-out.
+function updateExportBarVisibility(): void {
+  if (!exportBarEl) return;
+  const visible =
+    studioView.tab === 'step'
+      ? studioView.hasResult
+      : studioView.tab === 'bulk'
+        ? bulkDoneCount(bulkState) > 0
+        : false;
+  exportBarEl.hidden = !visible;
+  if (visible) refreshExportActions();
 }
 
 renderFormatOptions();
@@ -1037,9 +1130,6 @@ function renderResultPreview(): void {
   const before = figure.querySelector<HTMLImageElement>('.compareBefore');
   if (after) after.src = afterSrc;
   if (before) before.src = currentObjectUrl ?? '';
-
-  // The compare view's right-hand side shows the same composite.
-  compareAfterEl.src = afterSrc;
 }
 
 function updateBackgroundUi(): void {
@@ -1476,7 +1566,7 @@ function showInputImage(img: HTMLImageElement): void {
   // The object URL keeps the decoded image available for inference too.
   inputPreviewImg.src = img.src;
   inputPreviewEl.hidden = false;
-  panelInputEl.classList.add('has-preview');
+  stepInputEl.classList.add('has-preview');
 }
 
 // ——— Session library (render + entry points) ———
@@ -1633,13 +1723,12 @@ async function openLibraryResult(entry: SessionEntry): Promise<void> {
   currentImageName = entry.name;
   lastResultCanvas = canvas;
   lastPreviewCanvas = preview;
+  resultRevision += 1;
   resultSettingsKey = engineSettingsKey();
   applySession({ type: 'activate', id: entry.id });
   outputSection.hidden = false;
-  compareBeforeEl.src = currentObjectUrl ?? '';
   renderResultPreview();
   applyFormatUi();
-  setExportBarOpen(true);
   studioResult();
   log(`Reopened library cut-out (${entry.width}x${entry.height}).`);
 }
@@ -1681,9 +1770,9 @@ function storeLibraryResult(canvas: HTMLCanvasElement): void {
 }
 
 async function storeLibraryResultNow(canvas: HTMLCanvasElement, token: number): Promise<void> {
-  if (token !== libraryRunToken) return;
+  if (!librarySavingEnabled || token !== libraryRunToken) return;
   const blob = await canvasToPngBlob(canvas);
-  if (!blob || token !== libraryRunToken) return;
+  if (!blob || !librarySavingEnabled || token !== libraryRunToken) return;
   const url = URL.createObjectURL(blob);
 
   // The refined final replaces this run's interim preview in the same entry.
@@ -1731,11 +1820,45 @@ async function storeLibraryResultNow(canvas: HTMLCanvasElement, token: number): 
   });
 }
 
-libraryClearBtn?.addEventListener('click', () => {
-  for (const entry of session.entries) applySession({ type: 'remove', id: entry.id });
-});
+function applyLibrarySaveUi(): void {
+  if (librarySaveToggleEl) {
+    librarySaveToggleEl.setAttribute('aria-pressed', String(librarySavingEnabled));
+    librarySaveToggleEl.textContent = librarySavingEnabled ? 'Saving on' : 'Saving off';
+    librarySaveToggleEl.dataset.off = String(!librarySavingEnabled);
+    librarySaveToggleEl.title = librarySavingEnabled
+      ? 'Stop saving new cut-outs to the Library'
+      : 'Start saving new cut-outs to the Library';
+  }
+  if (librarySaveHintEl) {
+    librarySaveHintEl.textContent = librarySavingEnabled
+      ? 'Photos you process stay on this device, in this tab only. They are gone when you close or reload the page.'
+      : 'Saving is off — new cut-outs are not added to this history. Turn saving on to keep them again.';
+  }
+}
 
-async function loadImageFromFile(file: File, addToLibrary = true): Promise<void> {
+function clearLibrary(): void {
+  // Cancel any queued write for the run in flight before dropping its entry.
+  libraryRunToken += 1;
+  currentRunStoredEntryId = null;
+  const { state, revoked } = reduceSession(session, { type: 'clear' });
+  session = state;
+  for (const url of revoked) URL.revokeObjectURL(url);
+  libraryBlobs.clear();
+  libraryResultBlobs.clear();
+  renderLibrary();
+  log('Library history cleared.');
+}
+
+libraryClearBtn?.addEventListener('click', clearLibrary);
+librarySaveToggleEl?.addEventListener('click', () => {
+  librarySavingEnabled = !librarySavingEnabled;
+  savePref(LS_LIBRARY_SAVE, librarySavingEnabled);
+  applyLibrarySaveUi();
+  log(librarySavingEnabled ? 'Library saving enabled.' : 'Library saving disabled.');
+});
+applyLibrarySaveUi();
+
+async function loadImageFromFile(file: File, addToLibrary = librarySavingEnabled): Promise<void> {
   // Validate the declared type/size before decoding (never trust the extension),
   // then the decoded dimensions after. Reject with a message the user can act on.
   const typeCheck = validateFileTypeAndSize(file);
@@ -1770,7 +1893,10 @@ async function loadImageFromFile(file: File, addToLibrary = true): Promise<void>
   currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   currentImage = img;
   // Keep the URL alive while the preview is on screen; release the previous one.
-  if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+  // A bulk batch protects the step photo's URL until it restores it afterwards.
+  if (currentObjectUrl && currentObjectUrl !== protectedObjectUrl) {
+    URL.revokeObjectURL(currentObjectUrl);
+  }
   currentObjectUrl = url;
   showInputImage(img);
   // A new photo invalidates the previous job: bump the job id and cancel any
@@ -1781,11 +1907,11 @@ async function loadImageFromFile(file: File, addToLibrary = true): Promise<void>
   clearOutput();
   studioSelectImage();
   hideRecovery();
+  currentImageName = file.name || 'Photo';
   // Add the photo to the session library (a re-open of an existing entry passes
   // addToLibrary=false so it is not duplicated). The library owns its own blob
   // URL — separate from the preview URL, which is revoked on the next load.
   if (addToLibrary) {
-    currentImageName = file.name || `Photo ${session.nextId}`;
     const libUrl = URL.createObjectURL(file);
     libraryBlobs.set(session.nextId, file);
     applySession({
@@ -1879,12 +2005,21 @@ function pauseModelForMetered(reason: string): void {
   worker?.postMessage({ kind: 'cancel-model', reason });
 }
 
+// The inference run started by the last photo load. A bulk batch awaits it so
+// each photo is fully settled before the next one is loaded.
+let activeRunPromise: Promise<unknown> | null = null;
+
 // The primary action is the upload itself: choosing a photo starts the run
 // automatically, so there is no second button to press. A fatal model error is
 // the one case where a photo must not silently start a run — the recovery panel
 // offers the retry.
 function autoStartIfReady(): void {
-  if (currentImage && modelError === null) void runSmoke();
+  if (currentImage && modelError === null) {
+    // Remember the run so a bulk batch can await the photo it just loaded.
+    activeRunPromise = runSmoke().finally(() => {
+      activeRunPromise = null;
+    });
+  }
 }
 
 async function initWorker(): Promise<void> {
@@ -2383,6 +2518,7 @@ function finishResult(
 ): void {
   lastResultCanvas = canvas;
   lastPreviewCanvas = preview;
+  resultRevision += 1;
 
   const ctx = canvas.getContext('2d')!;
   const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -2390,15 +2526,13 @@ function finishResult(
   const verdict = classifyOutputAlpha(alpha);
 
   // The compare view pairs the original photo with the current composite.
-  compareBeforeEl.src = currentObjectUrl ?? '';
   // Preview + compare "after" are painted from the stored cut-out onto the chosen
   // background; the download link follows the chosen format.
   renderResultPreview();
   applyFormatUi();
 
   outputSection.hidden = false;
-  // Reveal the export bar with the first cut-out so the download is one click away.
-  if (!exportBarOpen) setExportBarOpen(true);
+  updateExportBarVisibility();
   // The export dimensions are the original dimensions; refinement never
   // downscales the export.
   if (phase === 'final') {
@@ -2806,42 +2940,330 @@ sidebarCollapseBtn?.addEventListener('click', () => {
   setSidebarCollapsed(!collapsed);
 });
 
-// ——— Export bar ———
-// The bar holds the output format picker + download link. It is toggled from the
-// studio top bar (and opened automatically the first time a result exists, so the
-// download is never hidden behind an extra click).
-function setExportBarOpen(open: boolean): void {
-  exportBarOpen = open;
-  if (exportBarEl) exportBarEl.hidden = !open;
-  if (exportToggleBtn) {
-    exportToggleBtn.setAttribute('aria-pressed', String(open));
-    exportToggleBtn.setAttribute(
-      'aria-label',
-      open ? 'Hide background and export bar' : 'Show background and export bar',
-    );
-    exportToggleBtn.setAttribute(
-      'title',
-      open ? 'Hide background and export bar' : 'Show background and export bar',
-    );
+// ——— Export bar: the step result or the whole Bulk batch ———
+async function downloadAllBulk(): Promise<void> {
+  const info = exportFormatInfo(exportFormat);
+  const done = bulkState.items.filter((item) => item.status === 'done' && bulkResults.has(item.id));
+  if (!done.length) return;
+  log(`Downloading ${done.length} bulk cut-out(s) as ${info.label}.`);
+  for (const item of done) {
+    const canvas = bulkResults.get(item.id);
+    if (!canvas) continue;
+    const link = document.createElement('a');
+    link.href = canvasToDataUrl(canvas, exportFormat, background);
+    link.download = bulkDownloadName(item, info.extension);
+    link.click();
+    // Browsers throttle rapid programmatic downloads; a short gap keeps them.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  trackDownloadInitiated();
+}
+bulkDownloadAllBtn?.addEventListener('click', () => void downloadAllBulk());
+
+// ——— Bulk queue ———
+function updateBulkStatus(): void {
+  if (!bulkStatusEl) return;
+  if (!bulkBatchRunning) {
+    bulkStatusEl.hidden = true;
+    return;
+  }
+  const total = bulkState.items.length;
+  const done = bulkDoneCount(bulkState);
+  const pct = studioView.percent;
+  bulkStatusEl.hidden = false;
+  bulkStatusEl.textContent =
+    `Processing ${Math.min(done + 1, total)} of ${total}` + (pct === null ? '…' : ` — ${pct}%`);
+}
+
+function bulkStatusLabel(item: BulkItem): string {
+  switch (item.status) {
+    case 'processing':
+      return 'Processing…';
+    case 'done':
+      return 'Cut-out ready';
+    case 'error':
+      return item.error ?? 'Failed';
+    default:
+      return 'Queued';
   }
 }
 
-// The in-bar chevron folds the bar down to its header, like the left sidebar's
-// chevron; the top-bar button still hides it entirely.
-function setBottomBarCollapsed(collapsed: boolean): void {
-  if (!exportBarEl) return;
-  exportBarEl.dataset.collapsed = collapsed ? 'true' : 'false';
-  bottomBarCollapseBtn?.setAttribute('aria-pressed', String(!collapsed));
-  bottomBarCollapseBtn?.setAttribute(
-    'aria-label',
-    collapsed ? 'Expand background and export bar' : 'Collapse background and export bar',
-  );
+function renderBulk(): void {
+  if (!bulkGridEl) return;
+  bulkGridEl.innerHTML = '';
+  if (bulkEmptyEl) bulkEmptyEl.hidden = bulkState.items.length > 0;
+  if (bulkCountEl) bulkCountEl.textContent = `${bulkState.items.length} / ${BULK_LIMIT}`;
+  if (bulkPickBtn) {
+    bulkPickBtn.disabled = bulkBatchRunning || bulkCapacity(bulkState) === 0;
+    bulkPickBtn.textContent = bulkCapacity(bulkState) === 0 ? `Maximum ${BULK_LIMIT}` : 'Choose images';
+  }
+  if (bulkProcessBtn) {
+    const pending = bulkPendingCount(bulkState);
+    bulkProcessBtn.disabled = bulkBatchRunning || pending === 0;
+    bulkProcessBtn.textContent = bulkBatchRunning
+      ? 'Processing…'
+      : pending > 0
+        ? `Process ${pending}`
+        : 'Process all';
+  }
+
+  for (const item of bulkState.items) {
+    const card = document.createElement('div');
+    card.className = 'bulkCard';
+    card.dataset.selected = String(item.id === bulkState.selectedId);
+    card.dataset.status = item.status;
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', `Select ${item.name}`);
+    const select = (): void => {
+      bulkState = selectBulkItem(bulkState, item.id);
+      renderBulk();
+    };
+    card.addEventListener('click', select);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        select();
+      }
+    });
+
+    const thumb = document.createElement('img');
+    thumb.className = 'bulkThumb';
+    thumb.alt = '';
+    thumb.src = item.resultUrl ?? item.originalUrl;
+    card.appendChild(thumb);
+
+    const meta = document.createElement('div');
+    meta.className = 'bulkMeta';
+    const name = document.createElement('span');
+    name.className = 'bulkName';
+    name.textContent = item.name;
+    const dims = document.createElement('span');
+    dims.className = 'bulkDims';
+    dims.textContent = formatDims(item.width, item.height);
+    meta.appendChild(name);
+    meta.appendChild(dims);
+    card.appendChild(meta);
+
+    const status = document.createElement('span');
+    status.className = 'bulkItemStatus';
+    status.textContent = bulkStatusLabel(item);
+    card.appendChild(status);
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'bulkRemove';
+    remove.setAttribute('aria-label', `Remove ${item.name}`);
+    remove.textContent = '×';
+    remove.disabled = bulkBatchRunning;
+    remove.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeBulkFile(item.id);
+    });
+    card.appendChild(remove);
+    bulkGridEl.appendChild(card);
+  }
+  updateBulkStatus();
+  updateExportBarVisibility();
 }
-exportToggleBtn?.addEventListener('click', () => setExportBarOpen(!exportBarOpen));
-bottomBarCollapseBtn?.addEventListener('click', () => {
-  setBottomBarCollapsed(exportBarEl?.dataset.collapsed !== 'true');
-});
-setBottomBarCollapsed(false);
+
+function removeBulkFile(id: number): void {
+  const { state, revoked } = removeBulkItem(bulkState, id);
+  bulkState = state;
+  for (const url of revoked) URL.revokeObjectURL(url);
+  bulkBlobs.delete(id);
+  bulkResults.delete(id);
+  renderBulk();
+}
+
+function pickBulkFiles(): void {
+  if (bulkCapacity(bulkState) === 0) {
+    showToast(`Bulk handles up to ${BULK_LIMIT} images. Remove one to add another.`, { kind: 'warn' });
+    return;
+  }
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/jpeg,image/png,image/webp';
+  input.multiple = true;
+  input.onchange = () => void addBulkFiles(Array.from(input.files ?? []));
+  input.click();
+}
+
+async function addBulkFiles(files: File[]): Promise<void> {
+  const capacity = bulkCapacity(bulkState);
+  if (capacity === 0) {
+    showToast(`Bulk handles up to ${BULK_LIMIT} images. Remove one to add another.`, { kind: 'warn' });
+    return;
+  }
+  if (files.length > capacity) {
+    showToast(`Bulk handles up to ${BULK_LIMIT} images; adding the first ${capacity}.`, { kind: 'warn' });
+  }
+  for (const file of files.slice(0, capacity)) {
+    const typeCheck = validateFileTypeAndSize(file);
+    if (!typeCheck.ok) {
+      error(typeCheck.reason, 'upload');
+      continue;
+    }
+    const url = URL.createObjectURL(file);
+    let img: HTMLImageElement;
+    try {
+      img = await loadImageElement(url);
+    } catch {
+      URL.revokeObjectURL(url);
+      error('Failed to decode image', 'upload');
+      continue;
+    }
+    const dimCheck = validateDimensions(img.naturalWidth, img.naturalHeight);
+    if (!dimCheck.ok) {
+      URL.revokeObjectURL(url);
+      error(dimCheck.reason, 'upload');
+      continue;
+    }
+    const added = addBulkItem(bulkState, {
+      name: file.name || `Photo ${bulkState.nextId}`,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+      originalUrl: url,
+    });
+    bulkState = added.state;
+    if (!added.item) {
+      URL.revokeObjectURL(url);
+      break;
+    }
+    bulkBlobs.set(added.item.id, file);
+  }
+  renderBulk();
+  log(`Bulk: ${bulkState.items.length} image(s) selected.`);
+}
+
+bulkPickBtn?.addEventListener('click', pickBulkFiles);
+bulkProcessBtn?.addEventListener('click', () => void processBulkBatch());
+
+// A bulk batch drives the same single-image pipeline, so it temporarily takes
+// over the step editor. Snapshot the step photo/result and put them back when the
+// batch ends; the user's single-image work is never lost.
+interface StepSnapshot {
+  image: HTMLImageElement | null;
+  imageData: ImageData | null;
+  objectUrl: string | null;
+  imageName: string;
+  result: HTMLCanvasElement | null;
+  preview: HTMLCanvasElement | null;
+  view: typeof studioView;
+}
+
+function snapshotStep(): StepSnapshot {
+  return {
+    image: currentImage,
+    imageData: currentImageData,
+    objectUrl: currentObjectUrl,
+    imageName: currentImageName,
+    result: lastResultCanvas,
+    preview: lastPreviewCanvas,
+    view: studioView,
+  };
+}
+
+function restoreStep(snapshot: StepSnapshot): void {
+  invalidateActiveJob();
+  if (currentObjectUrl && currentObjectUrl !== snapshot.objectUrl) {
+    URL.revokeObjectURL(currentObjectUrl);
+  }
+  currentImage = snapshot.image;
+  currentImageData = snapshot.imageData;
+  currentObjectUrl = snapshot.objectUrl;
+  currentImageName = snapshot.imageName;
+  lastResultCanvas = snapshot.result;
+  lastPreviewCanvas = snapshot.preview;
+  outputBox.innerHTML = '';
+  outputBox.classList.remove('hasResultCompare');
+  resultCompareFigure = null;
+  if (snapshot.objectUrl) {
+    inputPreviewImg.src = snapshot.objectUrl;
+    inputPreviewEl.hidden = false;
+    stepInputEl.classList.add('has-preview');
+  } else {
+    inputPreviewImg.removeAttribute('src');
+    inputPreviewEl.hidden = true;
+    stepInputEl.classList.remove('has-preview');
+  }
+  outputSection.hidden = !snapshot.result;
+  // Keep whatever tab the user is on: the batch normally leaves them on Bulk to
+  // download, but a manual tab switch during the run is respected.
+  studioView = { ...snapshot.view, tab: studioView.tab };
+  applyStudioView();
+  if (snapshot.result) {
+    renderResultPreview();
+    applyFormatUi();
+  }
+}
+
+async function processBulkBatch(): Promise<void> {
+  if (bulkBatchRunning) return;
+  if (studioView.running) {
+    showToast('Wait for the current photo to finish before starting a bulk run.', { kind: 'warn' });
+    return;
+  }
+  if (modelError) {
+    showToast(modelError, { kind: 'error' });
+    return;
+  }
+  const pending = bulkState.items.filter((item) => item.status !== 'done');
+  if (!pending.length) return;
+
+  const snapshot = snapshotStep();
+  protectedObjectUrl = currentObjectUrl;
+  bulkBatchRunning = true;
+  bulkTabPinned = true;
+  setStudioTab('bulk', true);
+  renderBulk();
+  const total = pending.length;
+  let index = 0;
+  try {
+    for (const item of pending) {
+      index += 1;
+      bulkState = updateBulkItem(bulkState, item.id, { status: 'processing', error: null });
+      renderBulk();
+      const blob = bulkBlobs.get(item.id);
+      if (!blob) {
+        bulkState = updateBulkItem(bulkState, item.id, {
+          status: 'error',
+          error: 'Source photo is no longer available',
+        });
+        renderBulk();
+        continue;
+      }
+      log(`Bulk ${index}/${total}: processing a ${item.width}x${item.height} photo.`);
+      const file = new File([blob], item.name, { type: blob.type || 'image/png' });
+      await loadImageFromFile(file, librarySavingEnabled);
+      const run = activeRunPromise;
+      if (run) await run;
+      await waitForJobSettled();
+      // The library write is queued behind a PNG encode; let it finish before the
+      // next run bumps the run token, or the write would be dropped.
+      await libraryWriteQueue;
+      const canvas = lastResultCanvas;
+      if (canvas) {
+        bulkResults.set(item.id, canvas);
+        const png = await canvasToPngBlob(previewFromCanvas(canvas));
+        const resultUrl = png ? URL.createObjectURL(png) : null;
+        bulkState = updateBulkItem(bulkState, item.id, { status: 'done', resultUrl });
+        log(`Bulk ${index}/${total}: cut-out ready (${canvas.width}x${canvas.height}).`);
+      } else {
+        bulkState = updateBulkItem(bulkState, item.id, { status: 'error', error: 'No cut-out produced' });
+        log(`Bulk ${index}/${total}: no cut-out produced.`);
+      }
+      renderBulk();
+    }
+  } finally {
+    bulkBatchRunning = false;
+    bulkTabPinned = false;
+    restoreStep(snapshot);
+    protectedObjectUrl = null;
+    renderBulk();
+    log(`Bulk finished: ${bulkDoneCount(bulkState)} of ${bulkState.items.length} cut-out(s).`);
+  }
+}
 
 // ——— Info bubbles ———
 // Each "?" toggles a floating explanation panel. The panel is positioned in
@@ -2988,7 +3410,7 @@ tilingApplyBtn?.addEventListener('click', () => {
   tilingAdvice = null;
   applyTilingUi();
   if (currentImageData) {
-    setStudioTab('processing', true);
+    setStudioTab('step', true);
     void runSmoke();
   }
 });
@@ -3036,7 +3458,7 @@ applyRefineUi();
 // tab so the user sees the run they asked for.
 reprocessBtn?.addEventListener('click', () => {
   if (!currentImageData) return;
-  setStudioTab('processing', true);
+  setStudioTab('step', true);
   void runSmoke();
 });
 
@@ -3195,6 +3617,7 @@ dropZone.addEventListener('keydown', (e) => {
 // The selected-photo preview replaces the drop zone once a photo exists, so it
 // takes over the "choose another image" job: clicking it re-opens the picker.
 inputPreviewEl.addEventListener('click', chooseFile);
+newPhotoBtn?.addEventListener('click', chooseFile);
 inputPreviewEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault();

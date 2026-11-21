@@ -499,26 +499,67 @@ try {
       jpegState.download,
     );
 
-    // Compare tab: a fourth editor tab, enabled once a result exists, pairing the
-    // original photo with the composited cut-out.
-    const compareState = await page.evaluate(() => {
-      const tab = document.getElementById('tabCompare');
-      tab.click();
+    // One step tab, titled after the current step: the result view now carries
+    // the before/after slider instead of a separate Compare tab.
+    const stepState = await page.evaluate(() => {
+      const tab = document.getElementById('tabStep');
+      const toggle = document.getElementById('resultCompareToggle');
+      const beforeEl = document.querySelector('#outputBox .resultCompare .compareBefore');
+      const beforeHidden = beforeEl ? getComputedStyle(beforeEl).display === 'none' : false;
+      toggle?.click();
+      const afterClick = {
+        pressed: toggle?.getAttribute('aria-pressed'),
+        beforeDisplay: beforeEl ? getComputedStyle(beforeEl).display : '',
+      };
+      toggle?.click();
       return {
-        enabled: !tab.disabled,
-        selected: tab.getAttribute('aria-selected') === 'true',
-        panelVisible: !document.getElementById('panelCompare').hidden,
-        before: document.getElementById('compareBefore')?.getAttribute('src') ?? '',
-        after: document.getElementById('compareAfter')?.getAttribute('src') ?? '',
+        title: tab?.textContent?.trim() ?? '',
+        selected: tab?.getAttribute('aria-selected') === 'true',
+        resultVisible: !document.getElementById('stepResult')?.hidden,
+        before: document.querySelector('#outputBox .resultCompare .compareBefore')?.getAttribute('src') ?? '',
+        after: document.querySelector('#outputBox .resultCompare .compareAfter')?.getAttribute('src') ?? '',
+        compareToggle: !!toggle && toggle.hidden === false,
+        beforeHidden,
+        afterClick,
+        beforeHiddenAgain: beforeEl ? getComputedStyle(beforeEl).display === 'none' : false,
       };
     });
     record(
-      'the Compare tab shows the original beside the cut-out',
-      compareState.enabled &&
-        compareState.selected &&
-        compareState.panelVisible &&
-        compareState.before.length > 0 &&
-        compareState.after.startsWith('data:image/'),
+      'the single step tab is titled Result and builds the before/after slider',
+      stepState.title === 'Result' &&
+        stepState.selected &&
+        stepState.resultVisible &&
+        stepState.before.length > 0 &&
+        stepState.after.startsWith('data:image/'),
+      `${stepState.title} / before ${stepState.before.length > 0} / after ${stepState.after.slice(0, 22)}`,
+    );
+    record(
+      'the compare button floats over the image and gates the before/after slider',
+      stepState.compareToggle &&
+        stepState.beforeHidden &&
+        stepState.afterClick.pressed === 'true' &&
+        stepState.afterClick.beforeDisplay !== 'none' &&
+        stepState.beforeHiddenAgain,
+      `toggle ${stepState.compareToggle} hidden ${stepState.beforeHidden} → ${stepState.afterClick.beforeDisplay} → hidden ${stepState.beforeHiddenAgain}`,
+    );
+
+    // Bulk and Library are available once a result exists, and the old Compare
+    // tab is gone. Wait for refinement to settle so the engine is no longer
+    // owned by the run (the Bulk tab is disabled while it is).
+    await page.waitForFunction(() => !document.getElementById('tabBulk')?.disabled, { timeout: 600000 });
+    const tabsState = await page.evaluate(() => ({
+      compareGone: !document.getElementById('tabCompare') && !document.getElementById('panelCompare'),
+      bulkEnabled: !document.getElementById('tabBulk')?.disabled,
+      libraryEnabled: !document.getElementById('tabLibrary')?.disabled,
+      exportParent: document.getElementById('exportBar')?.parentElement?.className ?? '',
+    }));
+    record(
+      'Bulk and Library tabs replace Compare, with background & export to the right of the sidebar',
+      tabsState.compareGone &&
+        tabsState.bulkEnabled &&
+        tabsState.libraryEnabled &&
+        tabsState.exportParent.includes('studioTabBody'),
+      `compareGone ${tabsState.compareGone} bulk ${tabsState.bulkEnabled} library ${tabsState.libraryEnabled} exportIn ${tabsState.exportParent}`,
     );
 
     // Background picker: one system colour input (a solid colour exports as JPG,
@@ -531,7 +572,7 @@ try {
       const afterColor = {
         download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
         pressed: document.getElementById('bgTransparentBtn')?.getAttribute('aria-pressed'),
-        compareAfter: document.getElementById('compareAfter')?.getAttribute('src') ?? '',
+        compareAfter: document.querySelector('#outputBox .resultCompare .compareAfter')?.getAttribute('src') ?? '',
       };
       document.getElementById('bgTransparentBtn').click();
       const afterTransparent = {
@@ -997,9 +1038,9 @@ try {
     await page.close();
   }
 
-  // ——— Scenario 2b: input tab shows exactly one of drop zone / preview ———
+  // ——— Scenario 2b: the step tab swaps the drop zone for the preview ———
   // The drop zone is the default; once a photo is chosen it is replaced by the
-  // preview (never both at once), and the preview reopens the picker.
+  // preview (never both at once) and the step tab advances to the run.
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
@@ -1013,36 +1054,53 @@ try {
         preview: visible(document.getElementById('inputPreview')),
       };
     });
-    record('input tab shows only the drop-zone placeholder before a photo is chosen', initial.dropZone && !initial.preview);
+    record('the step tab shows only the drop-zone placeholder before a photo is chosen', initial.dropZone && !initial.preview);
 
     await chooseFile(page, resolve(ROOT, 'test-images/glass-wine.jpg'));
     await page.waitForFunction(
-      () => document.getElementById('panelInput')?.classList.contains('has-preview') === true,
+      () => document.getElementById('stepInput')?.classList.contains('has-preview') === true,
       { timeout: 30000 },
     );
-    // Choosing a photo auto-starts the run, which moves to the Processing tab;
-    // return to the Input tab to inspect the editor view the user sees.
-    await page.click('#tabInput');
+    // Choosing a photo auto-starts the run, so the step tab advances to the
+    // Processing view; the preview lives in the now-hidden photo view.
     await page.waitForFunction(
-      () => document.getElementById('tabInput')?.getAttribute('aria-selected') === 'true',
-      { timeout: 10000 },
+      () => {
+        const visible = (id) => {
+          const el = document.getElementById(id);
+          return !!el && !el.hidden && el.getBoundingClientRect().height > 0;
+        };
+        return visible('stepProcessing') || visible('stepResult');
+      },
+      { timeout: 600000 },
     );
     const afterSelect = await page.evaluate(() => {
-      const visible = (el) => !!el && !el.hidden && el.getBoundingClientRect().height > 0;
+      const stepInput = document.getElementById('stepInput');
+      const preview = document.getElementById('inputPreview');
       return {
-        dropZone: visible(document.getElementById('dropZone')),
-        preview: visible(document.getElementById('inputPreview')),
+        hasPreviewClass: stepInput?.classList.contains('has-preview') ?? false,
+        previewSrc: preview?.querySelector('img')?.getAttribute('src') ?? '',
+        photoViewHidden: stepInput?.hidden ?? false,
+        dropZoneInPhotoView: !!stepInput?.contains(document.getElementById('dropZone')),
       };
     });
-    record('input tab shows only the preview once a photo is chosen (drop zone hidden)', afterSelect.preview && !afterSelect.dropZone);
+    record(
+      'the step tab replaces the drop zone with the preview and advances to the run',
+      afterSelect.hasPreviewClass &&
+        afterSelect.previewSrc.length > 0 &&
+        afterSelect.photoViewHidden &&
+        afterSelect.dropZoneInPhotoView,
+    );
 
-    // The preview itself is now the picker target.
+    // The Result step offers "Choose another photo" as the picker target.
+    await page.waitForFunction(() => document.getElementById('stepResult') && !document.getElementById('stepResult').hidden, {
+      timeout: 600000,
+    });
     const [chooser] = await Promise.all([
       page.waitForFileChooser({ timeout: 10000 }).catch(() => null),
-      page.click('#inputPreview'),
+      page.click('#newPhotoBtn'),
     ]);
     if (chooser) await chooser.cancel();
-    record('clicking the selected preview reopens the file chooser', !!chooser);
+    record('the Result step offers "Choose another photo"', !!chooser);
     await page.close();
   }
 
@@ -1596,8 +1654,8 @@ try {
 
   // ——— Scenario: studio engine sidebar (settings) ———
   // The gear popover is gone; the engine controls live in a left sidebar shared
-  // by every editor tab (Photo/Processing/Result/Compare/Library). It collapses
-  // via a chevron and drag-resizes up to 50% of the workspace.
+  // by every editor tab (Step, Bulk, Library). It collapses via a chevron and
+  // drag-resizes up to 50% of the workspace.
   {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 900 });
@@ -1625,7 +1683,7 @@ try {
         hasCollapse: !!document.getElementById('sidebarCollapse'),
         hasResize: !!document.getElementById('sidebarResize'),
         gearGone: !document.getElementById('settingsGearBtn') && !document.getElementById('advancedMenu'),
-        photoTab: document.getElementById('tabInput')?.textContent?.trim(),
+        photoTab: document.getElementById('tabStep')?.textContent?.trim(),
         barToggleHiddenOnPhoto: document.getElementById('sidebarToggle')?.hidden,
         // The sidebar is a sibling of the tab body (the panel area), always
         // visible — not nested inside the Result panel as it once was.
@@ -1638,7 +1696,7 @@ try {
         experimentalTag: document.querySelector('#settingsSidebar .sidebarBadge')?.textContent?.trim(),
       };
     });
-    record('the studio input tab reads "Photo"', markup.photoTab === 'Photo', markup.photoTab);
+    record('the step tab starts as "Photo"', markup.photoTab === 'Photo', markup.photoTab);
     record(
       'the engine controls are a shared left sidebar (gear popover removed)',
       markup.hasSidebar && markup.hasToggle && markup.hasCollapse && markup.hasResize && markup.gearGone && markup.sidebarLeftOfBody,

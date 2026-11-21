@@ -71,6 +71,7 @@ import {
   DEFAULT_EXPORT_FORMAT,
   type ExportFormat,
 } from './features/background-removal/export-image';
+import { createZipBlob, dataUrlToBytes } from './features/background-removal/zip';
 import {
   validateFileTypeAndSize,
   validateDimensions,
@@ -243,6 +244,7 @@ const sidebarResizeEl = document.getElementById('sidebarResize');
 // The export (background + format + download) section, placed to the right of
 // the settings sidebar inside the active tab body.
 const exportBarEl = document.getElementById('exportBar') as HTMLElement | null;
+const bottomBarCollapseBtn = document.getElementById('bottomBarCollapse') as HTMLButtonElement | null;
 // Bulk queue: up to five photos processed one after another.
 const bulkPickBtn = document.getElementById('bulkPick') as HTMLButtonElement | null;
 const bulkProcessBtn = document.getElementById('bulkProcess') as HTMLButtonElement | null;
@@ -1033,7 +1035,7 @@ function refreshExportActions(): void {
   if (bulkDownloadAllBtn) {
     const done = bulkDoneCount(bulkState);
     bulkDownloadAllBtn.hidden = !onBulk || done === 0;
-    bulkDownloadAllBtn.textContent = `Download all (${done})`;
+    bulkDownloadAllBtn.textContent = `Download ZIP (${done})`;
     bulkDownloadAllBtn.disabled = done === 0;
   }
 }
@@ -1051,6 +1053,23 @@ function updateExportBarVisibility(): void {
   exportBarEl.hidden = !visible;
   if (visible) refreshExportActions();
 }
+
+// The Background & Export header can collapse its own body, mirroring the
+// settings sidebar. The collapsed state stays put across tab switches.
+function setExportBarCollapsed(collapsed: boolean): void {
+  if (!exportBarEl) return;
+  exportBarEl.dataset.collapsed = collapsed ? 'true' : 'false';
+  if (!bottomBarCollapseBtn) return;
+  bottomBarCollapseBtn.setAttribute('aria-pressed', String(!collapsed));
+  bottomBarCollapseBtn.setAttribute('aria-expanded', String(!collapsed));
+  const label = collapsed ? 'Show background and export' : 'Hide background and export';
+  bottomBarCollapseBtn.setAttribute('aria-label', label);
+  bottomBarCollapseBtn.setAttribute('title', label);
+}
+bottomBarCollapseBtn?.addEventListener('click', () => {
+  setExportBarCollapsed(exportBarEl?.dataset.collapsed !== 'true');
+});
+setExportBarCollapsed(false);
 
 renderFormatOptions();
 
@@ -2952,24 +2971,58 @@ sidebarCollapseBtn?.addEventListener('click', () => {
 });
 
 // ——— Export bar: the step result or the whole Bulk batch ———
-async function downloadAllBulk(): Promise<void> {
-  const info = exportFormatInfo(exportFormat);
+// The encoder can fall back to PNG for a format the browser cannot produce
+// (WebP), so the archive entry takes its extension from the actual data URL.
+function dataUrlExtension(dataUrl: string, fallback: string): string {
+  if (dataUrl.startsWith('data:image/png')) return 'png';
+  if (dataUrl.startsWith('data:image/jpeg')) return 'jpg';
+  if (dataUrl.startsWith('data:image/webp')) return 'webp';
+  return fallback;
+}
+
+function uniqueZipName(name: string, used: Set<string>): string {
+  if (!used.has(name)) {
+    used.add(name);
+    return name;
+  }
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const extension = dot > 0 ? name.slice(dot) : '';
+  let index = 2;
+  let candidate = `${base}-${index}${extension}`;
+  while (used.has(candidate)) candidate = `${base}-${++index}${extension}`;
+  used.add(candidate);
+  return candidate;
+}
+
+function downloadAllBulk(): void {
   const done = bulkState.items.filter((item) => item.status === 'done' && bulkResults.has(item.id));
   if (!done.length) return;
-  log(`Downloading ${done.length} bulk cut-out(s) as ${info.label}.`);
-  for (const item of done) {
+  const used = new Set<string>();
+  const entries = done.flatMap((item) => {
     const canvas = bulkResults.get(item.id);
-    if (!canvas) continue;
-    const link = document.createElement('a');
-    link.href = canvasToDataUrl(canvas, exportFormat, background);
-    link.download = bulkDownloadName(item, info.extension);
-    link.click();
-    // Browsers throttle rapid programmatic downloads; a short gap keeps them.
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
+    if (!canvas) return [];
+    const dataUrl = canvasToDataUrl(canvas, exportFormat, background);
+    const extension = dataUrlExtension(dataUrl, exportFormatInfo(exportFormat).extension);
+    return [
+      {
+        name: uniqueZipName(bulkDownloadName(item, extension), used),
+        data: dataUrlToBytes(dataUrl),
+      },
+    ];
+  });
+  if (!entries.length) return;
+  log(`Downloading ${entries.length} bulk cut-out(s) as a ZIP archive.`);
+
+  const url = URL.createObjectURL(createZipBlob(entries));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `background-removed-${entries.length}-photos.zip`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
   trackDownloadInitiated();
 }
-bulkDownloadAllBtn?.addEventListener('click', () => void downloadAllBulk());
+bulkDownloadAllBtn?.addEventListener('click', downloadAllBulk);
 
 // ——— Bulk queue ———
 function updateBulkStatus(): void {

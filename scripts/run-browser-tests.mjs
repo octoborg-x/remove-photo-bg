@@ -503,22 +503,44 @@ try {
     // the before/after slider instead of a separate Compare tab.
     const stepState = await page.evaluate(() => {
       const tab = document.getElementById('tabStep');
+      const toggle = document.getElementById('resultCompareToggle');
+      const beforeEl = document.querySelector('#outputBox .resultCompare .compareBefore');
+      const beforeHidden = beforeEl ? getComputedStyle(beforeEl).display === 'none' : false;
+      toggle?.click();
+      const afterClick = {
+        pressed: toggle?.getAttribute('aria-pressed'),
+        beforeDisplay: beforeEl ? getComputedStyle(beforeEl).display : '',
+      };
+      toggle?.click();
       return {
         title: tab?.textContent?.trim() ?? '',
         selected: tab?.getAttribute('aria-selected') === 'true',
         resultVisible: !document.getElementById('stepResult')?.hidden,
         before: document.querySelector('#outputBox .resultCompare .compareBefore')?.getAttribute('src') ?? '',
         after: document.querySelector('#outputBox .resultCompare .compareAfter')?.getAttribute('src') ?? '',
+        compareToggle: !!toggle && toggle.hidden === false,
+        beforeHidden,
+        afterClick,
+        beforeHiddenAgain: beforeEl ? getComputedStyle(beforeEl).display === 'none' : false,
       };
     });
     record(
-      'the single step tab is titled Result and shows the before/after slider',
+      'the single step tab is titled Result and builds the before/after slider',
       stepState.title === 'Result' &&
         stepState.selected &&
         stepState.resultVisible &&
         stepState.before.length > 0 &&
         stepState.after.startsWith('data:image/'),
       `${stepState.title} / before ${stepState.before.length > 0} / after ${stepState.after.slice(0, 22)}`,
+    );
+    record(
+      'the compare button floats over the image and gates the before/after slider',
+      stepState.compareToggle &&
+        stepState.beforeHidden &&
+        stepState.afterClick.pressed === 'true' &&
+        stepState.afterClick.beforeDisplay !== 'none' &&
+        stepState.beforeHiddenAgain,
+      `toggle ${stepState.compareToggle} hidden ${stepState.beforeHidden} → ${stepState.afterClick.beforeDisplay} → hidden ${stepState.beforeHiddenAgain}`,
     );
 
     // Bulk and Library are available once a result exists, and the old Compare
@@ -737,6 +759,13 @@ try {
     // monospace line per event, newest at the bottom, with a prompt glyph. There
     // are no threads, chevrons, or collapsible groups, and no pipeline-dot row.
     // The Zero-Upload statement is hidden behind a clickable icon.
+    // The console starts hidden now; show it so its layout can be measured.
+    const consoleStartsHidden = await page.evaluate(
+      () => document.querySelector('.studioGrid')?.dataset.console === 'hidden',
+    );
+    record('the console is hidden by default', consoleStartsHidden === true, String(consoleStartsHidden));
+    await page.evaluate(() => document.getElementById('consoleToggle').click());
+
     const panelState = await page.evaluate(() => {
       const consoleEl = document.querySelector('.consoleCard');
       const inStudio = !!document.getElementById('studio')?.contains(consoleEl);
@@ -1634,26 +1663,39 @@ try {
     await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
 
-    const markup = await page.evaluate(() => ({
-      hasSidebar: !!document.getElementById('settingsSidebar'),
-      hasToggle: !!document.getElementById('sidebarToggle'),
-      hasCollapse: !!document.getElementById('sidebarCollapse'),
-      hasResize: !!document.getElementById('sidebarResize'),
-      gearGone: !document.getElementById('settingsGearBtn') && !document.getElementById('advancedMenu'),
-      photoTab: document.getElementById('tabStep')?.textContent?.trim(),
-      barToggleHiddenOnPhoto: document.getElementById('sidebarToggle')?.hidden,
-      // The sidebar is a sibling of the tab body (the panel area), always
-      // visible — not nested inside the Result panel as it once was.
-      sidebarLeftOfBody: (() => {
-        const sb = document.getElementById('settingsSidebar')?.getBoundingClientRect();
+    const markup = await page.evaluate(async () => {
+      const sidebar = document.getElementById('settingsSidebar');
+      // The sidebar starts collapsed as a floating rail, which deliberately sits
+      // over the panel. Expand it to check the shared left-column geometry.
+      const collapse = document.getElementById('sidebarToggle');
+      collapse?.click();
+      await new Promise((r) => setTimeout(r, 320));
+      const sidebarLeftOfBody = (() => {
+        const sb = sidebar?.getBoundingClientRect();
         const body = document.querySelector('.studioTabBody')?.getBoundingClientRect();
         return !!sb && !!body && sb.right <= body.left + 1;
-      })(),
-      sidebarVisibleOnPhotoTab: (() => {
-        const sb = document.getElementById('settingsSidebar');
-        return !!sb && sb.offsetParent !== null && sb.getBoundingClientRect().width > 0;
-      })(),
-    }));
+      })();
+      collapse?.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return {
+        hasSidebar: !!document.getElementById('settingsSidebar'),
+        hasToggle: !!document.getElementById('sidebarToggle'),
+        hasCollapse: !!document.getElementById('sidebarCollapse'),
+        hasResize: !!document.getElementById('sidebarResize'),
+        gearGone: !document.getElementById('settingsGearBtn') && !document.getElementById('advancedMenu'),
+        photoTab: document.getElementById('tabStep')?.textContent?.trim(),
+        barToggleHiddenOnPhoto: document.getElementById('sidebarToggle')?.hidden,
+        // The sidebar is a sibling of the tab body (the panel area), always
+        // visible — not nested inside the Result panel as it once was.
+        sidebarLeftOfBody,
+        sidebarVisibleOnPhotoTab: (() => {
+          const sb = document.getElementById('settingsSidebar');
+          return !!sb && sb.offsetParent !== null && sb.getBoundingClientRect().width > 0;
+        })(),
+        defaultCollapsed: document.getElementById('settingsSidebar')?.dataset.collapsed,
+        experimentalTag: document.querySelector('#settingsSidebar .sidebarBadge')?.textContent?.trim(),
+      };
+    });
     record('the step tab starts as "Photo"', markup.photoTab === 'Photo', markup.photoTab);
     record(
       'the engine controls are a shared left sidebar (gear popover removed)',
@@ -1661,47 +1703,53 @@ try {
       `sidebar ${markup.hasSidebar} toggle ${markup.hasToggle} collapse ${markup.hasCollapse} resize ${markup.hasResize} gearGone ${markup.gearGone} leftOfBody ${markup.sidebarLeftOfBody}`,
     );
     record(
-      'the settings sidebar is available in every tab (visible on the Photo tab)',
+      'the settings sidebar is available in every tab (reachable on the Photo tab)',
       markup.barToggleHiddenOnPhoto === false && markup.sidebarVisibleOnPhotoTab === true,
       `toggle hidden on photo tab: ${markup.barToggleHiddenOnPhoto} sidebar visible: ${markup.sidebarVisibleOnPhotoTab}`,
     );
+    record(
+      'the engine controls start collapsed and carry an experimental tag',
+      markup.defaultCollapsed === 'true' && markup.experimentalTag === 'Experimental',
+      `collapsed: ${markup.defaultCollapsed} tag: ${markup.experimentalTag}`,
+    );
 
-    // The top-bar show/hide button collapses the sidebar and stays in sync.
+    // The top-bar show/hide button expands the sidebar from its collapsed
+    // default and collapses it again, staying in sync.
     const barToggle = await page.evaluate(async () => {
       const sb = document.getElementById('settingsSidebar');
       const toggle = document.getElementById('sidebarToggle');
-      const openW = sb.getBoundingClientRect().width;
-      toggle.click();
-      await new Promise((r) => setTimeout(r, 320));
       const collapsedW = sb.getBoundingClientRect().width;
-      const pressedCollapsed = toggle.getAttribute('aria-pressed');
       toggle.click();
       await new Promise((r) => setTimeout(r, 320));
-      return { openW, collapsedW, pressedCollapsed, expandedW: sb.getBoundingClientRect().width };
+      const expandedW = sb.getBoundingClientRect().width;
+      const pressedExpanded = toggle.getAttribute('aria-pressed');
+      toggle.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return { collapsedW, expandedW, pressedExpanded, collapsedAgainW: sb.getBoundingClientRect().width };
     });
     record(
-      'the top-bar show/hide button collapses and re-expands the settings sidebar',
-      barToggle.collapsedW < barToggle.openW && barToggle.pressedCollapsed === 'false' && barToggle.expandedW > barToggle.collapsedW,
-      `open ${Math.round(barToggle.openW)} → collapsed ${Math.round(barToggle.collapsedW)} → expanded ${Math.round(barToggle.expandedW)}`,
+      'the top-bar show/hide button expands and re-collapses the settings sidebar',
+      barToggle.expandedW > barToggle.collapsedW && barToggle.pressedExpanded === 'true' && barToggle.collapsedAgainW < barToggle.expandedW,
+      `collapsed ${Math.round(barToggle.collapsedW)} → expanded ${Math.round(barToggle.expandedW)} → collapsed ${Math.round(barToggle.collapsedAgainW)}`,
     );
 
-    // Collapse + expand via the in-sidebar chevron.
+    // Expand + collapse via the in-sidebar chevron.
     const collapse = await page.evaluate(async () => {
       const sb = document.getElementById('settingsSidebar');
       const chevron = document.getElementById('sidebarCollapse');
-      const openW = sb.getBoundingClientRect().width;
-      chevron.click();
-      await new Promise((r) => setTimeout(r, 320));
       const collapsedW = sb.getBoundingClientRect().width;
-      const pressedCollapsed = chevron.getAttribute('aria-pressed');
       chevron.click();
       await new Promise((r) => setTimeout(r, 320));
-      return { openW, collapsedW, pressedCollapsed, expandedW: sb.getBoundingClientRect().width };
+      const expandedW = sb.getBoundingClientRect().width;
+      const pressedExpanded = chevron.getAttribute('aria-pressed');
+      chevron.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return { collapsedW, expandedW, pressedExpanded, collapsedAgainW: sb.getBoundingClientRect().width };
     });
     record(
-      'the settings sidebar collapses and re-expands from its chevron',
-      collapse.collapsedW < collapse.openW && collapse.pressedCollapsed === 'false' && collapse.expandedW > collapse.collapsedW,
-      `open ${Math.round(collapse.openW)} → collapsed ${Math.round(collapse.collapsedW)} → expanded ${Math.round(collapse.expandedW)}`,
+      'the settings sidebar expands and re-collapses from its chevron',
+      collapse.expandedW > collapse.collapsedW && collapse.pressedExpanded === 'true' && collapse.collapsedAgainW < collapse.expandedW,
+      `collapsed ${Math.round(collapse.collapsedW)} → expanded ${Math.round(collapse.expandedW)} → collapsed ${Math.round(collapse.collapsedAgainW)}`,
     );
 
     // Drag the right edge: grows toward the 50% cap, then shrinks but stays usable.
@@ -1709,6 +1757,8 @@ try {
       const sb = document.getElementById('settingsSidebar');
       const ws = document.getElementById('studioWorkspace');
       const h = document.getElementById('sidebarResize');
+      document.getElementById('sidebarCollapse').click();
+      await new Promise((res) => setTimeout(res, 320));
       const r = h.getBoundingClientRect();
       const x0 = r.left + r.width / 2;
       const y0 = r.top + r.height / 2;
@@ -1798,8 +1848,13 @@ try {
       afterReject.banner === false && afterReject.visitor === null && (await events()).length === 0,
     );
 
-    // 3. Change the choice via the footer control, then allow.
-    await page.click('#analyticsSettingsBtn');
+    // 3. Change the choice via the footer control, then allow. Use a DOM click
+    // (the footer sits at the very bottom of a long page) and wait for the
+    // banner before reading its state.
+    await page.evaluate(() => document.getElementById('analyticsSettingsBtn')?.click());
+    await page
+      .waitForFunction(() => document.getElementById('consentBanner')?.hidden === false, { timeout: 5000 })
+      .catch(() => {});
     const bannerBack = await page.evaluate(
       () => document.getElementById('consentBanner')?.hidden === false,
     );

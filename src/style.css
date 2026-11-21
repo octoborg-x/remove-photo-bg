@@ -1488,6 +1488,47 @@
     flex: none;
     margin-top: 0.5rem;
   }
+  /* The slider is opt-in: the Result tab shows only the cut-out until the
+     compare button is pressed. */
+  .resultCompare[data-compare-on='false'] .compareBefore,
+  .resultCompare[data-compare-on='false'] .compareDivider,
+  .resultCompare[data-compare-on='false'] .compareRange {
+    display: none;
+  }
+  /* Floats over the image's top-right corner, independent of the slider. */
+  .resultCompareToggle {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.32rem 0.65rem;
+    border: 0;
+    border-radius: 999px;
+    background: rgb(15 23 42 / 0.72);
+    color: #f8fafc;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: background 0.15s ease;
+  }
+  .resultCompareToggle[hidden] {
+    display: none;
+  }
+  .resultCompareToggle:hover {
+    background: rgb(15 23 42 / 0.88);
+  }
+  .resultCompareToggle[aria-pressed='true'] {
+    background: var(--color-blue-600);
+    color: var(--color-white);
+  }
+  .resultCompareToggle svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
   /* ——— Studio workspace: engine settings sidebar (left) + active panel (right).
      The sidebar is shared by every editor tab; it collapses to a floating icon
      rail over the image block, and its right edge drag-resizes up to 50% of the
@@ -1582,6 +1623,20 @@
     align-items: center;
     gap: 0.5rem;
     min-width: 0;
+  }
+  /* The engine controls are still experimental; the tag is part of the header
+     so it disappears with the header when the sidebar is collapsed. */
+  .sidebarBadge {
+    flex: none;
+    padding: 0.08rem 0.4rem;
+    border: 1px solid var(--color-amber-100);
+    border-radius: 999px;
+    background: var(--color-amber-50);
+    color: var(--color-amber-800);
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
   .sidebarToggle {
     flex: none;

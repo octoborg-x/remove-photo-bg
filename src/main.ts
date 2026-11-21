@@ -210,6 +210,7 @@ const tabPanels: Record<StudioTab, HTMLElement> = {
   bulk: document.getElementById('panelBulk')!,
   library: document.getElementById('panelLibrary')!,
 };
+const resultCompareToggleBtn = document.getElementById('resultCompareToggle') as HTMLButtonElement | null;
 const stepInputEl = document.getElementById('stepInput')!;
 const stepProcessingEl = document.getElementById('stepProcessing')!;
 const stepResultEl = document.getElementById('stepResult')!;
@@ -490,7 +491,12 @@ function setConsoleVisible(visible: boolean): void {
   studioGridEl.dataset.console = visible ? 'shown' : 'hidden';
   consoleToggleBtn.setAttribute('aria-pressed', String(visible));
   consoleToggleBtn.setAttribute('aria-label', visible ? 'Hide console' : 'Show console');
-  if (visible) applyConsoleHeight(consoleHeightPx);
+  if (visible) {
+    applyConsoleHeight(consoleHeightPx);
+    // Lines printed while the console was hidden left it at the top; a terminal
+    // opens on its newest line.
+    scrollConsoleToBottom();
+  }
 }
 
 // Pins the console to an explicit pixel height (or back to the default) so a
@@ -863,6 +869,8 @@ function clearOutput(): void {
   downloadImageBtn.removeAttribute('href');
   lastResultCanvas = null;
   lastPreviewCanvas = null;
+  setResultCompare(false);
+  if (resultCompareToggleBtn) resultCompareToggleBtn.hidden = true;
   outputSection.hidden = true;
   updateExportBarVisibility();
 }
@@ -880,7 +888,23 @@ let resultRevision = 0;
 let lastPreviewCanvas: HTMLCanvasElement | null = null;
 // The before/after slider in the Result editor, reused across background changes.
 let resultCompareFigure: HTMLElement | null = null;
+// The slider is off by default: the Result tab shows only the cut-out until the
+// compare button is pressed.
+let resultCompareOn = false;
 let exportFormat: ExportFormat = initExportFormat();
+
+function setResultCompare(on: boolean): void {
+  resultCompareOn = on;
+  if (resultCompareFigure) resultCompareFigure.dataset.compareOn = on ? 'true' : 'false';
+  if (resultCompareToggleBtn) {
+    resultCompareToggleBtn.setAttribute('aria-pressed', String(on));
+    const label = on ? 'Hide comparison with the original' : 'Compare with the original photo';
+    resultCompareToggleBtn.setAttribute('aria-label', label);
+    resultCompareToggleBtn.setAttribute('title', label);
+  }
+}
+
+resultCompareToggleBtn?.addEventListener('click', () => setResultCompare(!resultCompareOn));
 
 function initExportFormat(): ExportFormat {
   const fromUrl = urlParams.get('format');
@@ -1096,6 +1120,8 @@ function renderResultPreview(): void {
     outputBox.classList.add('hasResultCompare');
     initCompareSliders(outputBox);
     resultCompareFigure = figure;
+    setResultCompare(resultCompareOn);
+    if (resultCompareToggleBtn) resultCompareToggleBtn.hidden = false;
   }
   // Size the stage to the photo instead of the full panel, so the checkerboard
   // is only behind the image and the cut-out uses the available height.
@@ -3882,14 +3908,10 @@ initCompareSliders();
 initShowcaseGallery();
 initSupportCarousel();
 
-// Narrow screens: the side-by-side workspace left the editor panel too narrow
-// to show a cut-out, and the console took a large share of the height. Start
-// with the engine sidebar folded to its floating icon rail and the console
-// hidden; both stay one tap away in the studio top bar.
-if (window.matchMedia('(max-width: 767px)').matches) {
-  setSidebarCollapsed(true);
-  setConsoleVisible(false);
-}
+// The console and the engine sidebar both start hidden so the first photo gets
+// the whole workspace; each stays one tap away in the studio top bar.
+setSidebarCollapsed(true);
+setConsoleVisible(false);
 
 // ——— Privacy-first analytics ———
 // Custom-event endpoint comes from VITE_ANALYTICS_ENDPOINT and the Cloudflare

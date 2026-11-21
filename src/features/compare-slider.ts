@@ -44,6 +44,7 @@ export function initCompareSliders(root: ParentNode = document): void {
       dragging = false;
     };
     const setFromPointer = (clientX: number): void => {
+      if (figure.dataset.compareOn === 'false') return;
       const rect = stage.getBoundingClientRect();
       if (rect.width === 0) return;
       const pct = ((clientX - rect.left) / rect.width) * 100;

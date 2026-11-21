@@ -685,7 +685,7 @@
               type="button"
               class="studioBarBtn"
               aria-label="Show console"
-              aria-pressed="true"
+              aria-pressed="false"
               aria-controls="studioConsoleCol"
               title="Show or hide the console"
             >
@@ -700,8 +700,8 @@
               id="sidebarToggle"
               type="button"
               class="studioBarBtn"
-              aria-label="Hide settings sidebar"
-              aria-pressed="true"
+              aria-label="Show settings sidebar"
+              aria-pressed="false"
               aria-controls="settingsSidebar"
               title="Show or hide the settings sidebar"
             >
@@ -754,7 +754,7 @@
         </div>
 
         <!-- 2-Column Studio Workspace (fills the fixed studio height) -->
-        <div class="studioGrid">
+        <div class="studioGrid" data-console="hidden">
           <!-- Left Column: the editor (input → processing → result) -->
           <div class="studioEditorCol">
             <div class="studioCard">
@@ -770,20 +770,21 @@
                    the active tab's panel on the right. On small screens the
                    sidebar slides over the panel instead of reflowing it. -->
               <div id="studioWorkspace" class="studioWorkspace">
-              <aside id="settingsSidebar" class="settingsSidebar" aria-label="Studio engine settings">
+              <aside id="settingsSidebar" class="settingsSidebar" data-collapsed="true" aria-label="Studio engine settings">
                 <div class="sidebarHead">
                   <div class="sidebarHeadTitle">
                     <span class="w-2 h-2 rounded-full bg-blue-600"></span>
                     <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Studio Engine Controls</h4>
+                    <span class="sidebarBadge" title="These controls are experimental and may change">Experimental</span>
                   </div>
                   <button
                     id="sidebarCollapse"
                     type="button"
                     class="sidebarToggle"
-                    aria-label="Collapse settings sidebar"
-                    aria-pressed="true"
+                    aria-label="Expand settings sidebar"
+                    aria-pressed="false"
                     aria-controls="settingsSidebarBody"
-                    title="Collapse the settings sidebar"
+                    title="Expand the settings sidebar"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <polyline points="15 6 9 12 15 18" />
@@ -1077,6 +1078,26 @@
               <div id="outputFrame" class="relative rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-100 shadow-inner group/output">
                 <!-- Output Image Box with Checkerboard Background -->
                 <div id="outputBox" class="outputBox min-h-[320px] flex items-center justify-center p-6 checkerboard-pattern"></div>
+
+                <!-- Toggles the original/cut-out slider. The slider is hidden by
+                     default; the button floats over the image's top-right corner. -->
+                <button
+                  id="resultCompareToggle"
+                  type="button"
+                  class="resultCompareToggle"
+                  aria-label="Compare with the original photo"
+                  aria-pressed="false"
+                  title="Compare with the original photo"
+                  hidden
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <polyline points="7 10 5 12 7 14" />
+                    <polyline points="17 10 19 12 17 14" />
+                  </svg>
+                  <span>Compare</span>
+                </button>
 
                 <!-- Refinement banner: shown over the already-usable preview while
                      the edge-refinement stage sharpens it (no fabricated %). -->

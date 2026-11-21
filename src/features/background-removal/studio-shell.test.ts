@@ -168,6 +168,25 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/initCompareSliders\(outputBox\)/);
   });
 
+  it('keeps the Result slider hidden until the compare button is pressed', () => {
+    expect(HTML).toContain('id="resultCompareToggle"');
+    expect(HTML).toMatch(/id="resultCompareToggle"[\s\S]*?hidden/);
+    expect(MAIN).toMatch(/let resultCompareOn = false/);
+    expect(MAIN).toMatch(/resultCompareToggleBtn\?\.addEventListener\('click', \(\) => setResultCompare\(!resultCompareOn\)\)/);
+    expect(CSS).toMatch(/\.resultCompare\[data-compare-on='false'\] \.compareRange\s*\{[^}]*display:\s*none/s);
+  });
+
+  it('starts with the console and the engine controls hidden', () => {
+    expect(HTML).toMatch(/class="studioGrid" data-console="hidden"/);
+    expect(HTML).toMatch(/id="settingsSidebar"[^>]*data-collapsed="true"/);
+    expect(MAIN).toMatch(/setSidebarCollapsed\(true\);\s*setConsoleVisible\(false\);/);
+  });
+
+  it('marks the engine controls as experimental', () => {
+    expect(HTML).toMatch(/class="sidebarBadge"[^>]*>Experimental</);
+    expect(CSS).toMatch(/\.sidebarBadge\s*\{/);
+  });
+
   it('keeps every re-processed cut-out as its own library version', () => {
     expect(MAIN).toMatch(/type: 'add-version'/);
     expect(MAIN).toMatch(/libraryResultBlobs/);
@@ -197,7 +216,7 @@ describe('studio UI refinements', () => {
   it('gives the editor the full width on mobile and keeps it scrollable', () => {
     expect(CSS).toMatch(/@media \(max-width: 767px\)\s*\{[\s\S]*?\.studioWorkspace\s*\{\s*flex-direction: column/s);
     expect(CSS).toMatch(/\.studioTabBody\s*\{[^}]*overflow-y: auto/s);
-    expect(MAIN).toMatch(/matchMedia\('\(max-width: 767px\)'\)/);
+    // The console and engine sidebar start hidden on every screen, not just mobile.
     expect(MAIN).toMatch(/setSidebarCollapsed\(true\)/);
     expect(MAIN).toMatch(/setConsoleVisible\(false\)/);
   });

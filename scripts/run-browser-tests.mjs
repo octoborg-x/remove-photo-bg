@@ -870,6 +870,8 @@ try {
       const closeBtn = document.getElementById('consoleClose');
       const handle = document.getElementById('consoleResize');
       const gridH = grid.getBoundingClientRect().height;
+      const initiallyHidden = grid.dataset.console === 'hidden';
+      toggle.click();
       const openH = col.getBoundingClientRect().height;
       const cap = gridH * 0.5;
       const floor = gridH * 0.2;
@@ -889,11 +891,12 @@ try {
       toggle.click();
       const shownAgain = grid.dataset.console !== 'hidden';
       const togglePressedWhenShown = toggle.getAttribute('aria-pressed');
-      return { gridH, openH, cap, floor, grownH, shrunkH, hiddenByClose, shownAgain, togglePressedWhenHidden, togglePressedWhenShown };
+      return { gridH, initiallyHidden, openH, cap, floor, grownH, shrunkH, hiddenByClose, shownAgain, togglePressedWhenHidden, togglePressedWhenShown };
     });
     record(
-      'the console has a show/hide toggle and an in-card close button',
-      consoleControls.hiddenByClose === true &&
+      'the console is hidden by default and has a show/hide toggle and an in-card close button',
+      consoleControls.initiallyHidden === true &&
+        consoleControls.hiddenByClose === true &&
         consoleControls.shownAgain === true &&
         consoleControls.togglePressedWhenHidden === 'false' &&
         consoleControls.togglePressedWhenShown === 'true',
@@ -1562,6 +1565,8 @@ try {
         const sb = document.getElementById('settingsSidebar');
         return !!sb && sb.offsetParent !== null && sb.getBoundingClientRect().width > 0;
       })(),
+      defaultCollapsed: document.getElementById('settingsSidebar')?.dataset.collapsed,
+      experimentalTag: document.querySelector('#settingsSidebar .sidebarBadge')?.textContent?.trim(),
     }));
     record('the studio input tab reads "Photo"', markup.photoTab === 'Photo', markup.photoTab);
     record(
@@ -1570,47 +1575,53 @@ try {
       `sidebar ${markup.hasSidebar} toggle ${markup.hasToggle} collapse ${markup.hasCollapse} resize ${markup.hasResize} gearGone ${markup.gearGone} leftOfBody ${markup.sidebarLeftOfBody}`,
     );
     record(
-      'the settings sidebar is available in every tab (visible on the Photo tab)',
+      'the settings sidebar is available in every tab (reachable on the Photo tab)',
       markup.barToggleHiddenOnPhoto === false && markup.sidebarVisibleOnPhotoTab === true,
       `toggle hidden on photo tab: ${markup.barToggleHiddenOnPhoto} sidebar visible: ${markup.sidebarVisibleOnPhotoTab}`,
     );
+    record(
+      'the engine controls start collapsed and carry an experimental tag',
+      markup.defaultCollapsed === 'true' && markup.experimentalTag === 'Experimental',
+      `collapsed: ${markup.defaultCollapsed} tag: ${markup.experimentalTag}`,
+    );
 
-    // The top-bar show/hide button collapses the sidebar and stays in sync.
+    // The top-bar show/hide button expands the sidebar from its collapsed
+    // default and collapses it again, staying in sync.
     const barToggle = await page.evaluate(async () => {
       const sb = document.getElementById('settingsSidebar');
       const toggle = document.getElementById('sidebarToggle');
-      const openW = sb.getBoundingClientRect().width;
-      toggle.click();
-      await new Promise((r) => setTimeout(r, 320));
       const collapsedW = sb.getBoundingClientRect().width;
-      const pressedCollapsed = toggle.getAttribute('aria-pressed');
       toggle.click();
       await new Promise((r) => setTimeout(r, 320));
-      return { openW, collapsedW, pressedCollapsed, expandedW: sb.getBoundingClientRect().width };
+      const expandedW = sb.getBoundingClientRect().width;
+      const pressedExpanded = toggle.getAttribute('aria-pressed');
+      toggle.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return { collapsedW, expandedW, pressedExpanded, collapsedAgainW: sb.getBoundingClientRect().width };
     });
     record(
-      'the top-bar show/hide button collapses and re-expands the settings sidebar',
-      barToggle.collapsedW < barToggle.openW && barToggle.pressedCollapsed === 'false' && barToggle.expandedW > barToggle.collapsedW,
-      `open ${Math.round(barToggle.openW)} → collapsed ${Math.round(barToggle.collapsedW)} → expanded ${Math.round(barToggle.expandedW)}`,
+      'the top-bar show/hide button expands and re-collapses the settings sidebar',
+      barToggle.expandedW > barToggle.collapsedW && barToggle.pressedExpanded === 'true' && barToggle.collapsedAgainW < barToggle.expandedW,
+      `collapsed ${Math.round(barToggle.collapsedW)} → expanded ${Math.round(barToggle.expandedW)} → collapsed ${Math.round(barToggle.collapsedAgainW)}`,
     );
 
-    // Collapse + expand via the in-sidebar chevron.
+    // Expand + collapse via the in-sidebar chevron.
     const collapse = await page.evaluate(async () => {
       const sb = document.getElementById('settingsSidebar');
       const chevron = document.getElementById('sidebarCollapse');
-      const openW = sb.getBoundingClientRect().width;
-      chevron.click();
-      await new Promise((r) => setTimeout(r, 320));
       const collapsedW = sb.getBoundingClientRect().width;
-      const pressedCollapsed = chevron.getAttribute('aria-pressed');
       chevron.click();
       await new Promise((r) => setTimeout(r, 320));
-      return { openW, collapsedW, pressedCollapsed, expandedW: sb.getBoundingClientRect().width };
+      const expandedW = sb.getBoundingClientRect().width;
+      const pressedExpanded = chevron.getAttribute('aria-pressed');
+      chevron.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return { collapsedW, expandedW, pressedExpanded, collapsedAgainW: sb.getBoundingClientRect().width };
     });
     record(
-      'the settings sidebar collapses and re-expands from its chevron',
-      collapse.collapsedW < collapse.openW && collapse.pressedCollapsed === 'false' && collapse.expandedW > collapse.collapsedW,
-      `open ${Math.round(collapse.openW)} → collapsed ${Math.round(collapse.collapsedW)} → expanded ${Math.round(collapse.expandedW)}`,
+      'the settings sidebar expands and re-collapses from its chevron',
+      collapse.expandedW > collapse.collapsedW && collapse.pressedExpanded === 'true' && collapse.collapsedAgainW < collapse.expandedW,
+      `collapsed ${Math.round(collapse.collapsedW)} → expanded ${Math.round(collapse.expandedW)} → collapsed ${Math.round(collapse.collapsedAgainW)}`,
     );
 
     // Drag the right edge: grows toward the 50% cap, then shrinks but stays usable.
@@ -1618,6 +1629,8 @@ try {
       const sb = document.getElementById('settingsSidebar');
       const ws = document.getElementById('studioWorkspace');
       const h = document.getElementById('sidebarResize');
+      document.getElementById('sidebarCollapse').click();
+      await new Promise((res) => setTimeout(res, 320));
       const r = h.getBoundingClientRect();
       const x0 = r.left + r.width / 2;
       const y0 = r.top + r.height / 2;

@@ -1517,6 +1517,20 @@
                   <span class="w-2 h-2 rounded-full bg-blue-600"></span>
                   <h4 class="bottomBarTitle">Background &amp; Export</h4>
                 </div>
+                <button
+                  id="bottomBarCollapse"
+                  type="button"
+                  class="sidebarToggle"
+                  aria-label="Hide background and export"
+                  aria-pressed="true"
+                  aria-expanded="true"
+                  aria-controls="bottomBarBody"
+                  title="Hide background and export"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
               </div>
                 <div id="bottomBarBody" class="bottomBarBody">
                   <div class="bottomBarSection bottomBarBackground">
@@ -1564,7 +1578,7 @@
                         </svg>
                         <span>Download Image</span>
                       </a>
-                      <button id="bulkDownloadAll" type="button" class="bulkDownloadAll" hidden>
+                      <button id="bulkDownloadAll" type="button" class="bulkDownloadAll" title="Download every cut-out as one ZIP archive" hidden>
                         Download all
                       </button>
                     </div>

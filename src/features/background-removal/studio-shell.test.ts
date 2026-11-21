@@ -53,11 +53,11 @@ describe('studio shell wiring (main.ts + index.html)', () => {
     expect(MAIN).toMatch(/function updateExportBarVisibility\(/);
     expect(MAIN).toMatch(/studioView\.tab === 'step'[\s\S]{0,120}studioView\.hasResult/);
     expect(MAIN).toMatch(/studioView\.tab === 'bulk'[\s\S]{0,120}bulkDoneCount\(bulkState\) > 0/);
-    // The old top-bar toggle and collapsible bottom bar are gone.
+    // The old top-bar toggle is gone; the bar collapses from its own header.
     expect(HTML).not.toContain('id="exportToggle"');
-    expect(HTML).not.toContain('id="bottomBarCollapse"');
     expect(MAIN).not.toMatch(/function setExportBarOpen\(/);
     expect(HTML).toContain('id="exportBar"');
+    expect(HTML).toContain('id="bottomBarCollapse"');
   });
 
   it('exposes tiling + edge-refinement controls in the shared sidebar', () => {
@@ -250,11 +250,19 @@ describe('studio UI refinements', () => {
     expect(bodyStart).toBeGreaterThan(-1);
     expect(exportStart).toBeGreaterThan(bodyStart);
     expect(exportStart).toBeLessThan(bodyEnd);
-    expect(HTML).not.toContain('class="exportBar bottomBar" hidden role="region" aria-label="Background and export">\n                <div class="bottomBarHead">\n                  <div class="bottomBarHeadTitle">\n                    <span class="w-2 h-2 rounded-full bg-blue-600"></span>\n                    <h4 class="bottomBarTitle">Background &amp; Export</h4>\n                  </div>\n                  <button');
+    expect(HTML).toMatch(/id="exportBar"[\s\S]*?id="bottomBarCollapse"/);
     const resultPanel = HTML.slice(HTML.indexOf('id="panelStep"'), HTML.indexOf('id="panelBulk"'));
     expect(resultPanel).not.toContain('id="bgTransparentBtn"');
     // The Bulk tab and the step tab share the same section in that column.
     expect(HTML).toMatch(/id="panelBulk"[\s\S]*id="panelLibrary"[\s\S]*id="exportBar"/);
+  });
+
+  it('lets the Background & Export header show and hide its body', () => {
+    expect(HTML).toMatch(/id="bottomBarCollapse"[\s\S]*?aria-controls="bottomBarBody"/);
+    expect(MAIN).toMatch(/function setExportBarCollapsed\(/);
+    expect(MAIN).toMatch(/exportBarEl\.dataset\.collapsed = collapsed \? 'true' : 'false'/);
+    expect(MAIN).toMatch(/bottomBarCollapseBtn\?\.addEventListener\('click'/);
+    expect(CSS).toMatch(/\.bottomBar\[data-collapsed='true'\] \.bottomBarBody\s*\{[^}]*display:\s*none/s);
   });
 
   it('offers a Bulk tab for up to five photos', () => {
@@ -265,10 +273,14 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/BULK_LIMIT/);
     expect(MAIN).toMatch(/function addBulkFiles\(/);
     expect(MAIN).toMatch(/function processBulkBatch\(/);
-    // Batch output is downloadable in the chosen format on the chosen background.
+    // Batch output is downloadable in the chosen format on the chosen background,
+    // bundled into one ZIP archive.
     expect(HTML).toContain('id="bulkDownloadAll"');
     expect(MAIN).toMatch(/function downloadAllBulk\(/);
     expect(MAIN).toMatch(/canvasToDataUrl\(canvas, exportFormat, background\)/);
+    expect(MAIN).toMatch(/createZipBlob\(entries\)/);
+    expect(MAIN).toMatch(/dataUrlToBytes\(dataUrl\)/);
+    expect(MAIN).toMatch(/link\.download = `background-removed-\$\{entries\.length\}-photos\.zip`/);
   });
 
   it('saves bulk cut-outs to the library and can stop saving or clear history', () => {

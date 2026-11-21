@@ -562,6 +562,27 @@ try {
       `compareGone ${tabsState.compareGone} bulk ${tabsState.bulkEnabled} library ${tabsState.libraryEnabled} exportIn ${tabsState.exportParent}`,
     );
 
+    // The Background & Export header collapses and restores its own body.
+    const exportBarState = await page.evaluate(() => {
+      const toggle = document.getElementById('bottomBarCollapse');
+      const body = document.getElementById('bottomBarBody');
+      const display = () => (body ? getComputedStyle(body).display : '');
+      const initial = { expanded: toggle?.getAttribute('aria-expanded'), display: display() };
+      toggle?.click();
+      const collapsed = { expanded: toggle?.getAttribute('aria-expanded'), display: display() };
+      toggle?.click();
+      return { initial, collapsed, restored: display() };
+    });
+    record(
+      'the Background & Export header shows and hides its body',
+      exportBarState.initial.expanded === 'true' &&
+        exportBarState.initial.display !== 'none' &&
+        exportBarState.collapsed.expanded === 'false' &&
+        exportBarState.collapsed.display === 'none' &&
+        exportBarState.restored !== 'none',
+      `${exportBarState.initial.expanded}/${exportBarState.initial.display} → ${exportBarState.collapsed.expanded}/${exportBarState.collapsed.display} → ${exportBarState.restored}`,
+    );
+
     // Background picker: one system colour input (a solid colour exports as JPG,
     // no alpha to carry) repaints the compare view; the transparent toggle
     // returns a real alpha PNG.

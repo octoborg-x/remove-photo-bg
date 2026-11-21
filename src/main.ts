@@ -688,9 +688,11 @@ window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',
 requestAnimationFrame(() => document.documentElement.classList.add('ui-ready'));
 
 // ——— Floating notifications ———
-// Top-left, fixed, stacked vertically. Each dismisses itself after 10 s and has a
-// close button; several at once stack downward in the order they arrived.
-type ToastKind = 'info' | 'warn' | 'error';
+// Top-right, fixed over the page, stacked vertically. Each dismisses itself after
+// 10 s and has a close button; several at once stack downward in the order they
+// arrived. The host is a direct child of <body>, so a notification never reflows
+// the page and is never clipped by a scrolling column.
+type ToastKind = 'info' | 'warn' | 'error' | 'success';
 const TOAST_DEFAULT_MS = 10000;
 
 function showToast(
@@ -1454,7 +1456,7 @@ type ErrorKind = 'upload' | 'download' | 'memory' | 'worker' | 'generic';
 
 function retryModelOrRun(): void {
   hideRecovery();
-  if (!modelReady) loadSelectedModel();
+  if (!modelReady) void ensureModelLoaded();
   else if (currentImageData) void runSmoke();
 }
 
@@ -1472,11 +1474,11 @@ function showRecovery(kind: ErrorKind, message: string): void {
     case 'download':
       text =
         'The model download did not finish. Check your connection and try again — ' +
-        'the model is kept on this device once it succeeds, so you only download it once.';
+        'the model is kept on this device once it succeeds.';
       primaryLabel = 'Retry download';
       primaryRun = () => {
         hideRecovery();
-        loadSelectedModel();
+        void ensureModelLoaded();
       };
       break;
     case 'memory':
@@ -1486,7 +1488,7 @@ function showRecovery(kind: ErrorKind, message: string): void {
       primaryLabel = 'Try again';
       primaryRun = () => {
         hideRecovery();
-        if (!modelReady) loadSelectedModel();
+        if (!modelReady) void ensureModelLoaded();
         else if (currentImageData) void runSmoke();
       };
       break;
@@ -2816,7 +2818,7 @@ providerToggle.addEventListener('change', () => {
   if (selectedProvider === 'webgpu') warnOnGpuChoice();
   applyProviderUi();
   updateReprocessButton();
-  loadSelectedModel();
+  void ensureModelLoaded(true);
 });
 
 // ——— Mask adjust controls ———
@@ -3550,7 +3552,7 @@ function resetEngineOptions(): void {
     selectedProvider = defaultProvider;
     savePref(LS_PROVIDER, selectedProvider);
     applyProviderUi();
-    loadSelectedModel();
+    void ensureModelLoaded(true);
   }
 
   maskAdjust = { ...DEFAULT_MASK_ADJUST };
@@ -3763,12 +3765,16 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
     error('No image loaded');
     return null;
   }
-  // A model download that was paused at the metered-connection prompt resumes
-  // here: running is an explicit request to use the model.
+  // A run needs the model before it can start. On a metered link that is the
+  // user's decision, not the photo picker's: ask first and wait for the answer
+  // instead of silently spending their data plan. A dismissed prompt cancels
+  // the run; Wi-Fi arriving in the meantime resolves it as a confirmation.
   if (!modelReady && !modelError) {
-    sessionStorage.setItem('remove-bg:download-confirmed', '1');
-    netWarnEl.hidden = true;
-    if (!modelLoadInFlight) loadSelectedModel();
+    const canDownload = await ensureModelLoaded();
+    if (!canDownload) {
+      setStage('Paused — download the model to remove the background.');
+      return null;
+    }
   }
   hideRecovery();
   clearOutput();
@@ -4019,7 +4025,7 @@ let analyticsUi: AnalyticsUi | null = null;
     diagnostics: diagnosticReport,
     onReportSubmitted: () => {
       // Confirmation is a plain toast; the report itself is already stored.
-      showToast('Thanks — your report was sent.', { kind: 'info', title: 'Report sent' });
+      showToast('Thanks — your report was sent.', { kind: 'success', title: 'Report sent' });
     },
   });
   if (analyticsUi.enabled) {
@@ -4231,8 +4237,9 @@ async function modelFetchTick(): Promise<void> {
     return;
   }
   // An unmetered link is available and the model is still absent, so the earlier
-  // "may be metered" prompt no longer applies.
-  netWarnEl.hidden = true;
+  // "may be metered" prompt no longer applies. Resolve any run waiting on that
+  // prompt as a confirmation before starting the download.
+  settleDownloadPrompt(true);
   log(`Unmetered connection detected and the model is not on this device yet; downloading it now (${connection}).`);
   loadSelectedModel();
 }
@@ -4280,19 +4287,65 @@ function showMeteredPausePrompt(): void {
   netWarnConfirm.focus();
 }
 
+// A run that needs the model waits on this promise while the prompt is up, so
+// the transfer starts only after the user answers. Wi-Fi arriving also resolves
+// it as a confirmation (the background fetch loop can download for free).
+let downloadPromptPromise: Promise<boolean> | null = null;
+let downloadPromptResolve: ((confirmed: boolean) => void) | null = null;
+
+function requestDownloadConfirmation(): Promise<boolean> {
+  if (!selectedModel) return Promise.resolve(true);
+  if (sessionStorage.getItem('remove-bg:download-confirmed') === '1') {
+    return Promise.resolve(true);
+  }
+  if (!downloadPromptPromise) {
+    showNetWarn();
+    downloadPromptPromise = new Promise<boolean>((resolve) => {
+      downloadPromptResolve = resolve;
+    });
+  }
+  return downloadPromptPromise;
+}
+
+function settleDownloadPrompt(confirmed: boolean): void {
+  netWarnEl.hidden = true;
+  downloadPromptResolve?.(confirmed);
+  downloadPromptResolve = null;
+  downloadPromptPromise = null;
+}
+
+/**
+ * Makes the model available, asking first on a metered link. Resolves false when
+ * the user declines the download, so a caller can abandon its run instead of
+ * hanging on a model that will never arrive. `force` reloads the model even when
+ * one is already ready (a provider change).
+ */
+async function ensureModelLoaded(force = false): Promise<boolean> {
+  if (!force && (modelLoadInFlight || modelReady)) return true;
+  if (modelLoadInFlight) return true;
+  if (await needsDownloadConfirmation()) {
+    return requestDownloadConfirmation();
+  }
+  // No confirmation needed: any stale prompt is answered and the download starts.
+  settleDownloadPrompt(true);
+  if (force) loadSelectedModel();
+  else autoLoadModel();
+  return true;
+}
+
 function confirmDownload(): void {
   sessionStorage.setItem('remove-bg:download-confirmed', '1');
-  netWarnEl.hidden = true;
   log('Download confirmed by the user; starting the model download.');
+  settleDownloadPrompt(true);
   autoLoadModel();
 }
 
 netWarnConfirm.addEventListener('click', confirmDownload);
 netWarnDismiss.addEventListener('click', () => {
-  netWarnEl.hidden = true;
+  settleDownloadPrompt(false);
   setStage('Paused — choose a photo to download the model and remove its background.');
-  // A dismissal is not a dead end: choosing a photo starts the download and the
-  // run automatically.
+  // A dismissal is not a dead end: choosing a photo asks again before spending
+  // data, and Wi-Fi can still fetch the model in the background.
 });
 
 boot().catch((e) => error(e instanceof Error ? e.message : String(e)));

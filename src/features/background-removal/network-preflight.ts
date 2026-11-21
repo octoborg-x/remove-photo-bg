@@ -253,7 +253,7 @@ export function downloadConfirmationText(sizeBytes: number, label?: string): str
   return (
     `Removing backgrounds needs to download the model${named} once — about ${size}.\n\n` +
     'You look like you may be on mobile data, and this download uses your data plan. ' +
-    'It is kept on this device, so it only happens once. We will ask again next visit.\n\n' +
+    'We will ask again next visit.\n\n' +
     'Your photo is never uploaded; everything runs in your browser.'
   );
 }

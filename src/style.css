@@ -73,6 +73,9 @@
   --color-purple-50: light-dark(#faf5ff, #241a3f);
   --color-purple-600: light-dark(#9333ea, #c084fc);
   --color-green-50: light-dark(#f0fdf4, #0e2a1b);
+  --color-green-600: light-dark(#16a34a, #4ade80);
+  --color-green-700: light-dark(#15803d, #86efac);
+  --color-green-900: light-dark(#14532d, #bbf7d0);
 }
 
 /* Explicit override: force one mode regardless of the operating system. */
@@ -659,16 +662,25 @@
   }
 
   /* ——— Toasts ——— */
+  /* Every notification (info, success, warning, error) lives here: fixed to the
+     viewport's top-right corner, above the page and outside the flow, so it
+     overlays content instead of pushing it. Long messages wrap inside the card
+     rather than widening it or spilling off-screen. */
   .toastHost {
     position: fixed;
-    top: 1.25rem;
-    right: 1.25rem;
+    top: max(1.25rem, env(safe-area-inset-top));
+    right: max(1.25rem, env(safe-area-inset-right));
     z-index: 1000;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 0.6rem;
-    max-width: min(380px, calc(100vw - 2.5rem));
+    width: min(380px, calc(100vw - 2.5rem));
+    max-width: calc(100vw - 2.5rem);
+    max-height: calc(100dvh - 2.5rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     pointer-events: none;
   }
   .toast {
@@ -676,6 +688,9 @@
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
+    width: 100%;
+    max-width: 100%;
+    overflow-wrap: anywhere;
     background: var(--color-white);
     border: 1px solid var(--color-slate-200);
     border-left: 4px solid var(--color-blue-600);
@@ -684,9 +699,27 @@
     box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.1);
     animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
+  .toast.info {
+    border-left-color: var(--color-blue-600);
+    background: var(--color-white);
+  }
   .toast.warn {
     border-left-color: var(--color-amber-500);
     background: var(--color-amber-50);
+  }
+  .toast.success {
+    border-left-color: var(--color-green-600);
+    background: var(--color-green-50);
+  }
+  .toast.success .toastBody,
+  .toast.success .toastTitle {
+    color: var(--color-green-900);
+  }
+  .toast.success .toastClose {
+    color: var(--color-green-700);
+  }
+  .toast.success .toastClose:hover {
+    color: var(--color-green-900);
   }
   .toast.error {
     border-left-color: var(--color-red-500);
@@ -727,6 +760,19 @@
     color: var(--color-slate-700);
   }
   /* ——— Recovery panel ——— */
+  /* The error panel is a notification too: it stacks inside the fixed top-right
+     host, overlays the page, and wraps long error text instead of widening. */
+  .recovery {
+    pointer-events: auto;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+  }
+  .recovery[hidden] {
+    display: none;
+  }
   .recovery .actions {
     display: flex;
     flex-wrap: wrap;
@@ -2745,19 +2791,45 @@
   }
 
   /* ——— Metered-connection preflight warning ——— */
+  /* A notification, not an inline banner: fixed to the top-right corner so it
+     overlays the studio instead of shrinking the workspace, and long copy wraps
+     inside the card. It stays inside the studio layer, so it is only visible
+     while the studio is open. */
   .netWarn {
-    margin-bottom: 0.75rem;
+    position: fixed;
+    top: max(1.25rem, env(safe-area-inset-top));
+    right: max(1.25rem, env(safe-area-inset-right));
+    z-index: 1100;
+    width: min(380px, calc(100vw - 2.5rem));
+    max-width: calc(100vw - 2.5rem);
+    max-height: calc(100dvh - 2.5rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
     padding: 0.9rem;
     border-radius: 0.9rem;
     background: var(--color-amber-50);
     border: 1px solid var(--color-amber-100);
     color: var(--color-amber-900);
     font-size: 0.85rem;
-    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
-    flex: none;
+    box-shadow: 0 18px 40px -12px rgb(15 23 42 / 0.28);
+    animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .netWarn[hidden] {
     display: none;
+  }
+
+  /* Phones: notifications stay anchored to the top-right corner and fixed over
+     the page, with a little more of the width available for long copy. */
+  @media (max-width: 640px) {
+    .toastHost,
+    .netWarn {
+      top: max(0.75rem, env(safe-area-inset-top));
+      right: max(0.75rem, env(safe-area-inset-right));
+      width: min(380px, calc(100vw - 1.5rem));
+      max-width: calc(100vw - 1.5rem);
+      max-height: calc(100dvh - 1.5rem);
+    }
   }
 
   /* ——— Analytics consent banner ——— */

@@ -246,7 +246,7 @@ describe('studio UI refinements', () => {
     // settings sidebar), not in the result panel or the old bottom bar.
     const bodyStart = HTML.indexOf('id="studioWorkspace"');
     const exportStart = HTML.indexOf('id="exportBar"');
-    const bodyEnd = HTML.indexOf('id="recovery"');
+    const bodyEnd = HTML.indexOf('id="studioConsoleCol"');
     expect(bodyStart).toBeGreaterThan(-1);
     expect(exportStart).toBeGreaterThan(bodyStart);
     expect(exportStart).toBeLessThan(bodyEnd);
@@ -328,5 +328,50 @@ describe('studio UI refinements', () => {
     // A colour first picked from transparent starts fully opaque, not at the
     // slider's stale value.
     expect(MAIN).toMatch(/background\.kind === 'color' \? Number\(bgAlphaInput\.value\) : 100/);
+  });
+});
+
+describe('floating notifications', () => {
+  it('pins the notification host to the viewport top-right, above the flow', () => {
+    expect(CSS).toMatch(/\.toastHost\s*\{[^}]*position:\s*fixed/s);
+    expect(CSS).toMatch(/\.toastHost\s*\{[^}]*top:/s);
+    expect(CSS).toMatch(/\.toastHost\s*\{[^}]*right:/s);
+    // Long copy wraps inside the card instead of widening it off-screen.
+    expect(CSS).toMatch(/\.toast\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+  });
+
+  it('styles every notification kind, including success', () => {
+    for (const kind of ['info', 'success', 'warn', 'error']) {
+      expect(CSS).toMatch(new RegExp(`\\.toast\\.${kind}\\s*\\{`));
+    }
+    expect(MAIN).toMatch(/type ToastKind = 'info' \| 'warn' \| 'error' \| 'success'/);
+  });
+
+  it('shows the download prompt as a fixed top-right overlay, not an inline banner', () => {
+    expect(CSS).toMatch(/\.netWarn\s*\{[^}]*position:\s*fixed/s);
+    expect(CSS).toMatch(/\.netWarn\s*\{[^}]*top:/s);
+    expect(CSS).toMatch(/\.netWarn\s*\{[^}]*right:/s);
+    expect(CSS).toMatch(/\.netWarn\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+    expect(CSS).not.toMatch(/\.netWarn\s*\{[^}]*margin-bottom:\s*0\.75rem/s);
+  });
+
+  it('stacks the error recovery panel in the fixed notification host', () => {
+    // The download-failure panel used to sit in the studio flow and push the
+    // content down; it now shares the top-right notification stack.
+    expect(HTML.indexOf('id="recovery"')).toBeGreaterThan(HTML.indexOf('id="toastHost"'));
+    expect(HTML.indexOf('id="recovery"')).toBeLessThan(HTML.indexOf('id="studioWorkspace"'));
+    expect(CSS).toMatch(/\.recovery\s*\{[^}]*pointer-events:\s*auto/s);
+    expect(CSS).toMatch(/\.recovery\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+  });
+
+  it('waits for the user before a run downloads the model over mobile data', () => {
+    // The old path confirmed on the user's behalf when a photo was selected.
+    expect(MAIN).not.toMatch(/A model download that was paused at the metered-connection prompt resumes/);
+    expect(MAIN).toMatch(/const canDownload = await ensureModelLoaded\(\)/);
+    expect(MAIN).toMatch(/function ensureModelLoaded\(/);
+    expect(MAIN).toMatch(/return requestDownloadConfirmation\(\)/);
+    expect(MAIN).toMatch(/function requestDownloadConfirmation\(\): Promise<boolean>/);
+    // A dismissed prompt cancels the run instead of leaving it waiting forever.
+    expect(MAIN).toMatch(/if \(!canDownload\)\s*\{/);
   });
 });

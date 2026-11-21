@@ -1605,28 +1605,39 @@ try {
     await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
 
-    const markup = await page.evaluate(() => ({
-      hasSidebar: !!document.getElementById('settingsSidebar'),
-      hasToggle: !!document.getElementById('sidebarToggle'),
-      hasCollapse: !!document.getElementById('sidebarCollapse'),
-      hasResize: !!document.getElementById('sidebarResize'),
-      gearGone: !document.getElementById('settingsGearBtn') && !document.getElementById('advancedMenu'),
-      photoTab: document.getElementById('tabInput')?.textContent?.trim(),
-      barToggleHiddenOnPhoto: document.getElementById('sidebarToggle')?.hidden,
-      // The sidebar is a sibling of the tab body (the panel area), always
-      // visible — not nested inside the Result panel as it once was.
-      sidebarLeftOfBody: (() => {
-        const sb = document.getElementById('settingsSidebar')?.getBoundingClientRect();
+    const markup = await page.evaluate(async () => {
+      const sidebar = document.getElementById('settingsSidebar');
+      // The sidebar starts collapsed as a floating rail, which deliberately sits
+      // over the panel. Expand it to check the shared left-column geometry.
+      const collapse = document.getElementById('sidebarToggle');
+      collapse?.click();
+      await new Promise((r) => setTimeout(r, 320));
+      const sidebarLeftOfBody = (() => {
+        const sb = sidebar?.getBoundingClientRect();
         const body = document.querySelector('.studioTabBody')?.getBoundingClientRect();
         return !!sb && !!body && sb.right <= body.left + 1;
-      })(),
-      sidebarVisibleOnPhotoTab: (() => {
-        const sb = document.getElementById('settingsSidebar');
-        return !!sb && sb.offsetParent !== null && sb.getBoundingClientRect().width > 0;
-      })(),
-      defaultCollapsed: document.getElementById('settingsSidebar')?.dataset.collapsed,
-      experimentalTag: document.querySelector('#settingsSidebar .sidebarBadge')?.textContent?.trim(),
-    }));
+      })();
+      collapse?.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return {
+        hasSidebar: !!document.getElementById('settingsSidebar'),
+        hasToggle: !!document.getElementById('sidebarToggle'),
+        hasCollapse: !!document.getElementById('sidebarCollapse'),
+        hasResize: !!document.getElementById('sidebarResize'),
+        gearGone: !document.getElementById('settingsGearBtn') && !document.getElementById('advancedMenu'),
+        photoTab: document.getElementById('tabInput')?.textContent?.trim(),
+        barToggleHiddenOnPhoto: document.getElementById('sidebarToggle')?.hidden,
+        // The sidebar is a sibling of the tab body (the panel area), always
+        // visible — not nested inside the Result panel as it once was.
+        sidebarLeftOfBody,
+        sidebarVisibleOnPhotoTab: (() => {
+          const sb = document.getElementById('settingsSidebar');
+          return !!sb && sb.offsetParent !== null && sb.getBoundingClientRect().width > 0;
+        })(),
+        defaultCollapsed: document.getElementById('settingsSidebar')?.dataset.collapsed,
+        experimentalTag: document.querySelector('#settingsSidebar .sidebarBadge')?.textContent?.trim(),
+      };
+    });
     record('the studio input tab reads "Photo"', markup.photoTab === 'Photo', markup.photoTab);
     record(
       'the engine controls are a shared left sidebar (gear popover removed)',
@@ -1779,8 +1790,13 @@ try {
       afterReject.banner === false && afterReject.visitor === null && (await events()).length === 0,
     );
 
-    // 3. Change the choice via the footer control, then allow.
-    await page.click('#analyticsSettingsBtn');
+    // 3. Change the choice via the footer control, then allow. Use a DOM click
+    // (the footer sits at the very bottom of a long page) and wait for the
+    // banner before reading its state.
+    await page.evaluate(() => document.getElementById('analyticsSettingsBtn')?.click());
+    await page
+      .waitForFunction(() => document.getElementById('consentBanner')?.hidden === false, { timeout: 5000 })
+      .catch(() => {});
     const bannerBack = await page.evaluate(
       () => document.getElementById('consentBanner')?.hidden === false,
     );

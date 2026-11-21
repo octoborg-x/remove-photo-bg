@@ -22,6 +22,7 @@
 // with a genuinely busy, non-uniform background keeps the model's mask.
 
 import { upscaleMask } from './mask-postprocess';
+import { DEFAULT_ISLAND_CLEANUP, ISLAND_CLEANUP_FRACTIONS } from './island-cleanup';
 
 export interface RecoveryOptions {
   /** Longest side of the working resolution for the flood fill. */
@@ -32,6 +33,9 @@ export interface RecoveryOptions {
   floodFraction?: number;
   /** Border-band foreground fraction above which the flood is confirmed. */
   borderFraction?: number;
+  /** Island-area bar for the despeckle, as a fraction of the image. Defaults to
+   *  the `fine` variant; the engine controls pass the user's choice. */
+  minIslandFraction?: number;
 }
 
 export const DEFAULT_RECOVERY_OPTIONS: Required<RecoveryOptions> = {
@@ -39,6 +43,7 @@ export const DEFAULT_RECOVERY_OPTIONS: Required<RecoveryOptions> = {
   tolerance: 24,
   floodFraction: 0.75,
   borderFraction: 0.7,
+  minIslandFraction: ISLAND_CLEANUP_FRACTIONS[DEFAULT_ISLAND_CLEANUP],
 };
 
 /** Fraction of an 8-bit mask at or above `threshold` (default: the 0.5 cut). */
@@ -88,14 +93,14 @@ export function isFloodedMask(
   );
 }
 
-/** Smallest isolated island kept by the flood-recovery despeckle, as a fraction
- *  of the image. Below this a foreground island is background texture the fill
- *  could not reach (grain, reflections, gaps between product parts), not subject.
- *  Same number as `MIN_ISLAND_FRACTION` (refine-mask.ts) and the accuracy
- *  benchmark's `SPECKLE_ISLAND_FRACTION` (quality_metrics.py); the three are
- *  asserted equal by `--self-test` and threshold-sync.test.ts. See
- *  `docs/accuracy-benchmark.md` §5.1.1. */
-export const MIN_RECOVERY_ISLAND_FRACTION = 5e-4;
+/** Smallest isolated island kept by the flood-recovery despeckle by default, as
+ *  a fraction of the image. Below this a foreground island is background texture
+ *  the fill could not reach (grain, reflections, gaps between product parts),
+ *  not subject. This is the `fine` variant — the same number as
+ *  `MIN_ISLAND_FRACTION` (refine-mask.ts) — and the caller overrides it with
+ *  `strict` (5e-4, the benchmark's `SPECKLE_ISLAND_FRACTION`) when that island
+ *  cleanup is selected. See `docs/accuracy-benchmark.md` §5.1.1. */
+export const MIN_RECOVERY_ISLAND_FRACTION = ISLAND_CLEANUP_FRACTIONS[DEFAULT_ISLAND_CLEANUP];
 
 /** Drops foreground islands smaller than `minFraction` of the image, keeping the
  *  alpha of the rest. The flood fill is seeded from the border, so on a busy
@@ -108,7 +113,7 @@ export function despeckleRecoveredMask(
   mask: Uint8ClampedArray,
   width: number,
   height: number,
-  minFraction = MIN_RECOVERY_ISLAND_FRACTION,
+  minFraction: number = MIN_RECOVERY_ISLAND_FRACTION,
 ): Uint8ClampedArray {
   const n = width * height;
   const minArea = Math.max(16, Math.round(n * minFraction));
@@ -267,6 +272,7 @@ export function recoverForegroundMask(
     floodFillForeground(image, o),
     image.width,
     image.height,
+    o.minIslandFraction,
   );
   const modelFg = foregroundFraction(modelMask);
   const recoveredFg = foregroundFraction(recovered);

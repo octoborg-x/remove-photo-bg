@@ -132,7 +132,11 @@ describe('studio shell wiring (main.ts + index.html)', () => {
       MAIN.indexOf('function compositeAndRefine('),
       MAIN.indexOf('async function refineAndFinalize('),
     );
-    expect(refine).toMatch(/recoverForegroundMask\(image, fullResMask\)/);
+    // ...with the island-cleanup bar the engine controls selected, so the
+    // recovery despeckle matches the Stage-4 variant.
+    expect(refine).toMatch(
+      /recoverForegroundMask\(image, fullResMask, \{\s*minIslandFraction: islandFraction\(refineConfig\.cleanup\.islandCleanup\),?\s*\}\)/,
+    );
     // The refine input branches on `recovered`: the recovered full-resolution
     // mask, or the letterbox-cropped raw float mask.
     expect(refine).toMatch(/recovered\s*\?\s*\{ mask: bytesToAlpha\(recoveredMask\)/);
@@ -151,7 +155,9 @@ describe('studio shell wiring (main.ts + index.html)', () => {
     // be despeckled again, gated on the recovery flag.
     const refine = MAIN.slice(MAIN.indexOf('async function refineAndFinalize('));
     expect(refine).toMatch(/if \(despeckleAfterRefine\) \{/);
-    expect(refine).toMatch(/refinedMask = despeckleRecoveredMask\(refinedMask, image\.width, image\.height\)/);
+    expect(refine).toMatch(
+      /refinedMask = despeckleRecoveredMask\(\s*refinedMask,\s*image\.width,\s*image\.height,\s*islandFraction\(refineConfig\.cleanup\.islandCleanup\),\s*\)/,
+    );
     // The despeckle must land before the composite that paints the result.
     expect(refine.indexOf('despeckleRecoveredMask(refinedMask')).toBeLessThan(
       refine.indexOf('composeResult(image, refinedMask)'),
@@ -202,6 +208,15 @@ describe('studio UI refinements', () => {
     expect(HTML).toMatch(/class="studioGrid" data-console="hidden"/);
     expect(HTML).toMatch(/id="settingsSidebar"[^>]*data-collapsed="true"/);
     expect(MAIN).toMatch(/setSidebarCollapsed\(true\);\s*setConsoleVisible\(false\);/);
+  });
+
+  it('exposes the island cleanup variant in the engine controls', () => {
+    expect(HTML).toContain('id="islandCleanupSelect"');
+    expect(HTML).toMatch(/<option value="fine">/);
+    expect(HTML).toMatch(/<option value="strict">/);
+    expect(MAIN).toMatch(/refineConfig\.cleanup\.islandCleanup = islandCleanupSelect\.value/);
+    // A variant change invalidates the on-screen cut-out like any other knob.
+    expect(MAIN).toMatch(/refineConfig\.cleanup\.islandCleanup,\s*\]\s*\.join\('\|'\)/);
   });
 
   it('marks the engine controls as experimental', () => {

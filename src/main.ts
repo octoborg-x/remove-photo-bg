@@ -22,6 +22,7 @@ import {
 } from './features/background-removal/mask-postprocess';
 import { composeResult, previewSize } from './features/background-removal/composite';
 import { recoverForegroundMask, despeckleRecoveredMask } from './features/background-removal/mask-recovery';
+import { isIslandCleanup, islandFraction } from './features/background-removal/island-cleanup';
 import {
   rawMaskStats,
   formatRawMaskStats,
@@ -271,6 +272,8 @@ const refineStrengthInput = document.getElementById('refineStrength') as HTMLInp
 const refineStrengthValueEl = document.getElementById('refineStrengthValue');
 const refineEdgeSensitivityInput = document.getElementById('refineEdgeSensitivity') as HTMLInputElement | null;
 const refineEdgeSensitivityValueEl = document.getElementById('refineEdgeSensitivityValue');
+const islandCleanupSelect = document.getElementById('islandCleanupSelect') as HTMLSelectElement | null;
+const islandCleanupValueEl = document.getElementById('islandCleanupValue');
 let studioView = initialStudioView();
 
 // ——— Bulk queue ———
@@ -2287,7 +2290,9 @@ function compositeAndRefine(
   size: string,
   postprocessStart: number,
 ): void {
-  const { mask: recoveredMask, recovered } = recoverForegroundMask(image, fullResMask);
+  const { mask: recoveredMask, recovered } = recoverForegroundMask(image, fullResMask, {
+    minIslandFraction: islandFraction(refineConfig.cleanup.islandCleanup),
+  });
   if (recovered) {
     log('Model kept the whole frame; recovered the subject from the background edges.');
   }
@@ -2475,7 +2480,12 @@ async function refineAndFinalize(
     // despeckle has to run again on its output — and only for a recovery, so a
     // model mask is never altered.
     if (despeckleAfterRefine) {
-      refinedMask = despeckleRecoveredMask(refinedMask, image.width, image.height);
+      refinedMask = despeckleRecoveredMask(
+        refinedMask,
+        image.width,
+        image.height,
+        islandFraction(refineConfig.cleanup.islandCleanup),
+      );
     }
     const { canvas, preview } = await composeResult(image, refinedMask);
     if (jobId !== activeJobId) return;
@@ -2807,6 +2817,7 @@ function engineSettingsKey(): string {
     refineConfig.enabled ? 1 : 0,
     refineConfig.edgeRefinement.strength,
     refineConfig.edgeRefinement.edgeSensitivity,
+    refineConfig.cleanup.islandCleanup,
   ].join('|');
 }
 
@@ -3415,10 +3426,15 @@ tilingApplyBtn?.addEventListener('click', () => {
   }
 });
 
-// ——— Edge refinement controls ———
+// ——— Edge refinement + island cleanup controls ———
 // The product previously exposed refinement only through URL params. The sidebar
 // now surfaces the two knobs that matter (on/off and strength/sensitivity), each
 // mapping onto the same config the URL params resolve to.
+const ISLAND_CLEANUP_LABELS = {
+  fine: { short: 'Fine', log: 'fine (2e-5) — keeps small detail' },
+  strict: { short: 'Strict', log: 'strict (5e-4) — removes speckle' },
+} as const;
+
 function applyRefineUi(): void {
   if (refineToggle) refineToggle.value = refineConfig.enabled ? 'on' : 'off';
   if (refineValueEl) refineValueEl.textContent = refineConfig.enabled ? 'On' : 'Off';
@@ -3429,6 +3445,10 @@ function applyRefineUi(): void {
   }
   if (refineEdgeSensitivityValueEl) {
     refineEdgeSensitivityValueEl.textContent = refineConfig.edgeRefinement.edgeSensitivity.toFixed(2);
+  }
+  if (islandCleanupSelect) islandCleanupSelect.value = refineConfig.cleanup.islandCleanup;
+  if (islandCleanupValueEl) {
+    islandCleanupValueEl.textContent = ISLAND_CLEANUP_LABELS[refineConfig.cleanup.islandCleanup].short;
   }
   // The two sliders only matter when the stage is on.
   if (refineFieldEl) refineFieldEl.dataset.disabled = String(!refineConfig.enabled);
@@ -3449,6 +3469,13 @@ refineEdgeSensitivityInput?.addEventListener('input', () => {
   const v = Math.max(5, Math.min(400, Number(refineEdgeSensitivityInput.value))) / 100;
   refineConfig.edgeRefinement.edgeSensitivity = v;
   if (refineEdgeSensitivityValueEl) refineEdgeSensitivityValueEl.textContent = v.toFixed(2);
+  updateReprocessButton();
+});
+islandCleanupSelect?.addEventListener('change', () => {
+  if (!isIslandCleanup(islandCleanupSelect.value)) return;
+  refineConfig.cleanup.islandCleanup = islandCleanupSelect.value;
+  applyRefineUi();
+  log(`Island cleanup: ${ISLAND_CLEANUP_LABELS[refineConfig.cleanup.islandCleanup].log}`);
   updateReprocessButton();
 });
 applyTilingUi();

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { refineMask, removeTinyIslands, minIslandArea } from './refine-mask';
+import {
+  refineMask,
+  removeTinyIslands,
+  minIslandArea,
+  MIN_ISLAND_FRACTION,
+  MIN_ISLAND_FRACTION_STRICT,
+} from './refine-mask';
+import { ISLAND_CLEANUP_FRACTIONS } from './island-cleanup';
 import { DEFAULT_FAST_REFINEMENT, resolveRefinementConfig } from './refinement-config';
 
 const W = 40;
@@ -94,6 +101,7 @@ describe('refineMask', () => {
           minAlpha: 0.1,
           maxAlpha: 0.9,
           removeTinyIsolatedNoise: true,
+          islandCleanup: 'fine',
         },
       }),
     });
@@ -217,12 +225,12 @@ describe('removeTinyIslands', () => {
     expect(alpha[10 * w + 10]).toBe(1);
   });
 
-  it('keeps a legitimately multi-part subject at the real threshold', () => {
-    // Several separated blobs, each above the (larger, 5e-4) bar — a bouquet or
+  it('keeps a legitimately multi-part subject at the strict threshold', () => {
+    // Several separated blobs, each above the strict (5e-4) bar — a bouquet or
     // a cutlery set. Only the one genuinely sub-threshold speck is dropped.
     const w = 200;
     const h = 200;
-    const bar = minIslandArea(w, h);
+    const bar = minIslandArea(w, h, undefined, MIN_ISLAND_FRACTION_STRICT);
     expect(bar).toBe(20); // 200 * 200 * 5e-4
     const alpha = new Float32Array(w * h);
     const blobs: Array<[number, number]> = [[10, 10], [80, 20], [30, 120], [140, 150]];
@@ -237,20 +245,47 @@ describe('removeTinyIslands', () => {
     for (const [bx, by] of blobs) expect(alpha[(by + 2) * w + bx + 2]).toBe(1);
     expect(alpha[191 * w + 191]).toBe(0);
   });
+
+  it('keeps a small deliberate part that only the fine variant keeps', () => {
+    // A 6x6 = 36 px island: above the 16 px floor both variants share, but
+    // below the strict bar of a 200x200 frame (20 px is the strict bar, so use
+    // a smaller island than that to separate the variants).
+    const w = 200;
+    const h = 200;
+    const strictBar = minIslandArea(w, h, undefined, MIN_ISLAND_FRACTION_STRICT);
+    const fineBar = minIslandArea(w, h, undefined, MIN_ISLAND_FRACTION);
+    expect(fineBar).toBe(16);
+    expect(strictBar).toBe(20);
+    const alpha = new Float32Array(w * h);
+    // 4x4 = 16 px island: kept by fine, dropped by strict.
+    for (let y = 100; y < 104; y++) for (let x = 100; x < 104; x++) alpha[y * w + x] = 1;
+    const fine = Float32Array.from(alpha);
+    const strict = Float32Array.from(alpha);
+    expect(removeTinyIslands(fine, w, h, fineBar)).toBe(0);
+    expect(removeTinyIslands(strict, w, h, strictBar)).toBe(1);
+  });
 });
 
 describe('minIslandArea', () => {
-  it('uses the 5e-4 fraction with a 16 px floor', () => {
-    expect(minIslandArea(100, 100)).toBe(16);
-    expect(minIslandArea(4000, 4000)).toBe(8000);
+  it('defaults to the fine 2e-5 fraction with a 16 px floor', () => {
+    expect(MIN_ISLAND_FRACTION).toBe(ISLAND_CLEANUP_FRACTIONS.fine);
+    expect(MIN_ISLAND_FRACTION_STRICT).toBe(ISLAND_CLEANUP_FRACTIONS.strict);
+    expect(minIslandArea(100, 100)).toBe(16); // floor
+    expect(minIslandArea(4000, 4000)).toBe(320); // 4000 * 4000 * 2e-5
+  });
+
+  it('uses the strict 5e-4 fraction when asked', () => {
+    expect(minIslandArea(100, 100, undefined, MIN_ISLAND_FRACTION_STRICT)).toBe(16); // floor
+    expect(minIslandArea(4000, 4000, undefined, MIN_ISLAND_FRACTION_STRICT)).toBe(8000);
   });
 
   it('is resolution-invariant when cleanup runs on a downscaled copy', () => {
     // A 4000x4000 output refined at 1000x1000: the bar must be the same
     // *fraction* of the work grid, not the output pixel count.
     const outputArea = 4000 * 4000;
-    expect(minIslandArea(1000, 1000, outputArea)).toBe(500);
-    expect(minIslandArea(1000, 1000, outputArea) / (1000 * 1000)).toBeCloseTo(5e-4, 12);
-    expect(minIslandArea(4000, 4000, outputArea) / outputArea).toBeCloseTo(5e-4, 12);
+    expect(minIslandArea(1000, 1000, outputArea)).toBe(20);
+    expect(minIslandArea(1000, 1000, outputArea) / (1000 * 1000)).toBeCloseTo(2e-5, 12);
+    expect(minIslandArea(4000, 4000, outputArea) / outputArea).toBeCloseTo(2e-5, 12);
+    expect(minIslandArea(1000, 1000, outputArea, MIN_ISLAND_FRACTION_STRICT)).toBe(500);
   });
 });

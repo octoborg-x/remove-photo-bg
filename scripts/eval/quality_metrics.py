@@ -30,14 +30,14 @@ KEPT_OPAQUE_FRACTION = 0.995
 WASHED_MIN_COVERAGE = 0.9
 MIN_BIMODAL_TAIL = 0.4
 
-# Mirrored from src/features/background-removal/refine-mask.ts
-# (`MIN_ISLAND_FRACTION`) and mask-recovery.ts (`MIN_RECOVERY_ISLAND_FRACTION`):
-# the area bar, as a fraction of the image, below which a disconnected
-# foreground island counts as speckle. The app's Stage-4 cleanup and the
-# flood-recovery despeckle drop islands below it, and `component_stats` counts
-# them here — one number for all three, asserted by `--self-test` and by
-# src/features/background-removal/threshold-sync.test.ts.
+# Mirrored from src/features/background-removal/island-cleanup.ts
+# (`ISLAND_CLEANUP_FRACTIONS`). `component_stats` counts an island below
+# SPECKLE_ISLAND_FRACTION as speckle, which is the app's `strict` variant — the
+# bar the Stage-4 cleanup and the flood-recovery despeckle use when that variant
+# is selected. `FINE_ISLAND_FRACTION` is the product default. Asserted by
+# `--self-test` and by src/features/background-removal/threshold-sync.test.ts.
 SPECKLE_ISLAND_FRACTION = 5e-4
+FINE_ISLAND_FRACTION = 2e-5
 
 
 # ——— Descriptive metrics (no ground truth) ———

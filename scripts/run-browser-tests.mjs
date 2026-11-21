@@ -244,7 +244,8 @@ try {
         const tabs = [...gallery.querySelectorAll('[role="tab"]')];
         const visible = panels.filter((p) => !p.hidden);
         const active = tabs.find((t) => t.getAttribute('aria-selected') === 'true');
-        const railBox = gallery.querySelector('.showcaseRail').getBoundingClientRect();
+        const rail = gallery.querySelector('.showcaseRail');
+        const railBox = rail.getBoundingClientRect();
         const stageBox = gallery.querySelector('.compareStage').getBoundingClientRect();
         return {
           panelCount: panels.length,
@@ -254,14 +255,15 @@ try {
           selectedId: active?.getAttribute('aria-controls') ?? null,
           activeTabId: active?.id ?? null,
           activeTabTabIndex: active?.tabIndex ?? null,
-          railRightOfStage: railBox.left >= stageBox.right - 1,
+          railBelowStage: railBox.top >= stageBox.bottom - 1,
+          railScrolls: rail.scrollWidth > rail.clientWidth,
         };
       });
 
     const initial = await readState();
     record(
       'the showcase shows exactly one example at a time',
-      initial.panelCount === 3 && initial.tabCount === 3 && initial.visibleCount === 1,
+      initial.panelCount === 9 && initial.tabCount === 9 && initial.visibleCount === 1,
       `visible ${initial.visibleCount}/${initial.panelCount}`,
     );
     record(
@@ -269,7 +271,12 @@ try {
       initial.visibleId === 'showcase-panel-1' && initial.selectedId === 'showcase-panel-1',
       `${initial.visibleId} / ${initial.selectedId}`,
     );
-    record('the thumbnail rail sits to the right of the stage', initial.railRightOfStage);
+    record('the thumbnail rail sits below the stage', initial.railBelowStage);
+    record(
+      'the thumbnail rail scrolls horizontally to reach all nine examples',
+      initial.railScrolls,
+      `scroll ${initial.railScrolls}`,
+    );
 
     // Click the third thumbnail. The module script is deferred, so the rail may
     // not have listeners yet on a busy runner — retry until the click lands.
@@ -862,7 +869,8 @@ try {
 
 
     // Console show/hide + drag-resize: the toggle button and the in-card close
-    // both hide it; the resize handle can only shrink it (never past 35%).
+    // both hide it; the resize handle grows it to the 50% cap and returns to the
+    // 20% floor, which is also its default resting height.
     const consoleControls = await page.evaluate(async () => {
       const grid = document.querySelector('.studioGrid');
       const col = document.getElementById('studioConsoleCol');
@@ -879,7 +887,7 @@ try {
       handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientY: y0, pointerId: 1 }));
       handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 - 900, pointerId: 1 }));
       const grownH = col.getBoundingClientRect().height;
-      // Drag down hard: it shrinks (below 35%) but keeps a usable minimum.
+      // Drag down hard: it returns to the 20% floor (its default height).
       handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 + 900, pointerId: 1 }));
       const shrunkH = col.getBoundingClientRect().height;
       handle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientY: y0 + 900, pointerId: 1 }));
@@ -902,8 +910,9 @@ try {
     record(
       'the console top edge resizes between 20% and 50%',
       consoleControls.grownH <= consoleControls.cap + 1 &&
-        consoleControls.grownH >= consoleControls.openH - 1 &&
-        consoleControls.shrunkH < consoleControls.openH &&
+        consoleControls.grownH > consoleControls.openH + 1 &&
+        consoleControls.shrunkH < consoleControls.grownH &&
+        consoleControls.shrunkH <= consoleControls.openH + 1 &&
         consoleControls.shrunkH >= consoleControls.floor - 1,
       `open ${Math.round(consoleControls.openH)} cap ${Math.round(consoleControls.cap)} floor ${Math.round(consoleControls.floor)} grown ${Math.round(consoleControls.grownH)} shrunk ${Math.round(consoleControls.shrunkH)}`,
     );

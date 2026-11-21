@@ -308,6 +308,29 @@ try {
     });
     record('the comparison slider works on the revealed example', pos === '80%', pos);
 
+    // A pointer drag has to track the whole gesture. Dragging a bare <img>
+    // starts a native drag-and-drop, which fires `pointercancel` and used to
+    // freeze the divider after its first move.
+    const stageBox = await page.evaluate(() => {
+      const stage = document.querySelector('#showcase-panel-2 .compareStage');
+      stage.scrollIntoView({ block: 'center' });
+      const r = stage.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height };
+    });
+    const dragY = stageBox.y + stageBox.h / 2;
+    await page.mouse.move(stageBox.x + stageBox.w * 0.2, dragY);
+    await page.mouse.down();
+    await page.mouse.move(stageBox.x + stageBox.w * 0.8, dragY, { steps: 6 });
+    await page.mouse.up();
+    const dragPos = await page.evaluate(() =>
+      document.getElementById('showcase-panel-2').style.getPropertyValue('--pos'),
+    );
+    record(
+      'dragging the comparison stage tracks the pointer across the whole gesture',
+      Math.abs(Number.parseFloat(dragPos) - 80) <= 2,
+      dragPos,
+    );
+
     await page.close();
   }
 

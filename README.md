@@ -389,8 +389,10 @@ so opening the file directly will not work.
 ### Before / after gallery (original vs cut-out, all 64 images)
 
 `npm run eval:gallery:2up` builds a second static page at
-`public/eval-gallery-2up/`: the same 64 evaluation images as
-**original | cut-out**, one run at a time, each card badged with that image's
+`public/eval-gallery-2up/`: the same 64 evaluation images, one run at a time, each
+card a **before/after slider** — the landing page's comparison control (drag the
+divider, or focus the range input and use the arrow keys) wiping between the
+source photo and the cut-out. Every card is badged with that image's
 accuracy-benchmark verdict (`PASS` / `REVIEW` / `FAIL(gate)` / `FAIL(empty)`)
 when the run directory has a `benchmark.json` beside its `report.json`. It reads
 `eval-results/wasm/` by default; point it at any run with `--run`:

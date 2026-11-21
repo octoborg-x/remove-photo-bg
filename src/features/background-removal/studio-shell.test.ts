@@ -257,4 +257,30 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/setSidebarCollapsed\(true\)/);
     expect(MAIN).toMatch(/setConsoleVisible\(false\)/);
   });
+
+  it('keeps an alpha-capable format from inheriting an opaque background', () => {
+    // PNG/WebP exist to carry transparency, so selecting one is a request for a
+    // transparent cut-out. A solid colour would paint over the alpha and the
+    // file would be opaque even though the format supports alpha (the reported
+    // "PNG and WebP don't take alpha" result). A see-through colour already
+    // carries alpha, so it is kept.
+    expect(MAIN).toMatch(/function dropOpaqueBackgroundForAlpha\(/);
+    expect(MAIN).toMatch(/exportFormatInfo\(format\)\.supportsAlpha/);
+    expect(MAIN).toMatch(/background\.kind !== 'color' \|\| background\.alpha < 100/);
+    // The radio is the explicit choice, so it applies the rule.
+    expect(MAIN).toMatch(/chooseExportFormat\(format\.id\)/);
+    // A reload restores the same rule: a persisted PNG/WebP format must not sit
+    // on a persisted opaque colour and silently export an opaque file.
+    expect(MAIN).toMatch(/dropOpaqueBackgroundForAlpha\(exportFormat\)/);
+  });
+
+  it('makes the alpha slider inert unless a colour background is active', () => {
+    // Dragging "Alpha" on a transparent background used to paint an opaque white
+    // one, which flattened PNG/WebP exports.
+    expect(MAIN).toMatch(/bgAlphaInput\.disabled = !color/);
+    expect(MAIN).toMatch(/if \(background\.kind !== 'color'\) return;/);
+    // A colour first picked from transparent starts fully opaque, not at the
+    // slider's stale value.
+    expect(MAIN).toMatch(/background\.kind === 'color' \? Number\(bgAlphaInput\.value\) : 100/);
+  });
 });

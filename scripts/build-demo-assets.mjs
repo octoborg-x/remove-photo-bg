@@ -1,11 +1,14 @@
-// Generates the landing-page before/after demo pairs from the repo's own
-// Phase-1 test photos and the model's committed cut-outs.
+// Regenerates the three original landing-page before/after demo pairs from the
+// repo's own Phase-1 test photos and the model's committed cut-outs.
 //
 // The sources are the three public-domain product photos under test-images/;
 // the "after" images are the model's own outputs already committed under
 // smoke-results/benchmark-t4/quality-t4/ (*_512_cut.png, RGBA). Everything is
 // downscaled and re-encoded to WebP in a headless browser so the page stays
 // light. Output: public/demo/<name>-before.webp and <name>-after.webp.
+//
+// The six additional pairs (shoes, sneakers, phone, watch, tshirt, jogging) are
+// already committed; their sources and licences are in public/demo/ATTRIBUTION.md.
 //
 // Usage: node scripts/build-demo-assets.mjs
 import puppeteer from 'puppeteer-core';

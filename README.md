@@ -228,6 +228,14 @@ browser cannot encode (WebP on some builds) is shown disabled rather than
 silently producing a mislabelled file. The choice is persisted and can be
 forced with `?format=png|jpeg|webp`.
 
+The background picker sits beside the formats. A transparent background lets
+PNG and WebP keep the cut-out's alpha; a solid colour is composited underneath
+and switches the format to JPG, because a colour has no transparency to carry.
+Choosing PNG or WebP therefore clears a solid colour — those formats exist to
+carry alpha — while a see-through colour (alpha below 100%) is kept, since it
+already carries alpha. The alpha slider only refines a chosen colour and is
+inert on a transparent background, so it can never silently flatten a cut-out.
+
 ### If something goes wrong
 
 Failures are explained in plain language with a one-tap retry instead of a raw

@@ -22,10 +22,17 @@ figure on the page changes.
 The before/after pairs under `public/demo/` are the model's own outputs, not
 mock-ups:
 
-- `before` = the original test photo (public domain) under `test-images/`.
-- `after` = the model's committed cut-out under
-  `smoke-results/benchmark-t4/quality-t4/*_512_cut.png` (RGBA), downscaled and
-  re-encoded to WebP by `scripts/build-demo-assets.mjs`.
+- `before` = the original photo.
+- `after` = the RGBA cut-out produced by the pinned QMix Cut-512 model
+  (`model_512_int8_fp16.onnx`, the same SHA-256 as
+  `public/models-manifest.json`), downscaled and re-encoded to WebP.
+
+The three original pairs (`product-scent-bottle`, `animal-buddy-dog`,
+`glass-wine`) use `test-images/` originals and the committed
+`smoke-results/benchmark-t4/quality-t4/*_512_cut.png` cut-outs; they are rebuilt
+by `scripts/build-demo-assets.mjs`. The six added examples (`shoes`, `sneakers`,
+`phone`, `watch`, `tshirt`, `jogging`) were produced from the CC0/PD/CC-BY
+sources listed in `public/demo/ATTRIBUTION.md` with the same pinned model.
 
 ## Model provenance note
 

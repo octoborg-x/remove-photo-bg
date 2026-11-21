@@ -684,7 +684,10 @@
     pointer-events: none;
   }
   .toast {
-    pointer-events: auto;
+    /* The notification overlays the page, but its body must not swallow clicks
+       meant for the header or the editor underneath. Only its close button is
+       interactive. */
+    pointer-events: none;
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
@@ -748,6 +751,7 @@
     color: var(--color-slate-900);
   }
   .toast .toastClose {
+    pointer-events: auto;
     border: 0;
     background: transparent;
     cursor: pointer;
@@ -763,7 +767,8 @@
   /* The error panel is a notification too: it stacks inside the fixed top-right
      host, overlays the page, and wraps long error text instead of widening. */
   .recovery {
-    pointer-events: auto;
+    /* Only the action row takes clicks; the rest of the panel is an overlay. */
+    pointer-events: none;
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
@@ -773,7 +778,14 @@
   .recovery[hidden] {
     display: none;
   }
+  /* A boot failure can show the recovery panel while the studio is still
+     closed. Keep it out of the landing header then: the toast still announces
+     the error, and the panel appears when the studio opens. */
+  body:not(.studio-open) .recovery:not([hidden]) {
+    display: none;
+  }
   .recovery .actions {
+    pointer-events: auto;
     display: flex;
     flex-wrap: wrap;
     gap: 0.6rem;

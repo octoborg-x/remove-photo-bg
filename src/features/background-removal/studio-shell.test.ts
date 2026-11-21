@@ -338,6 +338,9 @@ describe('floating notifications', () => {
     expect(CSS).toMatch(/\.toastHost\s*\{[^}]*right:/s);
     // Long copy wraps inside the card instead of widening it off-screen.
     expect(CSS).toMatch(/\.toast\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+    // The overlay must not swallow clicks on the header/editor underneath.
+    expect(CSS).toMatch(/\.toast\s*\{[^}]*pointer-events:\s*none/s);
+    expect(CSS).toMatch(/\.toast \.toastClose\s*\{[^}]*pointer-events:\s*auto/s);
   });
 
   it('styles every notification kind, including success', () => {
@@ -360,8 +363,11 @@ describe('floating notifications', () => {
     // content down; it now shares the top-right notification stack.
     expect(HTML.indexOf('id="recovery"')).toBeGreaterThan(HTML.indexOf('id="toastHost"'));
     expect(HTML.indexOf('id="recovery"')).toBeLessThan(HTML.indexOf('id="studioWorkspace"'));
-    expect(CSS).toMatch(/\.recovery\s*\{[^}]*pointer-events:\s*auto/s);
+    expect(CSS).toMatch(/\.recovery\s*\{[^}]*pointer-events:\s*none/s);
+    expect(CSS).toMatch(/\.recovery \.actions\s*\{[^}]*pointer-events:\s*auto/s);
     expect(CSS).toMatch(/\.recovery\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+    // A boot failure must not cover the landing header's Studio button.
+    expect(CSS).toMatch(/body:not\(\.studio-open\) \.recovery:not\(\[hidden\]\)\s*\{[^}]*display:\s*none/s);
   });
 
   it('waits for the user before a run downloads the model over mobile data', () => {

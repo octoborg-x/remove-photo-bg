@@ -181,6 +181,7 @@ const toastHost = document.getElementById('toastHost')!;
 const studioEl = document.getElementById('studio')!;
 const studioLaunchBtn = document.getElementById('studioLaunch')! as HTMLButtonElement;
 const studioCloseBtn = document.getElementById('studioClose')! as HTMLButtonElement;
+const studioSplashEl = document.getElementById('studioSplash');
 const procPctEl = document.getElementById('procPct')!;
 const procStageLabelEl = document.getElementById('procStageLabel')!;
 const tabButtons: Record<StudioTab, HTMLButtonElement> = {
@@ -367,6 +368,41 @@ function setBackgroundInert(on: boolean): void {
   }
 }
 
+const STUDIO_SPLASH_MS = 1000;
+const STUDIO_SPLASH_FADE_MS = 400;
+let studioSplashTimer: number | null = null;
+let studioSplashFadeTimer: number | null = null;
+
+function playStudioSplash(): void {
+  const splash = studioSplashEl;
+  if (!splash) return;
+  if (studioSplashTimer != null) window.clearTimeout(studioSplashTimer);
+  if (studioSplashFadeTimer != null) window.clearTimeout(studioSplashFadeTimer);
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  splash.hidden = false;
+  splash.classList.remove('is-hidden');
+  // Restart the sheen and spin animations on every open.
+  splash.getBoundingClientRect();
+  studioSplashTimer = window.setTimeout(() => {
+    splash.classList.add('is-hidden');
+    studioSplashFadeTimer = window.setTimeout(() => {
+      splash.hidden = true;
+      studioSplashFadeTimer = null;
+    }, reduced ? 0 : STUDIO_SPLASH_FADE_MS);
+    studioSplashTimer = null;
+  }, reduced ? 0 : STUDIO_SPLASH_MS);
+}
+
+function hideStudioSplash(): void {
+  if (studioSplashTimer != null) window.clearTimeout(studioSplashTimer);
+  if (studioSplashFadeTimer != null) window.clearTimeout(studioSplashFadeTimer);
+  studioSplashTimer = null;
+  studioSplashFadeTimer = null;
+  if (!studioSplashEl) return;
+  studioSplashEl.classList.add('is-hidden');
+  studioSplashEl.hidden = true;
+}
+
 function openStudio(): void {
   closeMenu();
   studioEl.classList.add('is-open');
@@ -375,6 +411,7 @@ function openStudio(): void {
   setBackgroundInert(true);
   studioEl.scrollTop = 0;
   renderStudioView();
+  playStudioSplash();
   // The workspace has a size again, so a dragged console height can be re-clamped.
   if (consoleHeightPx != null) applyConsoleHeight(consoleHeightPx);
   // A terminal opens on its newest line.
@@ -388,6 +425,7 @@ function closeStudio(): void {
   studioEl.setAttribute('aria-hidden', 'true');
   document.body.classList.remove('studio-open');
   setBackgroundInert(false);
+  hideStudioSplash();
   studioLaunchBtn.focus();
 }
 
@@ -402,7 +440,7 @@ for (const tab of STUDIO_TABS) {
 
 // ——— Console column: show/hide, close, and drag-resize ———
 // The console drags between 20% and 50% of the workspace height; its resting
-// default is the 35% track in CSS. `null` means "use that default"; a number is
+// default is the 20% track in CSS. `null` means "use that default"; a number is
 // an explicit, clamped pixel height.
 const CONSOLE_MAX_FRACTION = 0.5;
 const CONSOLE_MIN_FRACTION = 0.2;
@@ -417,7 +455,7 @@ function setConsoleVisible(visible: boolean): void {
 }
 
 // Pins the console to an explicit pixel height (or back to the default) so a
-// drag can shrink it. The value is always clamped to the 35% cap.
+// drag can resize it. The value is clamped to the 20%–50% range.
 function applyConsoleHeight(px: number | null): void {
   const gridH = studioGridEl.getBoundingClientRect().height;
   if (!gridH) return;
@@ -2605,9 +2643,9 @@ bindMaskControl(maskFeatherInput, maskFeatherValue, 'feather');
 
 // ——— Result tab: engine settings sidebar ———
 // The advanced engine controls live in a sidebar in the result workspace. It
-// collapses via the chevron in its header (or the top-bar show/hide button) and
-// drag-resizes up to 50% of the workspace width (the clamp mirrors the
-// console's). `null` means the CSS default track width.
+// collapses to a floating icon rail via the header button (or the top-bar
+// show/hide button) and drag-resizes up to 50% of the workspace width (the
+// clamp mirrors the console's). `null` means the CSS default track width.
 const SIDEBAR_MAX_FRACTION = 0.5;
 const SIDEBAR_MIN_PX = 200;
 let sidebarWidthPx: number | null = null;
@@ -2625,7 +2663,12 @@ function renderSidebarToggle(): void {
 function setSidebarCollapsed(collapsed: boolean): void {
   if (!settingsSidebarEl) return;
   settingsSidebarEl.dataset.collapsed = collapsed ? 'true' : 'false';
-  sidebarCollapseBtn?.setAttribute('aria-pressed', String(!collapsed));
+  if (sidebarCollapseBtn) {
+    sidebarCollapseBtn.setAttribute('aria-pressed', String(!collapsed));
+    const label = collapsed ? 'Expand settings sidebar' : 'Collapse settings sidebar';
+    sidebarCollapseBtn.setAttribute('aria-label', label);
+    sidebarCollapseBtn.setAttribute('title', label);
+  }
   renderSidebarToggle();
   if (!collapsed) applySidebarWidth(sidebarWidthPx);
 }
@@ -2685,8 +2728,8 @@ window.addEventListener('resize', () => {
   if (sidebarWidthPx != null) applySidebarWidth(sidebarWidthPx);
 });
 
-// The top-bar button shows/hides the sidebar; the in-sidebar chevron collapses
-// it. Both drive the same state, so they stay in sync.
+// The top-bar button shows/hides the sidebar; the in-sidebar button collapses
+// it to its floating icon rail. Both drive the same state, so they stay in sync.
 sidebarToggleBtn?.addEventListener('click', () => {
   const collapsed = settingsSidebarEl?.dataset.collapsed === 'true';
   setSidebarCollapsed(!collapsed);
@@ -3376,9 +3419,9 @@ initShowcaseGallery();
 initSupportCarousel();
 
 // Narrow screens: the side-by-side workspace left the editor panel too narrow
-// to show a cut-out, and the console took a third of the height. Start with the
-// engine sidebar folded to its header and the console hidden; both stay one tap
-// away in the studio top bar.
+// to show a cut-out, and the console took a large share of the height. Start
+// with the engine sidebar folded to its floating icon rail and the console
+// hidden; both stay one tap away in the studio top bar.
 if (window.matchMedia('(max-width: 767px)').matches) {
   setSidebarCollapsed(true);
   setConsoleVisible(false);

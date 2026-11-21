@@ -831,7 +831,7 @@ function renderFormatOptions(): void {
     input.disabled = !available;
     input.addEventListener('change', () => {
       if (!input.checked) return;
-      setExportFormat(format.id);
+      chooseExportFormat(format.id);
     });
     label.appendChild(input);
     label.appendChild(document.createTextNode(format.label));
@@ -851,6 +851,32 @@ function setExportFormat(format: ExportFormat): void {
   savePref(LS_EXPORT_FORMAT, format);
   applyFormatUi();
   log(`Export format: ${exportFormatInfo(format).label}`);
+}
+
+/**
+ * Drops a fully opaque background when an alpha-capable format is chosen.
+ *
+ * PNG/WebP exist to carry transparency, so selecting one is a request for a
+ * transparent cut-out. A solid colour paints over that alpha and the file is
+ * opaque even though the format supports alpha — the "PNG/WebP have no alpha"
+ * report. A see-through colour (alpha < 100) already carries alpha, so it is
+ * kept. Returns true when the background changed.
+ */
+function dropOpaqueBackgroundForAlpha(format: ExportFormat): boolean {
+  if (!exportFormatInfo(format).supportsAlpha) return false;
+  if (background.kind !== 'color' || background.alpha < 100) return false;
+  background = { ...DEFAULT_BACKGROUND };
+  saveBackground();
+  return true;
+}
+
+/** The format radio is the user's explicit choice, so it may clear a colour. */
+function chooseExportFormat(format: ExportFormat): void {
+  if (dropOpaqueBackgroundForAlpha(format)) {
+    updateBackgroundUi();
+    renderResultPreview();
+  }
+  setExportFormat(format);
 }
 
 // Repoint the single download link at the current format, re-encoding the stored
@@ -956,11 +982,18 @@ function updateBackgroundUi(): void {
   const color = background.kind === 'color';
   bgTransparentBtn.setAttribute('aria-pressed', String(isTransparent(background)));
   bgCurrentEl.textContent = describeChoice(background);
+  // The alpha slider refines a chosen colour and is inert for a transparent
+  // background. Leaving it live let a stray drag paint an opaque white
+  // background, which silently flattened PNG/WebP exports.
+  bgAlphaInput.disabled = !color;
   if (color) {
     bgColorPicker.value = background.hex;
     bgColorSwatch.style.setProperty('--picked', background.hex);
     bgAlphaInput.value = String(background.alpha);
     bgAlphaValue.textContent = `${background.alpha}%`;
+  } else {
+    bgAlphaInput.value = '100';
+    bgAlphaValue.textContent = '—';
   }
 }
 
@@ -983,14 +1016,16 @@ function setBackground(choice: BackgroundChoice): void {
 bgTransparentBtn.addEventListener('click', () =>
   setBackground({ kind: 'transparent', hex: background.hex, alpha: 100 }),
 );
+/** Alpha for a newly picked colour: keep the current colour's alpha, else 100. */
+function colourPickAlpha(): number {
+  return background.kind === 'color' ? Number(bgAlphaInput.value) : 100;
+}
 bgColorPicker.addEventListener('input', () =>
-  setBackground({ kind: 'color', hex: bgColorPicker.value, alpha: Number(bgAlphaInput.value) }),
+  setBackground({ kind: 'color', hex: bgColorPicker.value, alpha: colourPickAlpha() }),
 );
 bgAlphaInput.addEventListener('input', () => {
-  // The alpha slider only refines the current colour (it has no meaning for a
-  // fully transparent background).
-  const hex = background.kind === 'color' ? background.hex : bgColorPicker.value;
-  setBackground({ kind: 'color', hex, alpha: Number(bgAlphaInput.value) });
+  if (background.kind !== 'color') return;
+  setBackground({ kind: 'color', hex: background.hex, alpha: Number(bgAlphaInput.value) });
 });
 // Screen eyedropper: sample any pixel on the display. The button is disabled
 // when the browser has no EyeDropper API, so it never looks broken.
@@ -1001,8 +1036,14 @@ if (!supportsScreenPicker()) {
 bgEyeDropperBtn.addEventListener('click', async () => {
   const picked = await pickColorFromScreen();
   if (!picked) return;
-  setBackground({ kind: 'color', hex: picked, alpha: Number(bgAlphaInput.value) });
+  setBackground({ kind: 'color', hex: picked, alpha: colourPickAlpha() });
 });
+
+// Restore consistency after a reload: an alpha-capable persisted format means
+// the cut-out should load transparent, so a persisted opaque colour must not
+// flatten it. This is the same rule the format radio applies in-session. An
+// explicit ?bg= is the user's ask, so it is left alone.
+if (!urlParams.has('bg')) dropOpaqueBackgroundForAlpha(exportFormat);
 
 updateBackgroundUi();
 

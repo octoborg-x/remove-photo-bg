@@ -1158,22 +1158,32 @@ try {
     const toast = await page.evaluate(() => {
       const t = document.querySelector('#toastHost .toast.error');
       if (!t) return null;
-      const host = document.getElementById('toastHost').getBoundingClientRect();
+      const hostEl = document.getElementById('toastHost');
+      const host = hostEl.getBoundingClientRect();
       const r = t.getBoundingClientRect();
       const body = getComputedStyle(t.querySelector('.toastBody')).color;
       const stage = document.getElementById('processingLabel');
+      const hostStyle = getComputedStyle(hostEl);
       return {
         onRight: Math.abs(window.innerWidth - host.right) < 40,
         nearTop: host.top < 60,
         floatAbove: r.width > 0,
         redText: /rgb\(\s*127|\s*252, 165, 165/.test(body),
         stageError: stage?.classList.contains('is-error') === true,
+        fixed: hostStyle.position === 'fixed',
+        scrolls: hostStyle.overflowY === 'auto',
+        bounded: hostStyle.maxHeight !== 'none',
       };
     });
     record(
       'errors show a red floating notification at the top-right',
       !!toast && toast.onRight && toast.nearTop && toast.floatAbove && toast.redText,
       toast ? `right:${toast.onRight} top:${toast.nearTop} red:${toast.redText}` : 'no error toast',
+    );
+    record(
+      'the notification stack is fixed and scrolls instead of overflowing the screen',
+      !!toast && toast.fixed && toast.scrolls && toast.bounded,
+      toast ? `fixed:${toast.fixed} scrolls:${toast.scrolls} bounded:${toast.bounded}` : 'no toast',
     );
     record('the stage line turns to the error colour theme', !!toast && toast.stageError);
     await page.close();
@@ -1328,6 +1338,20 @@ try {
       () => !!document.getElementById('netWarnRemember'),
     );
     record('the download confirmation no longer offers a "remember" checkbox', !hasRemember);
+
+    // Choosing a photo is not consent to spend mobile data: the run must wait
+    // for the confirmation instead of starting the download on its own.
+    await chooseFile(page, resolve(ROOT, 'test-images/glass-wine.jpg'));
+    await sleep(2000);
+    const startedAfterPhoto = await page.evaluate(() => window.smokeModelReady === true);
+    const promptStillShown = await page.evaluate(
+      () => (document.getElementById('netWarn')?.hidden ?? true) === false,
+    );
+    record(
+      'choosing a photo on mobile data waits for the download confirmation',
+      startedAfterPhoto === false && promptStillShown === true,
+      `ready:${startedAfterPhoto} prompt:${promptStillShown}`,
+    );
 
     // Confirm: the download starts and the prompt goes away.
     await page.click('#netWarnConfirm');

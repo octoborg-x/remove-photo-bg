@@ -3281,6 +3281,7 @@ async function processBulkBatch(): Promise<void> {
   protectedObjectUrl = currentObjectUrl;
   bulkBatchRunning = true;
   bulkTabPinned = true;
+  downloadConsentDeclined = false;
   setStudioTab('bulk', true);
   renderBulk();
   const total = pending.length;
@@ -3304,6 +3305,14 @@ async function processBulkBatch(): Promise<void> {
       await loadImageFromFile(file, librarySavingEnabled);
       const run = activeRunPromise;
       if (run) await run;
+      if (downloadConsentDeclined) {
+        bulkState = updateBulkItem(bulkState, item.id, {
+          status: 'error',
+          error: 'Model download not confirmed',
+        });
+        log('Bulk run stopped: the model download was not confirmed.');
+        break;
+      }
       await waitForJobSettled();
       // The library write is queued behind a PNG encode; let it finish before the
       // next run bumps the run token, or the write would be dropped.
@@ -4292,12 +4301,16 @@ function showMeteredPausePrompt(): void {
 // it as a confirmation (the background fetch loop can download for free).
 let downloadPromptPromise: Promise<boolean> | null = null;
 let downloadPromptResolve: ((confirmed: boolean) => void) | null = null;
+// Set when the prompt is dismissed, so a bulk batch stops instead of asking
+// again for every remaining photo.
+let downloadConsentDeclined = false;
 
 function requestDownloadConfirmation(): Promise<boolean> {
   if (!selectedModel) return Promise.resolve(true);
   if (sessionStorage.getItem('remove-bg:download-confirmed') === '1') {
     return Promise.resolve(true);
   }
+  downloadConsentDeclined = false;
   if (!downloadPromptPromise) {
     showNetWarn();
     downloadPromptPromise = new Promise<boolean>((resolve) => {
@@ -4309,6 +4322,7 @@ function requestDownloadConfirmation(): Promise<boolean> {
 
 function settleDownloadPrompt(confirmed: boolean): void {
   netWarnEl.hidden = true;
+  downloadConsentDeclined = !confirmed;
   downloadPromptResolve?.(confirmed);
   downloadPromptResolve = null;
   downloadPromptPromise = null;
@@ -4324,7 +4338,11 @@ async function ensureModelLoaded(force = false): Promise<boolean> {
   if (!force && (modelLoadInFlight || modelReady)) return true;
   if (modelLoadInFlight) return true;
   if (await needsDownloadConfirmation()) {
-    return requestDownloadConfirmation();
+    const confirmed = await requestDownloadConfirmation();
+    // The prompt's confirm button starts the download itself; this covers a
+    // consent remembered from earlier in the session, when no prompt appears.
+    if (confirmed && !modelLoadInFlight && !modelReady) autoLoadModel();
+    return confirmed;
   }
   // No confirmation needed: any stale prompt is answered and the download starts.
   settleDownloadPrompt(true);

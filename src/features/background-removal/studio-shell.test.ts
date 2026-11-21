@@ -355,6 +355,8 @@ describe('floating notifications', () => {
     expect(CSS).toMatch(/\.netWarn\s*\{[^}]*top:/s);
     expect(CSS).toMatch(/\.netWarn\s*\{[^}]*right:/s);
     expect(CSS).toMatch(/\.netWarn\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+    expect(CSS).toMatch(/\.netWarn\s*\{[^}]*pointer-events:\s*none/s);
+    expect(CSS).toMatch(/\.netWarn button\s*\{[^}]*pointer-events:\s*auto/s);
     expect(CSS).not.toMatch(/\.netWarn\s*\{[^}]*margin-bottom:\s*0\.75rem/s);
   });
 
@@ -375,7 +377,7 @@ describe('floating notifications', () => {
     expect(MAIN).not.toMatch(/A model download that was paused at the metered-connection prompt resumes/);
     expect(MAIN).toMatch(/const canDownload = await ensureModelLoaded\(\)/);
     expect(MAIN).toMatch(/function ensureModelLoaded\(/);
-    expect(MAIN).toMatch(/return requestDownloadConfirmation\(\)/);
+    expect(MAIN).toMatch(/const confirmed = await requestDownloadConfirmation\(\)/);
     expect(MAIN).toMatch(/function requestDownloadConfirmation\(\): Promise<boolean>/);
     // A dismissed prompt cancels the run instead of leaving it waiting forever.
     expect(MAIN).toMatch(/if \(!canDownload\)\s*\{/);

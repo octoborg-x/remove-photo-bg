@@ -664,8 +664,10 @@
   /* ——— Toasts ——— */
   /* Every notification (info, success, warning, error) lives here: fixed to the
      viewport's top-right corner, above the page and outside the flow, so it
-     overlays content instead of pushing it. Long messages wrap inside the card
-     rather than widening it or spilling off-screen. */
+     overlays content instead of pushing it. The host itself is the scroll
+     container, so a long error or a stack of notices scrolls inside the corner
+     instead of running off a short phone screen. Long messages wrap inside the
+     card rather than widening it or spilling off-screen. */
   .toastHost {
     position: fixed;
     top: max(1.25rem, env(safe-area-inset-top));
@@ -691,6 +693,7 @@
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
+    flex: none;
     width: 100%;
     max-width: 100%;
     overflow-wrap: anywhere;
@@ -741,8 +744,10 @@
   }
   .toast .toastBody {
     flex: 1;
+    min-width: 0;
     font-size: 0.88rem;
     color: var(--color-slate-800);
+    overflow-wrap: anywhere;
   }
   .toast .toastTitle {
     display: block;
@@ -762,6 +767,15 @@
   }
   .toast .toastClose:hover {
     color: var(--color-slate-700);
+  }
+  @media (max-width: 767px) {
+    /* Tighter corner on a phone so the notice keeps as much width as possible. */
+    .toastHost {
+      top: 0.75rem;
+      right: 0.75rem;
+      width: min(380px, calc(100vw - 1.5rem));
+      max-height: calc(100dvh - 1.5rem);
+    }
   }
   /* ——— Recovery panel ——— */
   /* The error panel is a notification too: it stacks inside the fixed top-right
@@ -2804,10 +2818,13 @@
 
   /* ——— Metered-connection preflight warning ——— */
   /* A notification, not an inline banner: fixed to the top-right corner so it
-     overlays the studio instead of shrinking the workspace, and long copy wraps
-     inside the card. It stays inside the studio layer, so it is only visible
-     while the studio is open. */
+     overlays the studio instead of shrinking the workspace. Long copy wraps and
+     scrolls inside the card. It stays inside the studio layer, so it is only
+     visible while the studio is open. */
   .netWarn {
+    /* The prompt overlays the editor so a photo can still be picked underneath;
+       only its buttons take the click. */
+    pointer-events: none;
     position: fixed;
     top: max(1.25rem, env(safe-area-inset-top));
     right: max(1.25rem, env(safe-area-inset-right));
@@ -2817,7 +2834,9 @@
     max-height: calc(100dvh - 2.5rem);
     overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior: contain;
     overflow-wrap: anywhere;
+    margin: 0;
     padding: 0.9rem;
     border-radius: 0.9rem;
     background: var(--color-amber-50);
@@ -2830,12 +2849,22 @@
   .netWarn[hidden] {
     display: none;
   }
-
-  /* Phones: notifications stay anchored to the top-right corner and fixed over
-     the page, with a little more of the width available for long copy. */
-  @media (max-width: 640px) {
-    .toastHost,
+  .netWarn button {
+    pointer-events: auto;
+  }
+  @media (max-width: 767px) {
     .netWarn {
+      top: max(0.75rem, env(safe-area-inset-top));
+      right: max(0.75rem, env(safe-area-inset-right));
+      width: min(380px, calc(100vw - 1.5rem));
+      max-height: calc(100dvh - 1.5rem);
+    }
+  }
+
+  /* Phones: toasts stay anchored to the top-right corner and fixed over the
+     page, with a little more of the width available for long copy. */
+  @media (max-width: 640px) {
+    .toastHost {
       top: max(0.75rem, env(safe-area-inset-top));
       right: max(0.75rem, env(safe-area-inset-right));
       width: min(380px, calc(100vw - 1.5rem));

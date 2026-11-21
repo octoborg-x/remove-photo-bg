@@ -244,8 +244,8 @@ function describeConnection(info: NetworkInformationLike | null, connection: Con
 
 /**
  * The confirmation copy for a metered/unknown connection. States the download
- * size (MVP §6: "Tell users the model download size before the first download"),
- * that it is one-time, and that the image never leaves the device.
+ * size (MVP §6: "Tell users the model download size before the first download")
+ * and that the image never leaves the device.
  */
 export function downloadConfirmationText(sizeBytes: number, label?: string): string {
   const size = sizeBytes > 0 ? formatBytes(sizeBytes) : 'a large file';

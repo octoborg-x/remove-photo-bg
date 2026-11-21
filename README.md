@@ -386,6 +386,29 @@ approach as `build-demo`. Serve the folder over HTTP to view it
 (`python3 -m http.server -d public/eval-gallery`) — it fetches `gallery.json`,
 so opening the file directly will not work.
 
+### Before / after gallery (original vs cut-out, all 64 images)
+
+`npm run eval:gallery:2up` builds a second static page at
+`public/eval-gallery-2up/`: the same 64 evaluation images as
+**original | cut-out**, one run at a time, each card badged with that image's
+accuracy-benchmark verdict (`PASS` / `REVIEW` / `FAIL(gate)` / `FAIL(empty)`)
+when the run directory has a `benchmark.json` beside its `report.json`. It reads
+`eval-results/wasm/` by default; point it at any run with `--run`:
+
+```bash
+npm run eval:run -- --provider wasm --out eval-results/after-145
+npm run eval:benchmark -- eval-results/after-145
+node scripts/build-eval-gallery.mjs --run eval-results/after-145
+```
+
+That writes `public/eval-gallery-2up/<id>-original.webp`, `<id>-cutout.webp` and
+`gallery.json` (128 WebP files, ~10 MB — the same downscale-and-re-encode
+approach as the three-up gallery). Serve `public/`
+(`python3 -m http.server -d public`) and open `/eval-gallery-2up/`; the page
+fetches `gallery.json`, so opening the file directly will not work. Cards can be
+filtered by category and by verdict. The committed copy was built from the
+`eval-results/after-145` run (issue #145, island/speckle threshold alignment).
+
 ## Commands
 
 | Command | Purpose |

@@ -100,4 +100,16 @@ describe('reduceSession', () => {
     state = reduceSession(state, { type: 'activate', id: 999 }).state;
     expect(activeEntry(state)).toBeNull();
   });
+
+  it('clears history and revokes every original and result URL', () => {
+    let state = add(initialSession(), 'a.jpg');
+    state = reduceSession(state, { type: 'set-result', id: state.entries[0].id, resultUrl: 'blob:a-cut' }).state;
+    state = add(state, 'b.jpg');
+    const res = reduceSession(state, { type: 'clear' });
+    expect(res.state.entries).toHaveLength(0);
+    expect(res.state.activeId).toBeNull();
+    expect(res.revoked).toEqual(expect.arrayContaining(['blob:a.jpg', 'blob:a-cut', 'blob:b.jpg']));
+    // The id counter is kept so a later entry can never reuse an old id.
+    expect(res.state.nextId).toBe(state.nextId);
+  });
 });

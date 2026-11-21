@@ -710,23 +710,6 @@
                 <line x1="9" y1="4" x2="9" y2="20" />
               </svg>
             </button>
-            <!-- Show/hide the bottom sidebar (background + format + download).
-                 Its icon mirrors the settings-sidebar icon, turned on its side.
-                 Only meaningful once a cut-out exists. -->
-            <button
-              id="exportToggle"
-              type="button"
-              class="studioBarBtn"
-              aria-label="Show background and export bar"
-              aria-pressed="false"
-              aria-controls="exportBar"
-              title="Show or hide the background and export bar"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <line x1="3" y1="15" x2="21" y2="15" />
-              </svg>
-            </button>
             <button id="studioThemeToggle" type="button" class="themeToggle" aria-label="Switch colour theme">
               <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="4" />
@@ -758,12 +741,11 @@
           <!-- Left Column: the editor (input → processing → result) -->
           <div class="studioEditorCol">
             <div class="studioCard">
-              <!-- Editor tab bar -->
+              <!-- Editor tab bar: one step tab whose label follows the current
+                   step (Photo → Processing → Result), plus Bulk and Library. -->
               <div class="studioTabs" role="tablist" aria-label="Studio editor">
-                <button id="tabInput" class="editorTab" role="tab" data-tab="input" aria-selected="true" aria-controls="panelInput">Photo</button>
-                <button id="tabProcessing" class="editorTab" role="tab" data-tab="processing" aria-selected="false" aria-controls="panelProcessing" disabled>Processing</button>
-                <button id="tabResult" class="editorTab" role="tab" data-tab="result" aria-selected="false" aria-controls="panelResult" disabled>Result</button>
-                <button id="tabCompare" class="editorTab" role="tab" data-tab="compare" aria-selected="false" aria-controls="panelCompare" disabled>Compare</button>
+                <button id="tabStep" class="editorTab" role="tab" data-tab="step" aria-selected="true" aria-controls="panelStep">Photo</button>
+                <button id="tabBulk" class="editorTab" role="tab" data-tab="bulk" aria-selected="false" aria-controls="panelBulk">Bulk</button>
                 <button id="tabLibrary" class="editorTab" role="tab" data-tab="library" aria-selected="false" aria-controls="panelLibrary">Library</button>
               </div>
               <!-- Workspace: the shared engine sidebar (visible in every tab) on the left,
@@ -994,7 +976,8 @@
                 </div>
               </aside>
               <div class="studioTabBody">
-            <div id="panelInput" class="editorPanel" role="tabpanel" aria-labelledby="tabInput">
+            <div id="panelStep" class="editorPanel stepPanel" role="tabpanel" aria-labelledby="tabStep">
+            <div id="stepInput" class="stepView">
             <!-- Selected photo preview (hidden until a photo is chosen). Clicking
                  it re-opens the system file picker, so the drop zone can be hidden
                  once a photo exists. -->
@@ -1043,7 +1026,7 @@
               </p>
             </div>
             </div>
-            <div id="panelProcessing" class="editorPanel" role="tabpanel" aria-labelledby="tabProcessing" hidden>
+            <div id="stepProcessing" class="stepView" hidden>
               <div class="procWallpaper">
                 <div class="procGrid" aria-hidden="true"></div>
                 <div class="procGlow" aria-hidden="true"></div>
@@ -1068,7 +1051,15 @@
                 </div>
               </div>
             </div>
-            <div id="panelResult" class="editorPanel" role="tabpanel" aria-labelledby="tabResult" hidden>
+            <div id="stepResult" class="stepView" hidden>
+              <div class="stepResultHead">
+                <button id="newPhotoBtn" type="button" class="newPhotoBtn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Choose another photo
+                </button>
+              </div>
               <section id="outputSection" class="relative rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-7 shadow-sm transition-all" hidden aria-label="Background-removed output">
               
               
@@ -1153,63 +1144,53 @@
               
             </section>
             </div>
-            <div id="panelCompare" class="editorPanel" role="tabpanel" aria-labelledby="tabCompare" hidden>
-              <div class="rounded-3xl border border-slate-200/80 p-5 sm:p-6 bg-slate-50/60">
-                <figure id="studioCompare" class="compare group" data-compare data-pos="50">
-                  <div class="compareStage">
-                    <img id="compareBefore" class="compareImg compareBefore" alt="Original photo before background removal" />
-                    <img id="compareAfter" class="compareImg compareAfter" alt="The same photo with the background removed" />
-                    <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+            </div>
+
+            <!-- Bulk: up to five photos processed one after another. Each cut-out
+                 is saved to the Library (unless saving is turned off there). -->
+            <div id="panelBulk" class="editorPanel" role="tabpanel" aria-labelledby="tabBulk" hidden>
+              <div class="bulkPanel">
+                <div class="bulkHead">
+                  <div class="bulkHeadText">
+                    <h3 class="bulkTitle">Bulk <span id="bulkCount" class="bulkCount">0 / 5</span></h3>
+                    <p class="bulkHint">Pick up to five photos. Each cut-out is saved to the Library unless saving is off.</p>
                   </div>
-                  <input
-                    class="compareRange mt-4"
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value="50"
-                    aria-label="Reveal the cut-out: left is the original, right is the background removed"
-                  />
-                </figure>
+                  <div class="bulkActions">
+                    <button id="bulkPick" type="button" class="bulkPick">Choose images</button>
+                    <button id="bulkProcess" type="button" class="bulkProcess" disabled>Process all</button>
+                  </div>
+                </div>
+                <p id="bulkStatus" class="bulkStatus" role="status" hidden></p>
+                <div id="bulkGrid" class="bulkGrid"></div>
+                <p id="bulkEmpty" class="bulkEmpty">No images selected yet — choose up to five photos to process them together.</p>
               </div>
             </div>
+
             <div id="panelLibrary" class="editorPanel" role="tabpanel" aria-labelledby="tabLibrary" hidden>
               <div class="libraryPanel">
                 <div class="libraryHead">
                   <h3 class="libraryTitle">This session</h3>
-                  <button id="libraryClear" type="button" class="libraryClear">Clear</button>
-                </div>
-                <p class="libraryHint">Photos you process stay on this device, in this tab only. They are gone when you close or reload the page.</p>
-                <div id="libraryGrid" class="libraryGrid"></div>
-                <p id="libraryEmpty" class="libraryEmpty">Nothing here yet — open the Photo tab and drop in an image.</p>
-              </div>
-            </div>
-            </div>
-              </div>
-
-              <!-- Bottom sidebar: background, output format and download.
-                   Shown once a cut-out exists; toggled from the studio top bar
-                   and collapsible from its own header. -->
-              <div id="exportBar" class="exportBar bottomBar" hidden role="region" aria-label="Background and export">
-                <div class="bottomBarHead">
-                  <div class="bottomBarHeadTitle">
-                    <span class="w-2 h-2 rounded-full bg-blue-600"></span>
-                    <h4 class="bottomBarTitle">Background &amp; Export</h4>
+                  <div class="libraryActions">
+                    <button id="librarySaveToggle" type="button" class="librarySaveToggle" aria-pressed="true">Saving on</button>
+                    <button id="libraryClear" type="button" class="libraryClear">Clear history</button>
                   </div>
-                  <button
-                    id="bottomBarCollapse"
-                    type="button"
-                    class="sidebarToggle"
-                    aria-label="Collapse background and export bar"
-                    aria-pressed="true"
-                    aria-controls="bottomBarBody"
-                    title="Collapse the background and export bar"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </button>
                 </div>
+                <p id="librarySaveHint" class="libraryHint">Photos you process stay on this device, in this tab only. They are gone when you close or reload the page.</p>
+                <div id="libraryGrid" class="libraryGrid"></div>
+                <p id="libraryEmpty" class="libraryEmpty">Nothing here yet — process a photo to keep its cut-out in this session.</p>
+              </div>
+            </div>
+
+            <!-- Background & export: sits to the right of the settings sidebar,
+                 below the active panel. Shown for the step result and for the
+                 Bulk tab once a batch has produced a cut-out. -->
+            <div id="exportBar" class="exportBar bottomBar" hidden role="region" aria-label="Background and export">
+              <div class="bottomBarHead">
+                <div class="bottomBarHeadTitle">
+                  <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                  <h4 class="bottomBarTitle">Background &amp; Export</h4>
+                </div>
+              </div>
                 <div id="bottomBarBody" class="bottomBarBody">
                   <div class="bottomBarSection bottomBarBackground">
                     <div class="bottomBarSectionHead">
@@ -1256,9 +1237,14 @@
                         </svg>
                         <span>Download Image</span>
                       </a>
+                      <button id="bulkDownloadAll" type="button" class="bulkDownloadAll" hidden>
+                        Download all
+                      </button>
                     </div>
                   </div>
                 </div>
+              </div>
+              </div>
               </div>
               <div id="recovery" class="recovery rounded-2xl p-4 bg-red-50 border border-red-200 text-red-900 text-sm" hidden></div>
             </div>

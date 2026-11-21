@@ -200,6 +200,17 @@ describe('despeckleRecoveredMask', () => {
     expect(out[25 * w + 25]).toBe(200);
   });
 
+  it('honours an explicit island fraction (strict drops what fine keeps)', () => {
+    const w = 200;
+    const h = 200;
+    const mask = maskOf(w, h, 0);
+    // 200x200: the fine bar is the 16 px floor, the strict bar is 20 px. A 4x4
+    // island is therefore kept by fine and dropped by strict.
+    for (let y = 100; y < 104; y++) for (let x = 100; x < 104; x++) mask[y * w + x] = 255;
+    expect(despeckleRecoveredMask(mask, w, h, 2e-5)[102 * w + 102]).toBe(255);
+    expect(despeckleRecoveredMask(mask, w, h, 5e-4)[102 * w + 102]).toBe(0);
+  });
+
   it('is a no-op on an already-clean mask', () => {
     const w = 60;
     const h = 60;

@@ -226,7 +226,7 @@ Tier-B run against its exact GT.
 |---|---|---|
 | `components` | count of 8-connected foreground regions | speckle, or a genuinely multi-part subject (verify against the photo) |
 | `largest_component_frac` | largest region ÷ total foreground | a fragmented subject (broken into pieces) |
-| `speckle_frac` | share of regions smaller than 0.05 % (`5e-4`) of the image | stray dots a listing shows as noise |
+| `speckle_frac` | share of regions smaller than 0.05 % (`5e-4`) of the image — the app's `strict` island bar | stray dots a listing shows as noise |
 | `holes` | count of background regions fully enclosed by foreground | a missing subject interior (e.g. a hole punched through a product) |
 | `hole_area_frac` | total enclosed-background area ÷ image | how much subject was eaten away |
 | `border_fg_frac` | foreground share within a 2-px frame at the image border | **background remains** — a subject that leaks to the edge is suspicious unless the subject genuinely fills the frame |
@@ -299,58 +299,74 @@ the starting point and are the single source the checklist generator mirrors.
 | bimodal | `tail_mass ≥ 0.40` | `raw-mask-stats.ts` `MIN_BIMODAL_TAIL` — the ghost guard |
 | opaque core | `alpha_max ≥ 230` | `output-alpha.ts` `NEAR_OPAQUE_ALPHA` |
 | not kept | `opaque_frac < 0.995` | `output-alpha.ts` `KEPT_OPAQUE_FRACTION` |
-| speckle | `speckle_frac ≤ 0.05` | per-image: after issue #145 the worst category mean is 0.26 (`complex-bg`), and the remaining failures are 1-px soft-band artefacts, not islands (§5.1.1) |
+| speckle | `speckle_frac ≤ 0.05` | measured against the `strict` (5e-4) island bar; after issue #145 the worst category mean is 0.26 (`complex-bg`), and the remaining failures are 1-px soft-band artefacts, not islands (§5.1.1) |
 
-#### 5.1.1 The island / speckle area bar is one number
+#### 5.1.1 The island / speckle area bars (two variants)
 
-The app removes disconnected foreground islands below **`5e-4` of the output
-image area (0.05 %)** in its Stage-4 cleanup, and the flood-fill recovery drops
-islands below the same fraction. This benchmark counts a component as speckle
-below the same fraction (§3.8). The number lives in three places, and all three
-must stay equal:
+The app can drop disconnected foreground specks with either of two bars, and the
+engine-controls sidebar exposes the choice ("Island cleanup"):
+
+| Variant | Fraction of the output area | On a 1920×2939 photo | Use |
+|---|---|---|---|
+| `fine` (**default**) | `2e-5` (0.002 %) | ~113 px (~11 px square) | keep small deliberate detail — a distant earring, a thin stem |
+| `strict` | `5e-4` (0.05 %) | ~2800 px (~53 px square) | clear this benchmark's speckle gate |
+
+The same selected variant is applied by the Stage-4 cleanup and by the
+flood-recovery despeckle, so a run is internally consistent. The numbers live in
+one place and the benchmark mirrors the `strict` one:
 
 | Constant | File | Role |
 |---|---|---|
-| `MIN_ISLAND_FRACTION` | `src/features/background-removal/refine-mask.ts` | Stage-4 `removeTinyIslands` bar — **the definition** |
-| `MIN_RECOVERY_ISLAND_FRACTION` | `src/features/background-removal/mask-recovery.ts` | flood-recovery despeckle bar |
-| `SPECKLE_ISLAND_FRACTION` | `scripts/eval/quality_metrics.py` | `component_stats` speckle definition, and therefore this gate |
+| `ISLAND_CLEANUP_FRACTIONS` | `src/features/background-removal/island-cleanup.ts` | **the definition** of both variants |
+| `MIN_ISLAND_FRACTION` | `src/features/background-removal/refine-mask.ts` | Stage-4 `removeTinyIslands` default — aliases `fine` |
+| `MIN_ISLAND_FRACTION_STRICT` | `src/features/background-removal/refine-mask.ts` | Stage-4 strict bar — aliases `strict` |
+| `MIN_RECOVERY_ISLAND_FRACTION` | `src/features/background-removal/mask-recovery.ts` | flood-recovery despeckle default — aliases `fine` |
+| `SPECKLE_ISLAND_FRACTION` | `scripts/eval/quality_metrics.py` | `component_stats` speckle definition, and therefore this gate — equals `strict` |
 
 The guard is two-sided: `src/features/background-removal/threshold-sync.test.ts`
-reads the Python constant and fails if any of the three differs, and
-`python3 scripts/eval/accuracy-benchmark.py --self-test` (in CI) reads both TS
-constants and fails the same way. Change the number in one place and the other
-two must change with it; there is no undocumented divergence to fall back on.
+reads the Python constants and fails if either variant drifts, and
+`python3 scripts/eval/accuracy-benchmark.py --self-test` (in CI) reads the TS map
+and both defaults and fails the same way. Change a number in one place and the
+other side must change with it; there is no undocumented divergence to fall back
+on.
+
+**Why the default is `fine`.** Only *disconnected* components strictly below the
+bar are deleted, so a thin-but-connected structure (a chain, a hair strand, a
+spectacle temple) is never touched regardless of its area. The `fine` bar keeps
+legitimately small, detached detail that the `strict` bar would delete, which is
+what a customer sees as a lost earring or a clipped product part. The cost is
+grain the benchmark counts as speckle.
+
+**Benchmarking.** This gate counts speckle at `5e-4`, so a run scored against it
+must use the `strict` variant: `?islands=strict` on the page URL (the eval
+harness passes it through `--url`). A `fine` run can still score
+`speckle_frac` — the number is computed the same way — but it describes the
+shipped default rather than the gate. With the pre-#145 code the Stage-4 bar was
+`2e-5`; issue #145 raised it to `5e-4` to match the gate, and the two variants
+now make that a choice instead of a hard-coded change.
 
 **Resolution.** The bar is a fraction of the **output** image, not of the grid
 the cleanup happens to run on. When `performance.maxProcessingPixels` forces
 Stage 4 onto a downscaled working copy, `minIslandArea()` rescales the bar into
-that grid (`outputArea × 5e-4 × workArea / outputArea`), so the effective
+that grid (`outputArea × fraction × workArea / outputArea`), so the effective
 fraction is identical at any working resolution. Before issue #145 the bar was
 recomputed from the work dimensions, so the 16-pixel floor was a floor in *work*
 pixels and the effective fraction drifted with the downscale factor. With the
 shipped default (`maxProcessingPixels = 4096²`, larger than any image the app
 accepts) no eval image is downscaled, so this is a correctness fix rather than a
-measured change on the 64-image set.
+measured change on the 64-image set. A 16-output-pixel floor keeps 1–2 px specks
+removable on thumbnails under either variant.
 
-**Why 5e-4 and not something larger.** Only *disconnected* components strictly
-below the bar are deleted, so a thin-but-connected structure (a chain, a hair
-strand, a spectacle temple) is never touched regardless of its area, and a
-legitimately multi-part subject survives as long as each part is at least the
-bar. On a 1920×2939 photo 5e-4 is ~2800 px (a ~53 px square) — the smallest
-island a buyer would read as part of the product rather than as grain,
-reflection or a gap between parts. A 16-output-pixel floor keeps 1–2 px specks
-removable on thumbnails.
-
-**Known residual (out of scope for #145).** Nine images still fail the speckle
-gate after this alignment — `hair-fur-03`, `glass-transparent-04`,
-`complex-bg-01`, `complex-bg-04`, `complex-bg-08`, `large-02`, `large-05`,
-`large-08`, `thin-structure-03` — and in every one the flagged component is
-**exactly one pixel** (measured: component areas are `[1]` or `[1,1,1]`), sitting
-inside a steep alpha gradient rather than an isolated blob. A one-pixel
-foreground component cannot have survived `removeTinyIslands` (any component
-below the bar is zeroed), so it became `alpha ≥ 0.5` afterwards: the only later
-writer is `smoothTransitionZone`, which averages transition-band pixels and can
-lift a single band pixel over the cutoff. The gate then counts it as a speckle
+**Known residual (out of scope for #145).** Under `strict`, nine images still
+fail the speckle gate — `hair-fur-03`, `glass-transparent-04`, `complex-bg-01`,
+`complex-bg-04`, `complex-bg-08`, `large-02`, `large-05`, `large-08`,
+`thin-structure-03` — and in every one the flagged component is **exactly one
+pixel** (measured: component areas are `[1]` or `[1,1,1]`), sitting inside a
+steep alpha gradient rather than an isolated blob. A one-pixel foreground
+component cannot have survived `removeTinyIslands` (any component below the bar
+is zeroed), so it became `alpha ≥ 0.5` afterwards: the only later writer is
+`smoothTransitionZone`, which averages transition-band pixels and can lift a
+single band pixel over the cutoff. The gate then counts it as a speckle
 component. No area threshold can catch it — the pass would have to run after
 smoothing, or the mask would have to be despeckled after 8-bit quantisation.
 That is a pass-ordering change, deliberately not folded into this threshold

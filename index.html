@@ -1212,6 +1212,33 @@
                         <p><strong>URL equivalents.</strong> Every control here maps to a query parameter: <code>?refine=off</code>, <code>?refine=on</code>, <code>?refineStrength=1</code>, <code>?refineEdgeSensitivity=2</code>, <code>?refineRadius</code>, <code>?refineEpsilon</code>, <code>?refineCleanup=0</code>.</p>
                       </div>
                     </div>
+
+                    <!-- Island cleanup: which disconnected specks are dropped, in
+                         the Stage-4 cleanup and the flood-recovery despeckle. -->
+                    <div class="sidebarField" id="islandCleanupField">
+                      <div class="sidebarFieldHead">
+                        <label for="islandCleanupSelect" class="font-semibold text-slate-700">Island cleanup</label>
+                        <span class="hint font-mono text-blue-600 font-bold" id="islandCleanupValue">Fine</span>
+                        <button
+                          type="button"
+                          class="infoBubble"
+                          aria-label="About island cleanup"
+                          aria-expanded="false"
+                          aria-controls="islandCleanupInfo"
+                          data-info-target="islandCleanupInfo"
+                        >?</button>
+                      </div>
+                      <select id="islandCleanupSelect" class="sidebarSelect">
+                        <option value="fine">Fine — keep small detail (2e-5)</option>
+                        <option value="strict">Strict — remove speckle (5e-4)</option>
+                      </select>
+                      <div id="islandCleanupInfo" class="infoPanel" hidden>
+                        <p><strong>What it does.</strong> Drops disconnected foreground specks — grain, reflections and flecks the mask picked up away from the subject. A speck is only removed when it is <em>not connected</em> to the subject, so a chain, a hair strand or a cutlery set survives whichever variant is chosen.</p>
+                        <p><strong>Fine (2e-5 of the frame).</strong> The default. On a 1920 × 2939 photo the bar is about 113 px, so it removes 1–2 px flecks but keeps small deliberate parts — a distant earring, a thin stem.</p>
+                        <p><strong>Strict (5e-4 of the frame).</strong> The bar the accuracy benchmark counts as speckle: about 2800 px on the same photo (a ~53 px square). Use it when the cut-out looks noisy or when reproducing the benchmark's speckle gate.</p>
+                        <p><strong>URL equivalent.</strong> <code>?islands=fine</code> (default) or <code>?islands=strict</code>.</p>
+                      </div>
+                    </div>
                   </div>
 
                   <!-- Re-run inference with the current engine settings, then

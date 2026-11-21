@@ -33,6 +33,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from quality_metrics import (  # noqa: E402
+    FINE_ISLAND_FRACTION,
     KEPT_OPAQUE_FRACTION,
     MIN_BIMODAL_TAIL,
     NEAR_OPAQUE_ALPHA,
@@ -186,11 +187,11 @@ def _selftest_components() -> list[str]:
     return errors
 
 
-def _ts_constant(text: str, name: str) -> float | None:
-    """Read an `export const NAME = <number>` value out of TypeScript source."""
+def _ts_map_entry(text: str, name: str) -> float | None:
+    """Read a `name: <number>` entry out of a TypeScript object literal."""
     import re
 
-    m = re.search(rf"export const {name}\s*=\s*([0-9.eE+-]+)", text)
+    m = re.search(rf"^\s*{name}:\s*([0-9.eE+-]+)", text, re.MULTILINE)
     return float(m.group(1)) if m else None
 
 
@@ -209,23 +210,37 @@ def _selftest_constants() -> list[str]:
         if not ok or decl not in text:
             errors.append(f"constant drifted: {decl}")
 
-    # The speckle/island area bar is one number shared by the app's Stage-4
-    # cleanup, the flood-recovery despeckle and this benchmark's speckle gate
-    # (issue #145). Compare values, not formatting, so 5e-4 and 0.0005 agree.
+    # The speckle/island area bars live in island-cleanup.ts and are shared by
+    # the app's Stage-4 cleanup, the flood-recovery despeckle and this
+    # benchmark's speckle gate (issue #145). `fine` is the product default,
+    # `strict` must equal the gate. Compare values, not formatting, so 5e-4 and
+    # 0.0005 agree.
     bg = ROOT / "src" / "features" / "background-removal"
-    for filename, name in (
-        ("refine-mask.ts", "MIN_ISLAND_FRACTION"),
-        ("mask-recovery.ts", "MIN_RECOVERY_ISLAND_FRACTION"),
+    variants = bg / "island-cleanup.ts"
+    variant_text = variants.read_text() if variants.exists() else ""
+    expected_variants = {
+        "fine": FINE_ISLAND_FRACTION,
+        "strict": SPECKLE_ISLAND_FRACTION,
+    }
+    for name, want in expected_variants.items():
+        value = _ts_map_entry(variant_text, name) if variant_text else None
+        if value is None:
+            errors.append(f"constant not found: {name} in island-cleanup.ts")
+        elif abs(value - want) > 1e-12:
+            errors.append(f"constant drifted: {name} = {value} != {want}")
+    # Both consumers must still default to the fine variant.
+    for filename, name, want_text in (
+        ("refine-mask.ts", "MIN_ISLAND_FRACTION", "ISLAND_CLEANUP_FRACTIONS[DEFAULT_ISLAND_CLEANUP]"),
+        (
+            "mask-recovery.ts",
+            "MIN_RECOVERY_ISLAND_FRACTION",
+            "ISLAND_CLEANUP_FRACTIONS[DEFAULT_ISLAND_CLEANUP]",
+        ),
     ):
         path = bg / filename
-        value = _ts_constant(path.read_text(), name) if path.exists() else None
-        if value is None:
-            errors.append(f"constant not found: {name} in {filename}")
-        elif abs(value - SPECKLE_ISLAND_FRACTION) > 1e-12:
-            errors.append(
-                f"constant drifted: {name} = {value} != SPECKLE_ISLAND_FRACTION "
-                f"= {SPECKLE_ISLAND_FRACTION}"
-            )
+        consumer_text = path.read_text() if path.exists() else ""
+        if f"export const {name} = {want_text}" not in consumer_text:
+            errors.append(f"default drifted: {name} in {filename} is not {want_text}")
     return errors
 
 

@@ -1,9 +1,30 @@
 // Pure presentation state for the Studio editor, kept out of main.ts so the tab
 // transitions and the console scrubber are unit-testable without a DOM.
 
-export type StudioTab = 'input' | 'processing' | 'result' | 'compare' | 'library';
+export type StudioTab = 'step' | 'bulk' | 'library';
 
-export const STUDIO_TABS: readonly StudioTab[] = ['input', 'processing', 'result', 'compare', 'library'];
+export const STUDIO_TABS: readonly StudioTab[] = ['step', 'bulk', 'library'];
+
+/** The single step editor shows one of these views at a time. */
+export type StepPhase = 'input' | 'processing' | 'result';
+
+/** Which view the step tab is showing: the drop zone, the run, or the cut-out. */
+export function stepPhase(state: StudioViewState): StepPhase {
+  if (state.hasResult) return 'result';
+  return state.running ? 'processing' : 'input';
+}
+
+/** The step tab's label follows the current step. */
+export function stepTitle(state: StudioViewState): string {
+  switch (stepPhase(state)) {
+    case 'processing':
+      return 'Processing';
+    case 'result':
+      return 'Result';
+    default:
+      return 'Photo';
+  }
+}
 
 export interface StudioViewState {
   tab: StudioTab;
@@ -28,7 +49,7 @@ export type StudioEvent =
   | { type: 'error' };
 
 export function initialStudioView(): StudioViewState {
-  return { tab: 'input', hasInput: false, running: false, hasResult: false, refining: false, percent: null };
+  return { tab: 'step', hasInput: false, running: false, hasResult: false, refining: false, percent: null };
 }
 
 function clampPercent(percent: number): number {
@@ -38,10 +59,11 @@ function clampPercent(percent: number): number {
 export function reduceStudio(state: StudioViewState, ev: StudioEvent): StudioViewState {
   switch (ev.type) {
     case 'select-image':
-      // A new photo resets the editor to the input tab; the previous result is gone.
-      return { ...state, tab: 'input', hasInput: true, running: false, hasResult: false, refining: false, percent: null };
+      // A new photo resets the step editor to the drop zone; the previous result
+      // is gone.
+      return { ...state, tab: 'step', hasInput: true, running: false, hasResult: false, refining: false, percent: null };
     case 'run-start':
-      return { ...state, tab: 'processing', running: true, hasResult: false, refining: false, percent: 0 };
+      return { ...state, tab: 'step', running: true, hasResult: false, refining: false, percent: 0 };
     case 'progress':
       // Progress only refines the percentage of a run already opened by
       // 'run-start'. It must not move the tab by itself: a boot-time model
@@ -49,33 +71,33 @@ export function reduceStudio(state: StudioViewState, ev: StudioEvent): StudioVie
       // editor to the processing tab then would hide the drop zone.
       return { ...state, percent: ev.percent === null ? null : clampPercent(ev.percent) };
     case 'preview':
-      // Stage 1 finished: a usable cut-out exists now, so move to the result tab
-      // and mark it refining. The result is already exportable in this state;
-      // `running` stays true so the console still shows the job as in flight and
-      // a later `result` (or `error`) can settle it.
-      return { ...state, tab: 'result', hasResult: true, refining: true, percent: null };
+      // Stage 1 finished: a usable cut-out exists now, so the step view shows the
+      // result and marks it refining. The result is already exportable in this
+      // state; `running` stays true so the console still shows the job as in
+      // flight and a later `result` (or `error`) can settle it.
+      return { ...state, tab: 'step', hasResult: true, refining: true, percent: null };
     case 'result':
-      return { ...state, tab: 'result', running: false, hasResult: true, refining: false, percent: 100 };
+      return { ...state, tab: 'step', running: false, hasResult: true, refining: false, percent: 100 };
     case 'show-background':
       // The user picked a new background colour. It changes the preview, the
-      // export and the compare view — all of which are result-stage views — so
-      // it must not move the tab. (Result and Compare both stay available.)
+      // export and the compare view, all of which belong to the step result, so
+      // it must not move the tab.
       return state;
     case 'error':
-      // A failed run returns to the last good view: the result if one exists,
-      // otherwise the input tab so the user can pick another photo. A refinement
-      // failure after a preview leaves that preview on screen (refining: false).
-      return { ...state, tab: state.hasResult ? 'result' : 'input', running: false, refining: false };
+      // A failed run returns to the last good step view: the result if one
+      // exists, otherwise the drop zone so the user can pick another photo. A
+      // refinement failure after a preview leaves that preview on screen.
+      return { ...state, tab: 'step', running: false, refining: false };
   }
 }
 
 export function tabEnabled(state: StudioViewState, tab: StudioTab): boolean {
-  if (tab === 'input') return true;
+  if (tab === 'step') return true;
+  // The bulk queue can be prepared while idle; a run in flight owns the engine,
+  // so switching away then would only hide the progress the user needs.
+  if (tab === 'bulk') return !state.running || state.tab === 'bulk';
   // The session library is always available — it is the user's own history.
-  if (tab === 'library') return true;
-  if (tab === 'processing') return state.running;
-  // Both 'result' and 'compare' need a finished cut-out.
-  return state.hasResult;
+  return true;
 }
 
 // The console is user-visible, so it must not leak the private repository, the

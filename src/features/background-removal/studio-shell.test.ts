@@ -14,14 +14,33 @@ const CSS = readFileSync(resolve(ROOT, 'src/style.css'), 'utf8');
 describe('studio shell wiring (main.ts + index.html)', () => {
   it('registers a tab button and panel for every tab in STUDIO_TABS', () => {
     // The maps must cover the full tab set, or a tab click would throw.
-    for (const id of ['tabInput', 'tabProcessing', 'tabResult', 'tabCompare', 'tabLibrary']) {
+    for (const id of ['tabStep', 'tabBulk', 'tabLibrary']) {
       expect(HTML).toContain(`id="${id}"`);
     }
-    for (const id of ['panelInput', 'panelProcessing', 'panelResult', 'panelCompare', 'panelLibrary']) {
+    for (const id of ['panelStep', 'panelBulk', 'panelLibrary']) {
       expect(HTML).toContain(`id="${id}"`);
     }
+    expect(MAIN).toMatch(/step:\s*document\.getElementById\('tabStep'\)/);
+    expect(MAIN).toMatch(/bulk:\s*document\.getElementById\('tabBulk'\)/);
     expect(MAIN).toMatch(/library:\s*document\.getElementById\('tabLibrary'\)/);
-    expect(MAIN).toMatch(/library:\s*document\.getElementById\('panelLibrary'\)/);
+    expect(MAIN).toMatch(/bulk:\s*document\.getElementById\('panelBulk'\)/);
+  });
+
+  it('keeps one step tab whose title follows the current step', () => {
+    // The old Photo/Processing/Result/Compare tabs are gone; one tab carries the
+    // step title from the pure state helper.
+    expect(HTML).not.toContain('id="tabInput"');
+    expect(HTML).not.toContain('id="tabProcessing"');
+    expect(HTML).not.toContain('id="tabResult"');
+    expect(HTML).not.toContain('id="tabCompare"');
+    expect(HTML).not.toContain('id="panelCompare"');
+    expect(MAIN).toMatch(/tabButtons\.step\.textContent = stepTitle\(studioView\)/);
+    expect(MAIN).toMatch(/stepInputEl\.hidden = phase !== 'input'/);
+    expect(MAIN).toMatch(/stepProcessingEl\.hidden = phase !== 'processing'/);
+    expect(MAIN).toMatch(/stepResultEl\.hidden = phase !== 'result'/);
+    // A result view still offers a way back to the photo picker.
+    expect(HTML).toContain('id="newPhotoBtn"');
+    expect(MAIN).toMatch(/newPhotoBtn\?\.addEventListener\('click', chooseFile\)/);
   });
 
   it('keeps the settings sidebar available in every tab', () => {
@@ -30,11 +49,14 @@ describe('studio shell wiring (main.ts + index.html)', () => {
     expect(MAIN).not.toMatch(/sidebarToggleBtn\.hidden = studioView\.tab !== 'result'/);
   });
 
-  it('drives the export bar from the result state and toggles it from the top bar', () => {
-    expect(MAIN).toMatch(/exportToggleBtn\.hidden = !studioView\.hasResult/);
-    expect(MAIN).toMatch(/function setExportBarOpen\(/);
-    expect(MAIN).toMatch(/setExportBarOpen\(!exportBarOpen\)/);
-    expect(HTML).toContain('id="exportToggle"');
+  it('drives the background & export section from the step result or a bulk batch', () => {
+    expect(MAIN).toMatch(/function updateExportBarVisibility\(/);
+    expect(MAIN).toMatch(/studioView\.tab === 'step'[\s\S]{0,120}studioView\.hasResult/);
+    expect(MAIN).toMatch(/studioView\.tab === 'bulk'[\s\S]{0,120}bulkDoneCount\(bulkState\) > 0/);
+    // The old top-bar toggle and collapsible bottom bar are gone.
+    expect(HTML).not.toContain('id="exportToggle"');
+    expect(HTML).not.toContain('id="bottomBarCollapse"');
+    expect(MAIN).not.toMatch(/function setExportBarOpen\(/);
     expect(HTML).toContain('id="exportBar"');
   });
 
@@ -185,13 +207,47 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/Object\.assign\(refineConfig, resolveRefinementConfig\(\)\)/);
   });
 
-  it('moves background, format and download into a collapsible bottom sidebar', () => {
-    expect(HTML).toMatch(/id="exportBar" class="exportBar bottomBar"/);
-    expect(HTML).toContain('id="bottomBarCollapse"');
-    // The background block now lives in the bottom bar, not the result panel.
-    const resultPanel = HTML.slice(HTML.indexOf('id="panelResult"'), HTML.indexOf('id="panelCompare"'));
+  it('places background & export to the right of the settings sidebar, inside the tab body', () => {
+    // The section lives in the tab body (the column to the right of the shared
+    // settings sidebar), not in the result panel or the old bottom bar.
+    const bodyStart = HTML.indexOf('id="studioWorkspace"');
+    const exportStart = HTML.indexOf('id="exportBar"');
+    const bodyEnd = HTML.indexOf('id="recovery"');
+    expect(bodyStart).toBeGreaterThan(-1);
+    expect(exportStart).toBeGreaterThan(bodyStart);
+    expect(exportStart).toBeLessThan(bodyEnd);
+    expect(HTML).not.toContain('class="exportBar bottomBar" hidden role="region" aria-label="Background and export">\n                <div class="bottomBarHead">\n                  <div class="bottomBarHeadTitle">\n                    <span class="w-2 h-2 rounded-full bg-blue-600"></span>\n                    <h4 class="bottomBarTitle">Background &amp; Export</h4>\n                  </div>\n                  <button');
+    const resultPanel = HTML.slice(HTML.indexOf('id="panelStep"'), HTML.indexOf('id="panelBulk"'));
     expect(resultPanel).not.toContain('id="bgTransparentBtn"');
-    expect(HTML).toMatch(/id="exportToggle"[\s\S]*?<line x1="3" y1="15" x2="21" y2="15"/);
+    // The Bulk tab and the step tab share the same section in that column.
+    expect(HTML).toMatch(/id="panelBulk"[\s\S]*id="panelLibrary"[\s\S]*id="exportBar"/);
+  });
+
+  it('offers a Bulk tab for up to five photos', () => {
+    expect(HTML).toContain('id="panelBulk"');
+    expect(HTML).toContain('id="bulkPick"');
+    expect(HTML).toContain('id="bulkProcess"');
+    expect(HTML).toContain('id="bulkGrid"');
+    expect(MAIN).toMatch(/BULK_LIMIT/);
+    expect(MAIN).toMatch(/function addBulkFiles\(/);
+    expect(MAIN).toMatch(/function processBulkBatch\(/);
+    // Batch output is downloadable in the chosen format on the chosen background.
+    expect(HTML).toContain('id="bulkDownloadAll"');
+    expect(MAIN).toMatch(/function downloadAllBulk\(/);
+    expect(MAIN).toMatch(/canvasToDataUrl\(canvas, exportFormat, background\)/);
+  });
+
+  it('saves bulk cut-outs to the library and can stop saving or clear history', () => {
+    // A bulk run goes through the same loader, so its result fills a library
+    // entry exactly like a single run.
+    expect(MAIN).toMatch(/await loadImageFromFile\(file, librarySavingEnabled\)/);
+    expect(MAIN).toMatch(/if \(!librarySavingEnabled \|\| token !== libraryRunToken\) return/);
+    expect(HTML).toContain('id="librarySaveToggle"');
+    expect(HTML).toContain('id="libraryClear"');
+    expect(MAIN).toMatch(/function applyLibrarySaveUi\(/);
+    expect(MAIN).toMatch(/function clearLibrary\(/);
+    expect(MAIN).toMatch(/reduceSession\(session, \{ type: 'clear' \}\)/);
+    expect(MAIN).toMatch(/LS_LIBRARY_SAVE/);
   });
 
   it('gives the editor the full width on mobile and keeps it scrollable', () => {

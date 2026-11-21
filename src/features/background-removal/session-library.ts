@@ -46,7 +46,8 @@ export type SessionEvent =
       createdAt: number;
     }
   | { type: 'activate'; id: number }
-  | { type: 'remove'; id: number };
+  | { type: 'remove'; id: number }
+  | { type: 'clear' };
 
 export interface SessionResult {
   state: SessionState;
@@ -106,6 +107,17 @@ export function reduceSession(state: SessionState, ev: SessionEvent): SessionRes
       }
       const activeId = state.activeId === ev.id ? (entries[0]?.id ?? null) : state.activeId;
       return { state: { ...state, entries, activeId }, revoked };
+    }
+    case 'clear': {
+      // Clear history: drop every entry and report all of its URLs for
+      // revocation. The id counter is kept so a re-opened version can never
+      // collide with a blob still held under an old id.
+      const revoked: string[] = [];
+      for (const entry of state.entries) {
+        revoked.push(entry.originalUrl);
+        if (entry.resultUrl) revoked.push(entry.resultUrl);
+      }
+      return { state: { ...state, entries: [], activeId: null }, revoked };
     }
   }
 }

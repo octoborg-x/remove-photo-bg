@@ -131,3 +131,75 @@ export function summarizeRun(cases, model) {
     verdicts,
   };
 }
+
+/**
+ * The three stacked layers of the merged gallery, bottom to top. `before` is the
+ * first gallery's cut-out, `after` the second gallery's (revealed by the
+ * horizontal slider), `original` the source photo (revealed by the vertical one).
+ */
+export const MERGED_LAYERS = [
+  { key: 'before', suffix: '-before.webp', label: 'Before' },
+  { key: 'after', suffix: '-after.webp', label: 'After' },
+  { key: 'original', suffix: '-original.webp', label: 'Original' },
+];
+
+/**
+ * Merges two gallery manifests (first = the older run, second = the newer one)
+ * into one case list keyed by image id. Timings, verdicts and dimensions come
+ * from whichever manifest has them; ids present in only one manifest are
+ * skipped, as are ids whose layer files are missing (`hasFile`).
+ */
+export function mergeGalleries(first, second, { hasFile } = {}) {
+  const newer = new Map((second?.cases || []).map((c) => [c.id, c]));
+  const cases = [];
+  const skipped = [];
+
+  for (const older of first?.cases || []) {
+    const after = newer.get(older.id);
+    if (!after) {
+      skipped.push(older.id);
+      continue;
+    }
+    if (hasFile && !MERGED_LAYERS.every((layer) => hasFile(older.id, layer.key))) {
+      skipped.push(older.id);
+      continue;
+    }
+    cases.push({
+      id: older.id,
+      category: after.category ?? older.category,
+      title: after.title ?? older.title,
+      source: after.source ?? older.source,
+      license: after.license ?? older.license,
+      width: older.width ?? after.width,
+      height: older.height ?? after.height,
+      beforeMs: older.wasmMs ?? null,
+      afterMs: after.ms ?? null,
+      ok: after.ok !== false,
+      verdict: after.verdict ?? null,
+      speckleFrac: after.speckleFrac ?? null,
+      fgFrac: after.fgFrac ?? null,
+    });
+  }
+  return { cases, skipped };
+}
+
+/** Header stats for the merged manifest: both means plus the verdict families. */
+export function summarizeMerged(cases, model) {
+  const mean = (pick) => {
+    const values = cases.map(pick).filter((v) => Number.isFinite(v));
+    return values.length ? Math.round(values.reduce((s, v) => s + v, 0) / values.length) : 0;
+  };
+  const verdicts = Object.fromEntries(VERDICT_FAMILIES.map((f) => [f, 0]));
+  for (const c of cases) {
+    const family = verdictFamily(c.verdict);
+    if (family && family in verdicts) verdicts[family] += 1;
+  }
+  return {
+    model,
+    total: cases.length,
+    categories: [...new Set(cases.map((c) => c.category))].sort(),
+    meanBeforeMs: mean((c) => c.beforeMs),
+    meanAfterMs: mean((c) => c.afterMs),
+    verdicts,
+  };
+}

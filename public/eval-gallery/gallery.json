@@ -1,7 +1,33 @@
 {
-  "generatedAt": "2026-11-18T11:41:53.362Z",
+  "generatedAt": "2026-11-21T09:07:05.757Z",
+  "mode": "three-layer",
   "model": "qmix-cut-512",
+  "sources": [
+    {
+      "layer": "before",
+      "gallery": "public/eval-gallery",
+      "file": "-wasm.webp",
+      "run": null,
+      "meanMs": 15215
+    },
+    {
+      "layer": "after",
+      "gallery": "public/eval-gallery-2up",
+      "file": "-cutout.webp",
+      "run": "eval-results/after-145",
+      "meanMs": 5666
+    },
+    {
+      "layer": "original",
+      "gallery": "public/eval-gallery",
+      "file": "-original.webp",
+      "run": null,
+      "meanMs": null
+    }
+  ],
+  "benchmark": true,
   "summary": {
+    "model": "qmix-cut-512",
     "total": 64,
     "categories": [
       "accessory",
@@ -13,8 +39,14 @@
       "ordinary-product",
       "thin-structure"
     ],
-    "meanWasmMs": 15215,
-    "meanGpuMs": 7360
+    "meanBeforeMs": 15215,
+    "meanAfterMs": 5666,
+    "verdicts": {
+      "PASS": 15,
+      "REVIEW": 36,
+      "FAIL": 9,
+      "empty": 4
+    }
   },
   "cases": [
     {
@@ -23,24 +55,14 @@
       "title": "File:Affligem Blond Bottle.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Affligem_Blond_Bottle.jpg",
       "license": "Public domain",
-      "wasmMs": 16048,
-      "gpuMs": 12629,
-      "wasmOpaqueFrac": 0.34015500173671415,
-      "gpuOpaqueFrac": 0.34015500173671415,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1727,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1727
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1727
-        }
-      }
+      "beforeMs": 16048,
+      "afterMs": 5698,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.35225
     },
     {
       "id": "ordinary-product-02",
@@ -48,24 +70,14 @@
       "title": "File:Beer bottles 2018 G1.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Beer_bottles_2018_G1.jpg",
       "license": "Public domain",
-      "wasmMs": 19512,
-      "gpuMs": 1910,
-      "wasmOpaqueFrac": 0.4607698567708333,
-      "gpuOpaqueFrac": 0.4607698567708333,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 576,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 576
-        },
-        "gpu": {
-          "w": 768,
-          "h": 576
-        }
-      }
+      "beforeMs": 19512,
+      "afterMs": 5608,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.48259
     },
     {
       "id": "ordinary-product-03",
@@ -73,24 +85,14 @@
       "title": "File:Happy and sad pills in a glass bottle on blue background (51021862811).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Happy_and_sad_pills_in_a_glass_bottle_on_blue_background_(51021862811).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 16227,
-      "gpuMs": 4789,
-      "wasmOpaqueFrac": 0.21443981903892945,
-      "gpuOpaqueFrac": 0.21443981903892945,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 493,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 493
-        },
-        "gpu": {
-          "w": 768,
-          "h": 493
-        }
-      }
+      "beforeMs": 16227,
+      "afterMs": 5551,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.2309
     },
     {
       "id": "ordinary-product-04",
@@ -98,24 +100,14 @@
       "title": "File:Oatmeal cookie shot and cookies on table and white plate with alcohol bottles in background (28414253693).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Oatmeal_cookie_shot_and_cookies_on_table_and_white_plate_with_alcohol_bottles_in_background_(28414253693).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 15637,
-      "gpuMs": 2122,
-      "wasmOpaqueFrac": 0.0944921875,
-      "gpuOpaqueFrac": 0.0944921875,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 384,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 384
-        },
-        "gpu": {
-          "w": 768,
-          "h": 384
-        }
-      }
+      "beforeMs": 15637,
+      "afterMs": 5534,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.10773
     },
     {
       "id": "ordinary-product-05",
@@ -123,24 +115,14 @@
       "title": "File:Vase bleu vicomte1.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Vase_bleu_vicomte1.jpg",
       "license": "Public domain",
-      "wasmMs": 15784,
-      "gpuMs": 5192,
-      "wasmOpaqueFrac": 0.27613869620611553,
-      "gpuOpaqueFrac": 0.27613869620611553,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1060,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1060
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1060
-        }
-      }
+      "beforeMs": 15784,
+      "afterMs": 5611,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.2852
     },
     {
       "id": "ordinary-product-06",
@@ -148,24 +130,14 @@
       "title": "File:Skin care products displayed on a light pink background with a spoonful of powder near jars.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Skin_care_products_displayed_on_a_light_pink_background_with_a_spoonful_of_powder_near_jars.jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14555,
-      "gpuMs": 2100,
-      "wasmOpaqueFrac": 0.15969518442622951,
-      "gpuOpaqueFrac": 0.15969518442622951,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 14555,
+      "afterMs": 5499,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.17327
     },
     {
       "id": "ordinary-product-07",
@@ -173,24 +145,14 @@
       "title": "File:A bottle of Aqua mineral water.JPG",
       "source": "https://commons.wikimedia.org/wiki/File:A_bottle_of_Aqua_mineral_water.JPG",
       "license": "CC BY 3.0",
-      "wasmMs": 15010,
-      "gpuMs": 4755,
-      "wasmOpaqueFrac": 0.09660158814839133,
-      "gpuOpaqueFrac": 0.09660158814839133,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 914,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 914
-        },
-        "gpu": {
-          "w": 768,
-          "h": 914
-        }
-      }
+      "beforeMs": 15010,
+      "afterMs": 6001,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.10259
     },
     {
       "id": "ordinary-product-08",
@@ -198,24 +160,14 @@
       "title": "File:Bottled water (6972595593).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Bottled_water_(6972595593).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 16175,
-      "gpuMs": 4943,
-      "wasmOpaqueFrac": 0.9521044921875,
-      "gpuOpaqueFrac": 0.9521044921875,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 576,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 576
-        },
-        "gpu": {
-          "w": 768,
-          "h": 576
-        }
-      }
+      "beforeMs": 16175,
+      "afterMs": 6120,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.0637
     },
     {
       "id": "clothing-01",
@@ -223,24 +175,14 @@
       "title": "File:Jumping woman with green shirt and black and white socks and sleeves.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Jumping_woman_with_green_shirt_and_black_and_white_socks_and_sleeves.jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 15614,
-      "gpuMs": 3664,
-      "wasmOpaqueFrac": 0.13490308055040198,
-      "gpuOpaqueFrac": 0.13490308055040198,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 970,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 970
-        },
-        "gpu": {
-          "w": 768,
-          "h": 970
-        }
-      }
+      "beforeMs": 15614,
+      "afterMs": 5568,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.15083
     },
     {
       "id": "clothing-02",
@@ -248,24 +190,14 @@
       "title": "File:Just a shirt.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Just_a_shirt.jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 15705,
-      "gpuMs": 5590,
-      "wasmOpaqueFrac": 0.19348714192708333,
-      "gpuOpaqueFrac": 0.19348714192708333,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1152,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1152
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1152
-        }
-      }
+      "beforeMs": 15705,
+      "afterMs": 5447,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.20795
     },
     {
       "id": "clothing-03",
@@ -273,24 +205,14 @@
       "title": "File:Man in white shirt frankfurt (Unsplash).png",
       "source": "https://commons.wikimedia.org/wiki/File:Man_in_white_shirt_frankfurt_(Unsplash).png",
       "license": "CC0",
-      "wasmMs": 15354,
-      "gpuMs": 6094,
-      "wasmOpaqueFrac": 0.3530544768464244,
-      "gpuOpaqueFrac": 0.35305539273153574,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 15354,
+      "afterMs": 5661,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.37463
     },
     {
       "id": "clothing-04",
@@ -298,24 +220,14 @@
       "title": "File:Person holding a small white dog while wearing a floral shirt outdoors.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Person_holding_a_small_white_dog_while_wearing_a_floral_shirt_outdoors.jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14681,
-      "gpuMs": 6107,
-      "wasmOpaqueFrac": 0.6004903395784543,
-      "gpuOpaqueFrac": 0.6004903395784543,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 14681,
+      "afterMs": 5815,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.62814
     },
     {
       "id": "clothing-05",
@@ -323,24 +235,14 @@
       "title": "File:Child walks through lavender field wearing white dress and sun hat.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Child_walks_through_lavender_field_wearing_white_dress_and_sun_hat.jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14865,
-      "gpuMs": 5809,
-      "wasmOpaqueFrac": 0.131585693359375,
-      "gpuOpaqueFrac": 0.131585693359375,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1152,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1152
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1152
-        }
-      }
+      "beforeMs": 14865,
+      "afterMs": 5611,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.14055
     },
     {
       "id": "clothing-06",
@@ -348,24 +250,14 @@
       "title": "File:Dress up.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Dress_up.jpg",
       "license": "CC0",
-      "wasmMs": 15113,
-      "gpuMs": 6371,
-      "wasmOpaqueFrac": 0.23089680989583333,
-      "gpuOpaqueFrac": 0.23089680989583333,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 576,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 576
-        },
-        "gpu": {
-          "w": 768,
-          "h": 576
-        }
-      }
+      "beforeMs": 15113,
+      "afterMs": 5554,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.24647
     },
     {
       "id": "clothing-07",
@@ -373,24 +265,14 @@
       "title": "File:Infant's white cotton dress with pink and gold vertical stripes - DPLA - d2b640fad9f8620e0b2cd1a6baa51329 (page 1).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Infant%27s_white_cotton_dress_with_pink_and_gold_vertical_stripes_-_DPLA_-_d2b640fad9f8620e0b2cd1a6baa51329_(page_1).jpg",
       "license": "Public domain",
-      "wasmMs": 15638,
-      "gpuMs": 4680,
-      "wasmOpaqueFrac": 0.542982464437046,
-      "gpuOpaqueFrac": 0.542982464437046,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 991,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 991
-        },
-        "gpu": {
-          "w": 768,
-          "h": 991
-        }
-      }
+      "beforeMs": 15638,
+      "afterMs": 5332,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.55723
     },
     {
       "id": "clothing-08",
@@ -398,24 +280,14 @@
       "title": "File:Infant's white cotton dress with pink and gold vertical stripes - DPLA - d2b640fad9f8620e0b2cd1a6baa51329 (page 2).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Infant%27s_white_cotton_dress_with_pink_and_gold_vertical_stripes_-_DPLA_-_d2b640fad9f8620e0b2cd1a6baa51329_(page_2).jpg",
       "license": "Public domain",
-      "wasmMs": 15890,
-      "gpuMs": 3783,
-      "wasmOpaqueFrac": 0.5381720074152543,
-      "gpuOpaqueFrac": 0.5381720074152543,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 991,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 991
-        },
-        "gpu": {
-          "w": 768,
-          "h": 991
-        }
-      }
+      "beforeMs": 15890,
+      "afterMs": 5368,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.55236
     },
     {
       "id": "hair-fur-01",
@@ -423,24 +295,14 @@
       "title": "File:Beautiful girl in white sweater with a golden retriever dog. Christmas tree background.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Beautiful_girl_in_white_sweater_with_a_golden_retriever_dog._Christmas_tree_background.jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 16625,
-      "gpuMs": 4107,
-      "wasmOpaqueFrac": 0.5128777875586854,
-      "gpuOpaqueFrac": 0.5128773800208659,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1150,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1150
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1150
-        }
-      }
+      "beforeMs": 16625,
+      "afterMs": 5496,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.52818
     },
     {
       "id": "hair-fur-02",
@@ -448,24 +310,14 @@
       "title": "File:Black lab dog sephia.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Black_lab_dog_sephia.jpg",
       "license": "Public domain",
-      "wasmMs": 14489,
-      "gpuMs": 3716,
-      "wasmOpaqueFrac": 0.4842079162597656,
-      "gpuOpaqueFrac": 0.4842079162597656,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 614,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 614
-        },
-        "gpu": {
-          "w": 768,
-          "h": 614
-        }
-      }
+      "beforeMs": 14489,
+      "afterMs": 5483,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.49631
     },
     {
       "id": "hair-fur-03",
@@ -473,24 +325,14 @@
       "title": "File:Boxer dog posing on the grass.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Boxer_dog_posing_on_the_grass.jpg",
       "license": "CC0",
-      "wasmMs": 14274,
-      "gpuMs": 3845,
-      "wasmOpaqueFrac": 0.20677388628370458,
-      "gpuOpaqueFrac": 0.20677388628370458,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 14274,
+      "afterMs": 5644,
+      "ok": true,
+      "verdict": "FAIL(gate)",
+      "speckleFrac": 0.5,
+      "fgFrac": 0.22299
     },
     {
       "id": "hair-fur-04",
@@ -498,24 +340,14 @@
       "title": "File:Bush dog on a white background.png",
       "source": "https://commons.wikimedia.org/wiki/File:Bush_dog_on_a_white_background.png",
       "license": "CC0",
-      "wasmMs": 14452,
-      "gpuMs": 3064,
-      "wasmOpaqueFrac": 0.26207662515188335,
-      "gpuOpaqueFrac": 0.26207662515188335,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 494,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 494
-        },
-        "gpu": {
-          "w": 768,
-          "h": 494
-        }
-      }
+      "beforeMs": 14452,
+      "afterMs": 5788,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.27864
     },
     {
       "id": "hair-fur-05",
@@ -523,24 +355,14 @@
       "title": "File:White rabbit with blue eyes on a rock.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:White_rabbit_with_blue_eyes_on_a_rock.jpg",
       "license": "CC0",
-      "wasmMs": 14679,
-      "gpuMs": 4377,
-      "wasmOpaqueFrac": 0.25257821658851115,
-      "gpuOpaqueFrac": 0.25257821658851115,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 14679,
+      "afterMs": 5524,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.2637
     },
     {
       "id": "hair-fur-06",
@@ -548,24 +370,14 @@
       "title": "File:2020 Seaman and White River Herd Areas Wild Horse Gather (49057019778).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:2020_Seaman_and_White_River_Herd_Areas_Wild_Horse_Gather_(49057019778).jpg",
       "license": "Public domain",
-      "wasmMs": 13989,
-      "gpuMs": 3925,
-      "wasmOpaqueFrac": 0.048255720010341265,
-      "gpuOpaqueFrac": 0.048255720010341265,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 580,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 580
-        },
-        "gpu": {
-          "w": 768,
-          "h": 580
-        }
-      }
+      "beforeMs": 13989,
+      "afterMs": 5517,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.05338
     },
     {
       "id": "hair-fur-07",
@@ -573,24 +385,14 @@
       "title": "File:Black and white picture of a horse on a river bank. Houses and vehicles in the background (51151104640).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Black_and_white_picture_of_a_horse_on_a_river_bank._Houses_and_vehicles_in_the_background_(51151104640).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 16206,
-      "gpuMs": 5407,
-      "wasmOpaqueFrac": 0,
-      "gpuOpaqueFrac": 0,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 575,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 575
-        },
-        "gpu": {
-          "w": 768,
-          "h": 575
-        }
-      }
+      "beforeMs": 16206,
+      "afterMs": 5386,
+      "ok": true,
+      "verdict": "FAIL(empty)",
+      "speckleFrac": 0,
+      "fgFrac": 0
     },
     {
       "id": "hair-fur-08",
@@ -598,24 +400,14 @@
       "title": "File:Le Horse White Eagle (i.e. White Horse Eagle, chef amérindien Sioux de 107 ans) au Soldat inconnu, 13-12-28 - btv1b532075002.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Le_Horse_White_Eagle_(i.e._White_Horse_Eagle,_chef_am%C3%A9rindien_Sioux_de_107_ans)_au_Soldat_inconnu,_13-12-28_-_btv1b532075002.jpg",
       "license": "Public domain",
-      "wasmMs": 15731,
-      "gpuMs": 3920,
-      "wasmOpaqueFrac": 0,
-      "gpuOpaqueFrac": 0,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 550,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 550
-        },
-        "gpu": {
-          "w": 768,
-          "h": 550
-        }
-      }
+      "beforeMs": 15731,
+      "afterMs": 5862,
+      "ok": true,
+      "verdict": "FAIL(empty)",
+      "speckleFrac": 0,
+      "fgFrac": 0
     },
     {
       "id": "glass-transparent-01",
@@ -623,24 +415,14 @@
       "title": "File:Glass wine white background.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Glass_wine_white_background.jpg",
       "license": "Public domain",
-      "wasmMs": 15904,
-      "gpuMs": 4303,
-      "wasmOpaqueFrac": 0.3781332381370826,
-      "gpuOpaqueFrac": 0.3781332381370826,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1024,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1024
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1024
-        }
-      }
+      "beforeMs": 15904,
+      "afterMs": 5405,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.39177
     },
     {
       "id": "glass-transparent-02",
@@ -648,24 +430,14 @@
       "title": "File:Six wine glasses in red, orange, purple, green, yellow, and light green.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Six_wine_glasses_in_red,_orange,_purple,_green,_yellow,_and_light_green.jpg",
       "license": "CC0",
-      "wasmMs": 16181,
-      "gpuMs": 3758,
-      "wasmOpaqueFrac": 0.5032731119791667,
-      "gpuOpaqueFrac": 0.5032731119791667,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 576,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 576
-        },
-        "gpu": {
-          "w": 768,
-          "h": 576
-        }
-      }
+      "beforeMs": 16181,
+      "afterMs": 5380,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.53401
     },
     {
       "id": "glass-transparent-03",
@@ -673,24 +445,14 @@
       "title": "File:Six wine glasses in red, orange, purple, green, yellow, and light green (cropped).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Six_wine_glasses_in_red,_orange,_purple,_green,_yellow,_and_light_green_(cropped).jpg",
       "license": "CC0",
-      "wasmMs": 15485,
-      "gpuMs": 3252,
-      "wasmOpaqueFrac": 0.8022839765100671,
-      "gpuOpaqueFrac": 0.8022839765100671,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 447,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 447
-        },
-        "gpu": {
-          "w": 768,
-          "h": 447
-        }
-      }
+      "beforeMs": 15485,
+      "afterMs": 5653,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.81945
     },
     {
       "id": "glass-transparent-04",
@@ -698,24 +460,14 @@
       "title": "File:Yellow Glass (6449532733).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Yellow_Glass_(6449532733).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 15314,
-      "gpuMs": 3484,
-      "wasmOpaqueFrac": 0.09979445523891767,
-      "gpuOpaqueFrac": 0.09979445523891767,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1042,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1042
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1042
-        }
-      }
+      "beforeMs": 15314,
+      "afterMs": 5547,
+      "ok": true,
+      "verdict": "FAIL(gate)",
+      "speckleFrac": 0.5,
+      "fgFrac": 0.10563
     },
     {
       "id": "glass-transparent-05",
@@ -723,24 +475,14 @@
       "title": "File:Bottle, perfume (51360897639).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Bottle,_perfume_(51360897639).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 15487,
-      "gpuMs": 5679,
-      "wasmOpaqueFrac": 0.33245524088541667,
-      "gpuOpaqueFrac": 0.33245524088541667,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1152,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1152
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1152
-        }
-      }
+      "beforeMs": 15487,
+      "afterMs": 5946,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.34714
     },
     {
       "id": "glass-transparent-06",
@@ -748,24 +490,14 @@
       "title": "File:Bottle, scent (51359099367).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Bottle,_scent_(51359099367).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 15527,
-      "gpuMs": 3374,
-      "wasmOpaqueFrac": 0.04283411488862837,
-      "gpuOpaqueFrac": 0.04283411488862837,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 15527,
+      "afterMs": 5642,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.05017
     },
     {
       "id": "glass-transparent-07",
@@ -773,24 +505,14 @@
       "title": "File:Bottle, scent (51360593019).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Bottle,_scent_(51360593019).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 15639,
-      "gpuMs": 3723,
-      "wasmOpaqueFrac": 0.06620841881594373,
-      "gpuOpaqueFrac": 0.06620841881594373,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 15639,
+      "afterMs": 5760,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.0742
     },
     {
       "id": "glass-transparent-08",
@@ -798,24 +520,14 @@
       "title": "File:Bottle with flowers of the four seasons (IA mma bottle with flowers of the four seasons 208279).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Bottle_with_flowers_of_the_four_seasons_(IA_mma_bottle_with_flowers_of_the_four_seasons_208279).jpg",
       "license": "Public domain",
-      "wasmMs": 15863,
-      "gpuMs": 9261,
-      "wasmOpaqueFrac": 0.29053662109375,
-      "gpuOpaqueFrac": 0.29053662109375,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 960,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 960
-        },
-        "gpu": {
-          "w": 768,
-          "h": 960
-        }
-      }
+      "beforeMs": 15863,
+      "afterMs": 5525,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.29985
     },
     {
       "id": "accessory-01",
@@ -823,24 +535,14 @@
       "title": "File:Flying shoe in the air.JPG",
       "source": "https://commons.wikimedia.org/wiki/File:Flying_shoe_in_the_air.JPG",
       "license": "CC0",
-      "wasmMs": 14501,
-      "gpuMs": 11269,
-      "wasmOpaqueFrac": 0.4920043663394919,
-      "gpuOpaqueFrac": 0.4920043663394919,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 520,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 520
-        },
-        "gpu": {
-          "w": 768,
-          "h": 520
-        }
-      }
+      "beforeMs": 14501,
+      "afterMs": 5611,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.5066
     },
     {
       "id": "accessory-02",
@@ -848,24 +550,14 @@
       "title": "File:Ladies' ballroom shoes, Tango Shoes 1.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Ladies%27_ballroom_shoes,_Tango_Shoes_1.jpg",
       "license": "Public domain",
-      "wasmMs": 15001,
-      "gpuMs": 11541,
-      "wasmOpaqueFrac": 0.25315247655334117,
-      "gpuOpaqueFrac": 0.25315247655334117,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 15001,
+      "afterMs": 5520,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.26979
     },
     {
       "id": "accessory-03",
@@ -873,24 +565,14 @@
       "title": "File:Mens' ballroom shoes, Eurodance CZ.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Mens%27_ballroom_shoes,_Eurodance_CZ.jpg",
       "license": "Public domain",
-      "wasmMs": 15676,
-      "gpuMs": 10185,
-      "wasmOpaqueFrac": 0.3207997508792497,
-      "gpuOpaqueFrac": 0.3207997508792497,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 15676,
+      "afterMs": 5652,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.34047
     },
     {
       "id": "accessory-04",
@@ -898,24 +580,14 @@
       "title": "File:Roberts, Johnson, and Rand Shoe Company Children's Bobbie Style High-Top Lace-up Boots.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Roberts,_Johnson,_and_Rand_Shoe_Company_Children%27s_Bobbie_Style_High-Top_Lace-up_Boots.jpg",
       "license": "Public domain",
-      "wasmMs": 15341,
-      "gpuMs": 12275,
-      "wasmOpaqueFrac": 0.36291214830011725,
-      "gpuOpaqueFrac": 0.36291214830011725,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 15341,
+      "afterMs": 5843,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.38049
     },
     {
       "id": "accessory-05",
@@ -923,24 +595,14 @@
       "title": "File:Generic analog watch.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Generic_analog_watch.jpg",
       "license": "CC0",
-      "wasmMs": 15389,
-      "gpuMs": 8975,
-      "wasmOpaqueFrac": 0.34266256590509664,
-      "gpuOpaqueFrac": 0.34266256590509664,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1024,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1024
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1024
-        }
-      }
+      "beforeMs": 15389,
+      "afterMs": 5868,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.35248
     },
     {
       "id": "accessory-06",
@@ -948,24 +610,14 @@
       "title": "File:Tissot chronograph watch on white background.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Tissot_chronograph_watch_on_white_background.jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14653,
-      "gpuMs": 12963,
-      "wasmOpaqueFrac": 0.5518258492867868,
-      "gpuOpaqueFrac": 0.5518258492867868,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 799,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 799
-        },
-        "gpu": {
-          "w": 768,
-          "h": 799
-        }
-      }
+      "beforeMs": 14653,
+      "afterMs": 6031,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.55966
     },
     {
       "id": "accessory-07",
@@ -973,24 +625,14 @@
       "title": "File:Ad pillar, street view, portrait, lady, handbag Fortepan 52840.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Ad_pillar,_street_view,_portrait,_lady,_handbag_Fortepan_52840.jpg",
       "license": "Public domain",
-      "wasmMs": 14514,
-      "gpuMs": 7567,
-      "wasmOpaqueFrac": 0.03277260638297872,
-      "gpuOpaqueFrac": 0.03277260638297872,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 564,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 564
-        },
-        "gpu": {
-          "w": 768,
-          "h": 564
-        }
-      }
+      "beforeMs": 14514,
+      "afterMs": 5506,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.03779
     },
     {
       "id": "accessory-08",
@@ -998,24 +640,14 @@
       "title": "File:Handbag, Women's (48708258183).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Handbag,_Women%27s_(48708258183).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 15783,
-      "gpuMs": 10648,
-      "wasmOpaqueFrac": 0.8563058689917936,
-      "gpuOpaqueFrac": 0.8563058689917936,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 15783,
+      "afterMs": 5704,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.86935
     },
     {
       "id": "complex-bg-01",
@@ -1023,24 +655,14 @@
       "title": "File:Barefoot Woman Hiking at Alberta Falls, Rocky Mountain National Park.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Barefoot_Woman_Hiking_at_Alberta_Falls,_Rocky_Mountain_National_Park.jpg",
       "license": "CC BY 4.0",
-      "wasmMs": 15155,
-      "gpuMs": 10215,
-      "wasmOpaqueFrac": 0.0573021931751611,
-      "gpuOpaqueFrac": 0.0573021931751611,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1024,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1024
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1024
-        }
-      }
+      "beforeMs": 15155,
+      "afterMs": 5592,
+      "ok": true,
+      "verdict": "FAIL(gate)",
+      "speckleFrac": 0.75,
+      "fgFrac": 0.06563
     },
     {
       "id": "complex-bg-02",
@@ -1048,24 +670,14 @@
       "title": "File:Woman enjoying warm drink in a cozy sweater while standing outdoors in a serene forest atmosphere.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Woman_enjoying_warm_drink_in_a_cozy_sweater_while_standing_outdoors_in_a_serene_forest_atmosphere.jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14878,
-      "gpuMs": 6369,
-      "wasmOpaqueFrac": 0.09334776017214398,
-      "gpuOpaqueFrac": 0.09334776017214398,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1150,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1150
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1150
-        }
-      }
+      "beforeMs": 14878,
+      "afterMs": 5579,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.09986
     },
     {
       "id": "complex-bg-03",
@@ -1073,24 +685,14 @@
       "title": "File:Woman enjoys the outdoors while standing beside a camper.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Woman_enjoys_the_outdoors_while_standing_beside_a_camper.jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14229,
-      "gpuMs": 12639,
-      "wasmOpaqueFrac": 0.10766670334507042,
-      "gpuOpaqueFrac": 0.10766670334507042,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 511,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 511
-        },
-        "gpu": {
-          "w": 768,
-          "h": 511
-        }
-      }
+      "beforeMs": 14229,
+      "afterMs": 5623,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.11789
     },
     {
       "id": "complex-bg-04",
@@ -1098,24 +700,14 @@
       "title": "File:Woman giving Vulcan salute.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Woman_giving_Vulcan_salute.jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14483,
-      "gpuMs": 11726,
-      "wasmOpaqueFrac": 0.317508253791841,
-      "gpuOpaqueFrac": 0.317508253791841,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1147,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1147
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1147
-        }
-      }
+      "beforeMs": 14483,
+      "afterMs": 5593,
+      "ok": true,
+      "verdict": "FAIL(gate)",
+      "speckleFrac": 0.6667,
+      "fgFrac": 0.33789
     },
     {
       "id": "complex-bg-05",
@@ -1123,24 +715,14 @@
       "title": "File:Burning Man 2013 Dance Party in Deep Playa (10226923844).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Burning_Man_2013_Dance_Party_in_Deep_Playa_(10226923844).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14513,
-      "gpuMs": 11287,
-      "wasmOpaqueFrac": 0,
-      "gpuOpaqueFrac": 0,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 576,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 576
-        },
-        "gpu": {
-          "w": 768,
-          "h": 576
-        }
-      }
+      "beforeMs": 14513,
+      "afterMs": 5682,
+      "ok": true,
+      "verdict": "FAIL(empty)",
+      "speckleFrac": 0,
+      "fgFrac": 0
     },
     {
       "id": "complex-bg-06",
@@ -1148,24 +730,14 @@
       "title": "File:Man playing saxophone.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Man_playing_saxophone.jpg",
       "license": "Public domain",
-      "wasmMs": 14540,
-      "gpuMs": 12548,
-      "wasmOpaqueFrac": 0.36368302453680523,
-      "gpuOpaqueFrac": 0.36368263332498746,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1198,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1198
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1198
-        }
-      }
+      "beforeMs": 14540,
+      "afterMs": 5789,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.37693
     },
     {
       "id": "complex-bg-07",
@@ -1173,24 +745,14 @@
       "title": "File:Man standing in a tall tree forest (49488603843).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Man_standing_in_a_tall_tree_forest_(49488603843).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14665,
-      "gpuMs": 9682,
-      "wasmOpaqueFrac": 0.005776307117750439,
-      "gpuOpaqueFrac": 0.005776307117750439,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1024,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1024
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1024
-        }
-      }
+      "beforeMs": 14665,
+      "afterMs": 5530,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.00772
     },
     {
       "id": "complex-bg-08",
@@ -1198,24 +760,14 @@
       "title": "File:Man vanguard glasses outdoors (Unsplash).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Man_vanguard_glasses_outdoors_(Unsplash).jpg",
       "license": "CC0",
-      "wasmMs": 14394,
-      "gpuMs": 13150,
-      "wasmOpaqueFrac": 0.396523125,
-      "gpuOpaqueFrac": 0.396523125,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 750,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 750
-        },
-        "gpu": {
-          "w": 768,
-          "h": 750
-        }
-      }
+      "beforeMs": 14394,
+      "afterMs": 5747,
+      "ok": true,
+      "verdict": "FAIL(gate)",
+      "speckleFrac": 0.6667,
+      "fgFrac": 0.40874
     },
     {
       "id": "large-01",
@@ -1223,24 +775,14 @@
       "title": "File:White prairie clover flower dalea candida stem with the bottom flowering white and the top green.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:White_prairie_clover_flower_dalea_candida_stem_with_the_bottom_flowering_white_and_the_top_green.jpg",
       "license": "Public domain",
-      "wasmMs": 14676,
-      "gpuMs": 9619,
-      "wasmOpaqueFrac": 0.09111517522966996,
-      "gpuOpaqueFrac": 0.09111464358625383,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1176,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1176
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1176
-        }
-      }
+      "beforeMs": 14676,
+      "afterMs": 5510,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.12826
     },
     {
       "id": "large-02",
@@ -1248,24 +790,14 @@
       "title": "File:Birthday flower bouquet - 2021-08-26 - Sarah Stierch.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Birthday_flower_bouquet_-_2021-08-26_-_Sarah_Stierch.jpg",
       "license": "CC BY 4.0",
-      "wasmMs": 15305,
-      "gpuMs": 9645,
-      "wasmOpaqueFrac": 0.4642667643229167,
-      "gpuOpaqueFrac": 0.4642669677734375,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1024,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1024
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1024
-        }
-      }
+      "beforeMs": 15305,
+      "afterMs": 5594,
+      "ok": true,
+      "verdict": "FAIL(gate)",
+      "speckleFrac": 0.5,
+      "fgFrac": 0.4806
     },
     {
       "id": "large-03",
@@ -1273,24 +805,14 @@
       "title": "File:Bouquet 2026 G1.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Bouquet_2026_G1.jpg",
       "license": "CC BY 4.0",
-      "wasmMs": 15671,
-      "gpuMs": 12560,
-      "wasmOpaqueFrac": 0.290162037037037,
-      "gpuOpaqueFrac": 0.290162037037037,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1033,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1033
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1033
-        }
-      }
+      "beforeMs": 15671,
+      "afterMs": 5854,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.31042
     },
     {
       "id": "large-04",
@@ -1298,24 +820,14 @@
       "title": "File:Bouquet of flowers - Jan van Huijsum.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Bouquet_of_flowers_-_Jan_van_Huijsum.jpg",
       "license": "CC BY 4.0",
-      "wasmMs": 15018,
-      "gpuMs": 6504,
-      "wasmOpaqueFrac": 0.9373627804487179,
-      "gpuOpaqueFrac": 0.9373627804487179,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 832,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 832
-        },
-        "gpu": {
-          "w": 768,
-          "h": 832
-        }
-      }
+      "beforeMs": 15018,
+      "afterMs": 5965,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.1151
     },
     {
       "id": "large-05",
@@ -1323,24 +835,14 @@
       "title": "File:Flower arrangement.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Flower_arrangement.jpg",
       "license": "CC0",
-      "wasmMs": 14922,
-      "gpuMs": 10645,
-      "wasmOpaqueFrac": 0.4879787190755208,
-      "gpuOpaqueFrac": 0.4879787190755208,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1024,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1024
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1024
-        }
-      }
+      "beforeMs": 14922,
+      "afterMs": 6005,
+      "ok": true,
+      "verdict": "FAIL(gate)",
+      "speckleFrac": 0.3333,
+      "fgFrac": 0.51905
     },
     {
       "id": "large-06",
@@ -1348,24 +850,14 @@
       "title": "File:Cactus flower extracted.png",
       "source": "https://commons.wikimedia.org/wiki/File:Cactus_flower_extracted.png",
       "license": "CC0",
-      "wasmMs": 14803,
-      "gpuMs": 8696,
-      "wasmOpaqueFrac": 0.5858270941840278,
-      "gpuOpaqueFrac": 0.5858270941840278,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 768,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 768
-        },
-        "gpu": {
-          "w": 768,
-          "h": 768
-        }
-      }
+      "beforeMs": 14803,
+      "afterMs": 5941,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.59665
     },
     {
       "id": "large-07",
@@ -1373,24 +865,14 @@
       "title": "File:Close-up of a specimen of Old man cactus (Opuntia Polyacantha Trichoplora), ca.1920 (CHS-1912).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Close-up_of_a_specimen_of_Old_man_cactus_(Opuntia_Polyacantha_Trichoplora),_ca.1920_(CHS-1912).jpg",
       "license": "Public domain",
-      "wasmMs": 15151,
-      "gpuMs": 9354,
-      "wasmOpaqueFrac": 0.11819459625066242,
-      "gpuOpaqueFrac": 0.11819438924218335,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1006,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1006
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1006
-        }
-      }
+      "beforeMs": 15151,
+      "afterMs": 5745,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.27609
     },
     {
       "id": "large-08",
@@ -1398,24 +880,14 @@
       "title": "File:Close-up of a specimen of a cactus in blossom, ca.1920 (CHS-1558).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Close-up_of_a_specimen_of_a_cactus_in_blossom,_ca.1920_(CHS-1558).jpg",
       "license": "Public domain",
-      "wasmMs": 15384,
-      "gpuMs": 12822,
-      "wasmOpaqueFrac": 0.37019424019607844,
-      "gpuOpaqueFrac": 0.37019424019607844,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1020,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1020
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1020
-        }
-      }
+      "beforeMs": 15384,
+      "afterMs": 5907,
+      "ok": true,
+      "verdict": "FAIL(gate)",
+      "speckleFrac": 0.5,
+      "fgFrac": 0.3856
     },
     {
       "id": "thin-structure-01",
@@ -1423,24 +895,14 @@
       "title": "File:Black Titanium Frame Eyeglasses, JINS MTF-16S-151B, 1.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Black_Titanium_Frame_Eyeglasses,_JINS_MTF-16S-151B,_1.jpg",
       "license": "CC0",
-      "wasmMs": 14917,
-      "gpuMs": 8562,
-      "wasmOpaqueFrac": 0.06126447098475967,
-      "gpuOpaqueFrac": 0.06126447098475967,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 14917,
+      "afterMs": 5851,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.08187
     },
     {
       "id": "thin-structure-02",
@@ -1448,24 +910,14 @@
       "title": "File:Black Titanium Frame Eyeglasses, JINS MTF-16S-151B, 2.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Black_Titanium_Frame_Eyeglasses,_JINS_MTF-16S-151B,_2.jpg",
       "license": "CC0",
-      "wasmMs": 14136,
-      "gpuMs": 8972,
-      "wasmOpaqueFrac": 0.13333913393903868,
-      "gpuOpaqueFrac": 0.13333913393903868,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 14136,
+      "afterMs": 5917,
+      "ok": true,
+      "verdict": "PASS",
+      "speckleFrac": 0,
+      "fgFrac": 0.14594
     },
     {
       "id": "thin-structure-03",
@@ -1473,24 +925,14 @@
       "title": "File:CPLA Cutlery.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:CPLA_Cutlery.jpg",
       "license": "CC BY 4.0",
-      "wasmMs": 14754,
-      "gpuMs": 8880,
-      "wasmOpaqueFrac": 0.1617327880859375,
-      "gpuOpaqueFrac": 0.1617327880859375,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 768,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 768
-        },
-        "gpu": {
-          "w": 768,
-          "h": 768
-        }
-      }
+      "beforeMs": 14754,
+      "afterMs": 6011,
+      "ok": true,
+      "verdict": "FAIL(gate)",
+      "speckleFrac": 0.5,
+      "fgFrac": 0.18325
     },
     {
       "id": "thin-structure-04",
@@ -1498,24 +940,14 @@
       "title": "File:Close-up of a wooden cutlery tray. Forks, spoons and knives.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Close-up_of_a_wooden_cutlery_tray._Forks,_spoons_and_knives.jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14273,
-      "gpuMs": 6269,
-      "wasmOpaqueFrac": 0,
-      "gpuOpaqueFrac": 0,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 512,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 512
-        },
-        "gpu": {
-          "w": 768,
-          "h": 512
-        }
-      }
+      "beforeMs": 14273,
+      "afterMs": 5879,
+      "ok": true,
+      "verdict": "FAIL(empty)",
+      "speckleFrac": 0,
+      "fgFrac": 0
     },
     {
       "id": "thin-structure-05",
@@ -1523,24 +955,14 @@
       "title": "File:Cutlery, knife & fork (51368794896).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Cutlery,_knife_%26_fork_(51368794896).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14608,
-      "gpuMs": 7304,
-      "wasmOpaqueFrac": 0.10258829752604166,
-      "gpuOpaqueFrac": 0.10258829752604166,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1152,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1152
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1152
-        }
-      }
+      "beforeMs": 14608,
+      "afterMs": 5393,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.11998
     },
     {
       "id": "thin-structure-06",
@@ -1548,24 +970,14 @@
       "title": "File:Cutlery (51359407562).jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Cutlery_(51359407562).jpg",
       "license": "CC BY 2.0",
-      "wasmMs": 14409,
-      "gpuMs": 11406,
-      "wasmOpaqueFrac": 0.112855224609375,
-      "gpuOpaqueFrac": 0.112855224609375,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1152,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1152
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1152
-        }
-      }
+      "beforeMs": 14409,
+      "afterMs": 5564,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.13139
     },
     {
       "id": "thin-structure-07",
@@ -1573,24 +985,14 @@
       "title": "File:An old type scissors at Kakinada.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:An_old_type_scissors_at_Kakinada.jpg",
       "license": "CC BY 4.0",
-      "wasmMs": 15281,
-      "gpuMs": 9464,
-      "wasmOpaqueFrac": 0.11098097905682484,
-      "gpuOpaqueFrac": 0.11098097905682484,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 1024,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 1024
-        },
-        "gpu": {
-          "w": 768,
-          "h": 1024
-        }
-      }
+      "beforeMs": 15281,
+      "afterMs": 5414,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.12942
     },
     {
       "id": "thin-structure-08",
@@ -1598,24 +1000,14 @@
       "title": "File:Crossed scissors.jpg",
       "source": "https://commons.wikimedia.org/wiki/File:Crossed_scissors.jpg",
       "license": "CC0",
-      "wasmMs": 15062,
-      "gpuMs": 7539,
-      "wasmOpaqueFrac": 0.18686658321823205,
-      "gpuOpaqueFrac": 0.18686658321823205,
-      "wasmOk": true,
-      "gpuOk": true,
       "width": 768,
       "height": 434,
-      "dims": {
-        "wasm": {
-          "w": 768,
-          "h": 434
-        },
-        "gpu": {
-          "w": 768,
-          "h": 434
-        }
-      }
+      "beforeMs": 15062,
+      "afterMs": 5663,
+      "ok": true,
+      "verdict": "REVIEW",
+      "speckleFrac": 0,
+      "fgFrac": 0.22391
     }
   ]
 }

@@ -1,19 +1,23 @@
 // Builds a static evaluation gallery from local eval runs. Two modes:
 //
-//   trio (default) — original | WASM/CPU cut-out | WebGPU cut-out, two runs.
+//   backends (default) — original | WASM/CPU cut-out | WebGPU cut-out, two runs.
 //     node scripts/build-eval-gallery.mjs [--wasm <dir>] [--gpu <dir>] [--out <dir>]
 //
-//   duo (--run) — original | cut-out for ONE run, each card badged with that
-//   run's benchmark verdict when `benchmark.json` sits beside `report.json`.
+//   single run (--run) — original | cut-out for ONE run, each card badged with
+//   that run's benchmark verdict when `benchmark.json` sits beside `report.json`.
 //     node scripts/build-eval-gallery.mjs --run eval-results/after-145
+//
+// Both modes write to scratch directories under eval-results/ (gitignored);
+// scripts/merge-eval-galleries.mjs combines two of them into the committed
+// three-layer page at public/eval-gallery/.
 //
 // Sources (all local, none committed to the gallery as-is):
 //   - originals:  eval/images/<id>.{jpg,JPG,png}   (tracked in the repo)
 //   - a run dir:  <run>/outputs/<id>.png + report.json [+ benchmark.json]
 //
-// Output (committed, served from public/):
-//   public/eval-gallery/      <id>-original.webp <id>-wasm.webp <id>-gpu.webp gallery.json
-//   public/eval-gallery-2up/  <id>-original.webp <id>-cutout.webp gallery.json
+// Output:
+//   eval-results/gallery-backends/  <id>-original.webp <id>-wasm.webp <id>-gpu.webp gallery.json
+//   eval-results/gallery-2up/       <id>-original.webp <id>-cutout.webp gallery.json
 //
 // The eval PNGs are ~3 MB each (192 MB total), so everything is downscaled and
 // re-encoded to WebP in a headless browser — the same approach as
@@ -34,7 +38,7 @@ const arg = (name, fallback) => {
   return i >= 0 ? process.argv[i + 1] : fallback;
 };
 const RUN_DIR = arg('--run', null) && resolve(ROOT, arg('--run', null));
-const OUT = resolve(ROOT, arg('--out', RUN_DIR ? 'public/eval-gallery-2up' : 'public/eval-gallery'));
+const OUT = resolve(ROOT, arg('--out', RUN_DIR ? 'eval-results/gallery-2up' : 'eval-results/gallery-backends'));
 const rel = (p) => p.replace(`${ROOT}/`, '');
 
 const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));

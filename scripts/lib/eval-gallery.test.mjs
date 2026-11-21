@@ -6,6 +6,9 @@ import {
   buildPairs,
   summarizeRun,
   verdictFamily,
+  mergeGalleries,
+  summarizeMerged,
+  MERGED_LAYERS,
 } from './eval-gallery.mjs';
 
 const row = (id, extra = {}) => ({
@@ -157,5 +160,100 @@ describe('summarizeRun', () => {
 
   it('does not divide by zero on an empty list', () => {
     expect(summarizeRun([], 'm').meanMs).toBe(0);
+  });
+});
+
+describe('mergeGalleries', () => {
+  const older = (id, extra = {}) => ({
+    id,
+    category: 'accessory',
+    title: `File:${id}.jpg`,
+    source: 'https://example.org',
+    license: 'Public domain',
+    wasmMs: 15000,
+    gpuMs: 7000,
+    width: 768,
+    height: 1024,
+    ...extra,
+  });
+  const newer = (id, extra = {}) => ({
+    id,
+    category: 'accessory',
+    title: `File:${id}.jpg`,
+    source: 'https://example.org',
+    license: 'Public domain',
+    ms: 5000,
+    ok: true,
+    verdict: 'REVIEW',
+    speckleFrac: 0.01,
+    fgFrac: 0.4,
+    width: 768,
+    height: 1024,
+    ...extra,
+  });
+
+  it('keeps only ids present in both galleries', () => {
+    const { cases, skipped } = mergeGalleries(
+      { cases: [older('a'), older('only-old')] },
+      { cases: [newer('a'), newer('only-new')] },
+    );
+    expect(cases.map((c) => c.id)).toEqual(['a']);
+    expect(skipped).toEqual(['only-old']);
+  });
+
+  it('takes the before timing from the older gallery and the after one from the newer', () => {
+    const { cases } = mergeGalleries({ cases: [older('a')] }, { cases: [newer('a')] });
+    expect(cases[0].beforeMs).toBe(15000);
+    expect(cases[0].afterMs).toBe(5000);
+    expect(cases[0].verdict).toBe('REVIEW');
+    expect(cases[0].speckleFrac).toBe(0.01);
+    expect(cases[0].width).toBe(768);
+  });
+
+  it('drops cases whose layer files are missing', () => {
+    const hasFile = (id, layer) => !(id === 'a' && layer === 'after');
+    const { cases, skipped } = mergeGalleries(
+      { cases: [older('a'), older('b')] },
+      { cases: [newer('a'), newer('b')] },
+      { hasFile },
+    );
+    expect(cases.map((c) => c.id)).toEqual(['b']);
+    expect(skipped).toEqual(['a']);
+  });
+
+  it('treats a missing ok flag as success and keeps a false one', () => {
+    const { cases } = mergeGalleries(
+      { cases: [older('a'), older('b')] },
+      { cases: [newer('a', { ok: undefined }), newer('b', { ok: false })] },
+    );
+    expect(cases.map((c) => c.ok)).toEqual([true, false]);
+  });
+
+  it('describes exactly three layers, bottom to top', () => {
+    expect(MERGED_LAYERS.map((l) => l.key)).toEqual(['before', 'after', 'original']);
+    expect(MERGED_LAYERS.map((l) => l.suffix)).toEqual(['-before.webp', '-after.webp', '-original.webp']);
+  });
+});
+
+describe('summarizeMerged', () => {
+  it('averages both runs and counts the verdict families', () => {
+    const cases = [
+      { beforeMs: 10000, afterMs: 4000, verdict: 'PASS' },
+      { beforeMs: 20000, afterMs: 6000, verdict: 'FAIL(gate)' },
+      { beforeMs: 15000, afterMs: 8000, verdict: 'FAIL(empty)' },
+      { beforeMs: null, afterMs: 8000, verdict: null },
+    ];
+    const s = summarizeMerged(cases, 'qmix-cut-512');
+    expect(s.total).toBe(4);
+    expect(s.meanBeforeMs).toBe(15000);
+    expect(s.meanAfterMs).toBe(6500);
+    expect(s.verdicts).toEqual({ PASS: 1, REVIEW: 0, FAIL: 1, empty: 1 });
+  });
+
+  it('does not divide by zero on an empty list', () => {
+    const s = summarizeMerged([], 'm');
+    expect(s.meanBeforeMs).toBe(0);
+    expect(s.meanAfterMs).toBe(0);
+    expect(s.total).toBe(0);
   });
 });

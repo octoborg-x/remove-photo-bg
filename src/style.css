@@ -1196,6 +1196,9 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    /* Scroll the panel, not the export bar: the result preview has a 320px
+       minimum, so without this it paints over the bar below. */
+    overflow-y: auto;
   }
   #panelStep[hidden],
   #panelBulk[hidden],
@@ -1669,6 +1672,12 @@
   }
   .bottomBar[hidden] {
     display: none;
+  }
+  /* In the tab body the bar shares vertical space with the panel. Let it take
+     the height its controls need and scroll the tab body instead of clipping
+     the download button below the bar's max-height. */
+  .studioTabBody > .bottomBar {
+    max-height: none;
   }
   .bottomBarHead {
     display: flex;

@@ -515,7 +515,9 @@ try {
     );
 
     // Bulk and Library are available once a result exists, and the old Compare
-    // tab is gone.
+    // tab is gone. Wait for refinement to settle so the engine is no longer
+    // owned by the run (the Bulk tab is disabled while it is).
+    await page.waitForFunction(() => !document.getElementById('tabBulk')?.disabled, { timeout: 600000 });
     const tabsState = await page.evaluate(() => ({
       compareGone: !document.getElementById('tabCompare') && !document.getElementById('panelCompare'),
       bulkEnabled: !document.getElementById('tabBulk')?.disabled,
@@ -541,7 +543,7 @@ try {
       const afterColor = {
         download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
         pressed: document.getElementById('bgTransparentBtn')?.getAttribute('aria-pressed'),
-        compareAfter: document.getElementById('compareAfter')?.getAttribute('src') ?? '',
+        compareAfter: document.querySelector('#outputBox .resultCompare .compareAfter')?.getAttribute('src') ?? '',
       };
       document.getElementById('bgTransparentBtn').click();
       const afterTransparent = {

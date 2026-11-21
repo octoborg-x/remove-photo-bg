@@ -665,6 +665,13 @@ try {
     // monospace line per event, newest at the bottom, with a prompt glyph. There
     // are no threads, chevrons, or collapsible groups, and no pipeline-dot row.
     // The Zero-Upload statement is hidden behind a clickable icon.
+    // The console starts hidden now; show it so its layout can be measured.
+    const consoleStartsHidden = await page.evaluate(
+      () => document.querySelector('.studioGrid')?.dataset.console === 'hidden',
+    );
+    record('the console is hidden by default', consoleStartsHidden === true, String(consoleStartsHidden));
+    await page.evaluate(() => document.getElementById('consoleToggle').click());
+
     const panelState = await page.evaluate(() => {
       const consoleEl = document.querySelector('.consoleCard');
       const inStudio = !!document.getElementById('studio')?.contains(consoleEl);
@@ -870,8 +877,6 @@ try {
       const closeBtn = document.getElementById('consoleClose');
       const handle = document.getElementById('consoleResize');
       const gridH = grid.getBoundingClientRect().height;
-      const initiallyHidden = grid.dataset.console === 'hidden';
-      toggle.click();
       const openH = col.getBoundingClientRect().height;
       const cap = gridH * 0.5;
       const floor = gridH * 0.2;
@@ -891,12 +896,11 @@ try {
       toggle.click();
       const shownAgain = grid.dataset.console !== 'hidden';
       const togglePressedWhenShown = toggle.getAttribute('aria-pressed');
-      return { gridH, initiallyHidden, openH, cap, floor, grownH, shrunkH, hiddenByClose, shownAgain, togglePressedWhenHidden, togglePressedWhenShown };
+      return { gridH, openH, cap, floor, grownH, shrunkH, hiddenByClose, shownAgain, togglePressedWhenHidden, togglePressedWhenShown };
     });
     record(
-      'the console is hidden by default and has a show/hide toggle and an in-card close button',
-      consoleControls.initiallyHidden === true &&
-        consoleControls.hiddenByClose === true &&
+      'the console has a show/hide toggle and an in-card close button',
+      consoleControls.hiddenByClose === true &&
         consoleControls.shownAgain === true &&
         consoleControls.togglePressedWhenHidden === 'false' &&
         consoleControls.togglePressedWhenShown === 'true',

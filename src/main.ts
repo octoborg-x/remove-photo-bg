@@ -20,7 +20,7 @@ import {
   isMaskAdjust,
   type MaskAdjust,
 } from './features/background-removal/mask-postprocess';
-import { composeResult } from './features/background-removal/composite';
+import { composeResult, previewSize } from './features/background-removal/composite';
 import { recoverForegroundMask, despeckleRecoveredMask } from './features/background-removal/mask-recovery';
 import {
   rawMaskStats,
@@ -52,11 +52,13 @@ import {
   initialSession,
   reduceSession,
   activeEntry,
+  type SessionEntry,
   type SessionState,
 } from './features/background-removal/session-library';
 import { RefinementRunner } from './features/background-removal/refinement-client';
 import {
   refinementConfigFromParams,
+  resolveRefinementConfig,
   type FastRefinementConfig,
 } from './features/background-removal/refinement-config';
 import {
@@ -226,6 +228,7 @@ const sidebarResizeEl = document.getElementById('sidebarResize');
 // cut-out exists and toggled from the studio top bar.
 const exportBarEl = document.getElementById('exportBar') as HTMLElement | null;
 const exportToggleBtn = document.getElementById('exportToggle') as HTMLButtonElement | null;
+const bottomBarCollapseBtn = document.getElementById('bottomBarCollapse') as HTMLButtonElement | null;
 // Tiled-inference + edge-refinement engine controls (shared sidebar).
 const tilingSelect = document.getElementById('tilingSelect') as HTMLSelectElement | null;
 const tilingValueEl = document.getElementById('tilingValue');
@@ -256,6 +259,16 @@ let studioView = initialStudioView();
 // are kept here, on the main thread. Nothing is persisted.
 let session: SessionState = initialSession();
 const libraryBlobs = new Map<number, Blob>();
+// The full-resolution PNG cut-out for every completed library version, kept so
+// a version can be re-opened, re-composited on another background and
+// downloaded without running inference again.
+const libraryResultBlobs = new Map<number, Blob>();
+// The library entry the current run's result belongs to. A preview and its
+// refined final update the same entry; a fresh re-process adds a new version.
+let currentRunStoredEntryId: number | null = null;
+// Guards against a slow PNG encode from an older run landing after a newer run
+// has started (the queue is serial, the token is the run identity).
+let libraryRunToken = 0;
 let currentImageName = 'Photo';
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
@@ -761,7 +774,11 @@ function applyMaskUi(): void {
 // Clears a previous result so a newly chosen photo never sits above a stale
 // export, and hides the download section until a fresh mask is rendered.
 function clearOutput(): void {
+  // Cancel any queued library write from the result being replaced.
+  libraryRunToken += 1;
   outputBox.innerHTML = '';
+  outputBox.classList.remove('hasResultCompare');
+  resultCompareFigure = null;
   downloadImageBtn.hidden = true;
   downloadImageBtn.removeAttribute('href');
   lastResultCanvas = null;
@@ -780,6 +797,8 @@ let lastResultCanvas: HTMLCanvasElement | null = null;
 // background or format never re-encodes a full-resolution PNG just to repaint
 // the display. Rebuilt whenever a new result is composited.
 let lastPreviewCanvas: HTMLCanvasElement | null = null;
+// The before/after slider in the Result editor, reused across background changes.
+let resultCompareFigure: HTMLElement | null = null;
 let exportFormat: ExportFormat = initExportFormat();
 
 function initExportFormat(): ExportFormat {
@@ -816,10 +835,12 @@ function renderFormatOptions(): void {
     });
     label.appendChild(input);
     label.appendChild(document.createTextNode(format.label));
-    const hint = document.createElement('span');
-    hint.className = 'formatHint';
-    hint.textContent = `— ${available ? format.description : 'not supported by this browser'}`;
-    label.appendChild(hint);
+    if (!available) {
+      const hint = document.createElement('span');
+      hint.className = 'formatHint';
+      hint.textContent = 'not supported';
+      label.appendChild(hint);
+    }
     formatOptionsEl.appendChild(label);
   }
 }
@@ -836,7 +857,7 @@ function setExportFormat(format: ExportFormat): void {
 // result when one exists.
 function applyFormatUi(): void {
   const info = exportFormatInfo(exportFormat);
-  downloadImageBtn.textContent = `Download ${info.label} (${info.description})`;
+  downloadImageBtn.textContent = `Download ${info.label}`;
   if (lastResultCanvas) {
     const { width, height } = lastResultCanvas;
     const href = canvasToDataUrl(lastResultCanvas, exportFormat, background);
@@ -892,13 +913,43 @@ function saveBackground(): void {
 function renderResultPreview(): void {
   const display = lastPreviewCanvas ?? lastResultCanvas;
   if (!display) return;
-  outputBox.innerHTML = '';
-  const img = document.createElement('img');
-  img.src = canvasToDataUrl(display, 'png', background);
-  img.alt = 'Background removed';
-  outputBox.appendChild(img);
+
+  const afterSrc = canvasToDataUrl(display, 'png', background);
+  // Build the slider once per result. Rebuilding it on every background change
+  // would re-register its window listeners on each alpha-slider tick.
+  let figure = resultCompareFigure;
+  if (!figure || !figure.isConnected) {
+    figure = document.createElement('figure');
+    figure.className = 'compare resultCompare';
+    figure.dataset.compare = '';
+    figure.dataset.pos = '50';
+    figure.setAttribute('aria-label', 'Before and after comparison');
+    // The composite is first so the smoke harness (`#outputBox img`) still reads
+    // the cut-out; the original sits on top, clipped to the left of the divider.
+    figure.innerHTML = `
+      <div class="compareStage">
+        <img class="compareImg compareAfter" alt="Background removed" />
+        <img class="compareImg compareBefore" alt="Original photo" />
+        <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+      </div>
+      <input class="compareRange" type="range" min="0" max="100" step="1" value="50"
+        aria-label="Reveal the original photo: left is before, right is after" />
+    `;
+    outputBox.appendChild(figure);
+    outputBox.classList.add('hasResultCompare');
+    initCompareSliders(outputBox);
+    resultCompareFigure = figure;
+  }
+  // Size the stage to the photo instead of the full panel, so the checkerboard
+  // is only behind the image and the cut-out uses the available height.
+  figure.style.aspectRatio = `${display.width} / ${display.height}`;
+  const after = figure.querySelector<HTMLImageElement>('.compareAfter');
+  const before = figure.querySelector<HTMLImageElement>('.compareBefore');
+  if (after) after.src = afterSrc;
+  if (before) before.src = currentObjectUrl ?? '';
+
   // The compare view's right-hand side shows the same composite.
-  compareAfterEl.src = img.src;
+  compareAfterEl.src = afterSrc;
 }
 
 function updateBackgroundUi(): void {
@@ -907,7 +958,7 @@ function updateBackgroundUi(): void {
   bgCurrentEl.textContent = describeChoice(background);
   if (color) {
     bgColorPicker.value = background.hex;
-    bgColorSwatch.style.background = background.hex;
+    bgColorSwatch.style.setProperty('--picked', background.hex);
     bgAlphaInput.value = String(background.alpha);
     bgAlphaValue.textContent = `${background.alpha}%`;
   }
@@ -1331,7 +1382,14 @@ function applySession(ev: Parameters<typeof reduceSession>[1]): void {
   const { state, revoked } = reduceSession(session, ev);
   session = state;
   for (const url of revoked) URL.revokeObjectURL(url);
-  if (ev.type === 'remove') libraryBlobs.delete(ev.id);
+  if (ev.type === 'remove') {
+    libraryBlobs.delete(ev.id);
+    libraryResultBlobs.delete(ev.id);
+  }
+  // Eviction drops entries without naming them; reconcile the blob maps.
+  const live = new Set(session.entries.map((e) => e.id));
+  for (const id of [...libraryBlobs.keys()]) if (!live.has(id)) libraryBlobs.delete(id);
+  for (const id of [...libraryResultBlobs.keys()]) if (!live.has(id)) libraryResultBlobs.delete(id);
   renderLibrary();
 }
 
@@ -1369,6 +1427,15 @@ function renderLibrary(): void {
     meta.appendChild(dims);
     card.appendChild(meta);
 
+    // A completed cut-out is a re-openable, downloadable version. Mark it so
+    // several versions of the same photo are distinguishable.
+    if (entry.resultUrl) {
+      const badge = document.createElement('span');
+      badge.className = 'libraryBadge';
+      badge.textContent = 'Cut-out';
+      card.appendChild(badge);
+    }
+
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'libraryRemove';
@@ -1392,42 +1459,171 @@ function renderLibrary(): void {
   }
 }
 
-// Re-open an earlier entry: load its original blob, re-run the cut-out and jump
-// to the result. Only the entry's own photo is re-run, so the library never
-// fabricates a result the user did not produce.
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to decode image'));
+    img.src = src;
+  });
+}
+
+function canvasFromImage(img: HTMLImageElement): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.getContext('2d', { willReadFrequently: true })!.drawImage(img, 0, 0);
+  return canvas;
+}
+
+function previewFromCanvas(source: HTMLCanvasElement): HTMLCanvasElement {
+  const { width, height } = previewSize(source.width, source.height);
+  if (width === source.width && height === source.height) return source;
+  const preview = document.createElement('canvas');
+  preview.width = width;
+  preview.height = height;
+  const ctx = preview.getContext('2d')!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, width, height);
+  return preview;
+}
+
+function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+}
+
+// Re-open a stored cut-out exactly as it was produced: the full-resolution PNG
+// becomes the editable/exportable result, and the original photo is restored so
+// the background can be changed and a re-process can still run. No inference is
+// performed, so a version is always the pixels the user saw.
+async function openLibraryResult(entry: SessionEntry): Promise<void> {
+  const resultBlob = libraryResultBlobs.get(entry.id);
+  if (!resultBlob || !entry.resultUrl) return;
+
+  // Restore the source photo (needed by the before/after slider and re-process).
+  const originalBlob = libraryBlobs.get(entry.id);
+  if (originalBlob) {
+    const url = URL.createObjectURL(originalBlob);
+    try {
+      const img = await loadImageElement(url);
+      currentImage = img;
+      currentImageData = canvasFromImage(img).getContext('2d', { willReadFrequently: true })!
+        .getImageData(0, 0, img.naturalWidth, img.naturalHeight);
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = url;
+      showInputImage(img);
+    } catch {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  const resultImg = await loadImageElement(entry.resultUrl);
+  const canvas = canvasFromImage(resultImg);
+  const preview = previewFromCanvas(canvas);
+
+  invalidateActiveJob();
+  hideRecovery();
+  clearOutput();
+  currentImageName = entry.name;
+  lastResultCanvas = canvas;
+  lastPreviewCanvas = preview;
+  resultSettingsKey = engineSettingsKey();
+  applySession({ type: 'activate', id: entry.id });
+  outputSection.hidden = false;
+  compareBeforeEl.src = currentObjectUrl ?? '';
+  renderResultPreview();
+  applyFormatUi();
+  setExportBarOpen(true);
+  studioResult();
+  log(`Reopened library cut-out (${entry.width}x${entry.height}).`);
+}
+
+// Re-open an earlier entry. A completed cut-out opens its stored result; an
+// unprocessed photo is re-run from its original blob.
 async function reopenEntry(id: number): Promise<void> {
   const entry = session.entries.find((e) => e.id === id);
+  if (!entry) return;
+  if (entry.resultUrl && libraryResultBlobs.has(id)) {
+    await openLibraryResult(entry);
+    return;
+  }
   const blob = libraryBlobs.get(id);
-  if (!entry || !blob) return;
+  if (!blob) return;
   applySession({ type: 'activate', id });
   const file = new File([blob], entry.name, { type: blob.type });
   await loadImageFromFile(file, false);
 }
 
-// The current entry is the one matching the loaded photo; a fresh photo adds a
-// new entry, and a re-open re-activates the existing one.
-function currentEntryId(): number | null {
-  const entry = activeEntry(session);
-  return entry?.id ?? null;
+// Mark the start of a new run: its preview and refined final update one entry,
+// while a later re-process adds a new library version.
+function beginLibraryRun(): void {
+  currentRunStoredEntryId = null;
+  libraryRunToken += 1;
 }
 
-// Record a freshly composited cut-out against the current entry so the library
-// shows the transparent thumbnail, not the original.
+// PNG encodes are serialised so the preview's result cannot land after the
+// refined final's and overwrite it.
+let libraryWriteQueue: Promise<void> = Promise.resolve();
+
 function storeLibraryResult(canvas: HTMLCanvasElement): void {
-  const id = currentEntryId();
-  if (id == null) return;
-  const thumb = document.createElement('canvas');
-  const long = Math.max(canvas.width, canvas.height);
-  const scale = long > 320 ? 320 / long : 1;
-  thumb.width = Math.max(1, Math.round(canvas.width * scale));
-  thumb.height = Math.max(1, Math.round(canvas.height * scale));
-  const tctx = thumb.getContext('2d')!;
-  tctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
-  thumb.toBlob((blob) => {
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    applySession({ type: 'set-result', id, resultUrl: url });
-  }, 'image/png');
+  const token = libraryRunToken;
+  libraryWriteQueue = libraryWriteQueue
+    .then(() => storeLibraryResultNow(canvas, token))
+    .catch((e) =>
+      log(`WARNING: could not add the cut-out to the library (${e instanceof Error ? e.message : String(e)}).`),
+    );
+}
+
+async function storeLibraryResultNow(canvas: HTMLCanvasElement, token: number): Promise<void> {
+  if (token !== libraryRunToken) return;
+  const blob = await canvasToPngBlob(canvas);
+  if (!blob || token !== libraryRunToken) return;
+  const url = URL.createObjectURL(blob);
+
+  // The refined final replaces this run's interim preview in the same entry.
+  if (currentRunStoredEntryId != null) {
+    libraryResultBlobs.set(currentRunStoredEntryId, blob);
+    applySession({ type: 'set-result', id: currentRunStoredEntryId, resultUrl: url });
+    return;
+  }
+
+  const active = activeEntry(session);
+  if (!active) {
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  // First result for this photo: fill in its placeholder entry.
+  if (!active.resultUrl) {
+    currentRunStoredEntryId = active.id;
+    libraryResultBlobs.set(active.id, blob);
+    applySession({ type: 'set-result', id: active.id, resultUrl: url });
+    return;
+  }
+
+  // A re-process: keep the previous cut-out and add this one as a new version.
+  const originalBlob = libraryBlobs.get(active.id);
+  if (!originalBlob) {
+    currentRunStoredEntryId = active.id;
+    libraryResultBlobs.set(active.id, blob);
+    applySession({ type: 'set-result', id: active.id, resultUrl: url });
+    return;
+  }
+  const newOriginalUrl = URL.createObjectURL(originalBlob);
+  const newId = session.nextId;
+  libraryBlobs.set(newId, originalBlob);
+  libraryResultBlobs.set(newId, blob);
+  currentRunStoredEntryId = newId;
+  applySession({
+    type: 'add-version',
+    name: active.name,
+    width: active.width,
+    height: active.height,
+    originalUrl: newOriginalUrl,
+    resultUrl: url,
+    createdAt: Date.now(),
+  });
 }
 
 libraryClearBtn?.addEventListener('click', () => {
@@ -1520,6 +1716,9 @@ async function loadImageFromUrl(url: string): Promise<void> {
   ctx.drawImage(img, 0, 0);
   currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   currentImage = img;
+  // The result editor's before/after slider needs the source pixels too.
+  if (currentObjectUrl && currentObjectUrl !== url) URL.revokeObjectURL(currentObjectUrl);
+  currentObjectUrl = url;
   // A new photo invalidates the previous job (same guard as loadImageFromFile).
   invalidateActiveJob();
   showInputImage(img);
@@ -2358,6 +2557,7 @@ providerToggle.addEventListener('change', () => {
 // stale. `null` means "no result rendered yet".
 let resultSettingsKey: string | null = null;
 const reprocessBtn = document.getElementById('reprocessBtn') as HTMLButtonElement | null;
+const resetEngineBtn = document.getElementById('resetEngineBtn') as HTMLButtonElement | null;
 
 function engineSettingsKey(): string {
   return [
@@ -2505,15 +2705,41 @@ function setExportBarOpen(open: boolean): void {
   if (exportBarEl) exportBarEl.hidden = !open;
   if (exportToggleBtn) {
     exportToggleBtn.setAttribute('aria-pressed', String(open));
-    exportToggleBtn.setAttribute('aria-label', open ? 'Hide export bar' : 'Show export bar');
+    exportToggleBtn.setAttribute(
+      'aria-label',
+      open ? 'Hide background and export bar' : 'Show background and export bar',
+    );
+    exportToggleBtn.setAttribute(
+      'title',
+      open ? 'Hide background and export bar' : 'Show background and export bar',
+    );
   }
 }
+
+// The in-bar chevron folds the bar down to its header, like the left sidebar's
+// chevron; the top-bar button still hides it entirely.
+function setBottomBarCollapsed(collapsed: boolean): void {
+  if (!exportBarEl) return;
+  exportBarEl.dataset.collapsed = collapsed ? 'true' : 'false';
+  bottomBarCollapseBtn?.setAttribute('aria-pressed', String(!collapsed));
+  bottomBarCollapseBtn?.setAttribute(
+    'aria-label',
+    collapsed ? 'Expand background and export bar' : 'Collapse background and export bar',
+  );
+}
 exportToggleBtn?.addEventListener('click', () => setExportBarOpen(!exportBarOpen));
+bottomBarCollapseBtn?.addEventListener('click', () => {
+  setBottomBarCollapsed(exportBarEl?.dataset.collapsed !== 'true');
+});
+setBottomBarCollapsed(false);
 
 // ——— Info bubbles ———
-// Each "?" toggles the explanation panel it controls. Only one panel is open at a
-// time, so the sidebar does not grow by several blocks at once.
+// Each "?" toggles a floating explanation panel. The panel is positioned in
+// viewport coordinates and overlays the page, so opening it never reflows the
+// sidebar or moves the controls below it. Only one panel is open at a time.
 const infoBubbles = Array.from(document.querySelectorAll<HTMLButtonElement>('.infoBubble'));
+let openInfoBubble: HTMLButtonElement | null = null;
+
 function closeInfoPanels(except?: HTMLElement | null): void {
   for (const bubble of infoBubbles) {
     const target = document.getElementById(bubble.dataset.infoTarget ?? '');
@@ -2522,17 +2748,83 @@ function closeInfoPanels(except?: HTMLElement | null): void {
       bubble.setAttribute('aria-expanded', 'false');
     }
   }
+  if (!except) openInfoBubble = null;
 }
+
+// Place the panel next to its "?", right-aligned and flipped above when there
+// is not enough room below. The width is clamped to the viewport.
+function positionInfoPanel(panel: HTMLElement, bubble: HTMLButtonElement): void {
+  const margin = 8;
+  const width = Math.min(320, window.innerWidth - margin * 2);
+  panel.style.width = `${width}px`;
+  const height = panel.offsetHeight;
+  const rect = bubble.getBoundingClientRect();
+  const left = Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin));
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - height - 6);
+  }
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function toggleInfoPanel(bubble: HTMLButtonElement): void {
+  const target = document.getElementById(bubble.dataset.infoTarget ?? '');
+  if (!target) return;
+  const willOpen = target.hidden;
+  if (!willOpen) {
+    target.hidden = true;
+    bubble.setAttribute('aria-expanded', 'false');
+    openInfoBubble = null;
+    return;
+  }
+  closeInfoPanels(target);
+  target.hidden = false;
+  bubble.setAttribute('aria-expanded', 'true');
+  openInfoBubble = bubble;
+  positionInfoPanel(target, bubble);
+}
+
 for (const bubble of infoBubbles) {
-  bubble.addEventListener('click', () => {
-    const target = document.getElementById(bubble.dataset.infoTarget ?? '');
-    if (!target) return;
-    const willOpen = target.hidden;
-    closeInfoPanels(target);
-    target.hidden = !willOpen;
-    bubble.setAttribute('aria-expanded', String(willOpen));
+  bubble.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleInfoPanel(bubble);
   });
 }
+
+// A click outside the open panel/bubble closes it. Clicking the bubble itself is
+// left to the click handler so it can toggle shut.
+document.addEventListener('pointerdown', (e) => {
+  if (!openInfoBubble) return;
+  const panel = document.getElementById(openInfoBubble.dataset.infoTarget ?? '');
+  const target = e.target as Node | null;
+  if (!target) return;
+  if (openInfoBubble.contains(target) || panel?.contains(target)) return;
+  closeInfoPanels();
+});
+
+// Escape closes the explanation before it reaches the studio's close handler.
+document.addEventListener(
+  'keydown',
+  (e) => {
+    if (e.key !== 'Escape' || !openInfoBubble) return;
+    e.stopPropagation();
+    const bubble = openInfoBubble;
+    closeInfoPanels();
+    bubble.focus();
+  },
+  true,
+);
+
+const repositionOpenInfoPanel = (): void => {
+  if (!openInfoBubble) return;
+  const panel = document.getElementById(openInfoBubble.dataset.infoTarget ?? '');
+  if (panel && !panel.hidden) positionInfoPanel(panel, openInfoBubble);
+};
+window.addEventListener('resize', repositionOpenInfoPanel);
+document
+  .querySelector('.settingsSidebarBody')
+  ?.addEventListener('scroll', repositionOpenInfoPanel, { passive: true });
 
 // ——— Tiled inference control ———
 function tilingLabel(grid: TileGrid): string {
@@ -2637,6 +2929,33 @@ reprocessBtn?.addEventListener('click', () => {
   setStudioTab('processing', true);
   void runSmoke();
 });
+
+// Restore every engine control to its default: the GPU gate's provider, mask
+// threshold/feather off, tiling off, and the stock edge-refinement config.
+function resetEngineOptions(): void {
+  const defaultProvider: 'webgpu' | 'wasm' = webGpuUsable() ? 'webgpu' : 'wasm';
+  if (selectedProvider !== defaultProvider) {
+    selectedProvider = defaultProvider;
+    savePref(LS_PROVIDER, selectedProvider);
+    applyProviderUi();
+    loadSelectedModel();
+  }
+
+  maskAdjust = { ...DEFAULT_MASK_ADJUST };
+  saveMaskAdjust();
+  applyMaskUi();
+
+  tileGrid = 1;
+  savePref('remove-bg:tiles', tileGrid);
+  applyTilingUi();
+
+  Object.assign(refineConfig, resolveRefinementConfig());
+  applyRefineUi();
+
+  updateReprocessButton();
+  log('Engine options reset to their defaults.');
+}
+resetEngineBtn?.addEventListener('click', resetEngineOptions);
 
 type PendingRun = { resolve: (ms: number) => void; reject: (err: Error) => void };
 const pendingRuns = new Map<number, PendingRun>();
@@ -2840,6 +3159,7 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
   }
   hideRecovery();
   clearOutput();
+  beginLibraryRun();
   // The panel's progress spans the whole run. A model that still has to be
   // fetched starts in the download band; one already on the device starts at
   // the session-build band, so the bar never sits at a bare 0%.
@@ -3054,6 +3374,15 @@ log('Detecting GPU…');
 initCompareSliders();
 initShowcaseGallery();
 initSupportCarousel();
+
+// Narrow screens: the side-by-side workspace left the editor panel too narrow
+// to show a cut-out, and the console took a third of the height. Start with the
+// engine sidebar folded to its header and the console hidden; both stay one tap
+// away in the studio top bar.
+if (window.matchMedia('(max-width: 767px)').matches) {
+  setSidebarCollapsed(true);
+  setConsoleVisible(false);
+}
 
 // ——— Privacy-first analytics ———
 // Custom-event endpoint comes from VITE_ANALYTICS_ENDPOINT and the Cloudflare

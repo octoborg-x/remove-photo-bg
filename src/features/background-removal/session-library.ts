@@ -36,6 +36,15 @@ export function initialSession(): SessionState {
 export type SessionEvent =
   | { type: 'add'; name: string; width: number; height: number; originalUrl: string; createdAt: number }
   | { type: 'set-result'; id: number; resultUrl: string }
+  | {
+      type: 'add-version';
+      name: string;
+      width: number;
+      height: number;
+      originalUrl: string;
+      resultUrl: string;
+      createdAt: number;
+    }
   | { type: 'activate'; id: number }
   | { type: 'remove'; id: number };
 
@@ -53,14 +62,15 @@ export interface SessionResult {
  */
 export function reduceSession(state: SessionState, ev: SessionEvent): SessionResult {
   switch (ev.type) {
-    case 'add': {
+    case 'add':
+    case 'add-version': {
       const entry: SessionEntry = {
         id: state.nextId,
         name: ev.name,
         width: ev.width,
         height: ev.height,
         originalUrl: ev.originalUrl,
-        resultUrl: null,
+        resultUrl: ev.type === 'add-version' ? ev.resultUrl : null,
         createdAt: ev.createdAt,
       };
       let entries = [entry, ...state.entries];
@@ -74,10 +84,15 @@ export function reduceSession(state: SessionState, ev: SessionEvent): SessionRes
       return { state: { ...state, entries, activeId: entry.id, nextId: state.nextId + 1 }, revoked };
     }
     case 'set-result': {
-      const entries = state.entries.map((e) =>
-        e.id === ev.id ? { ...e, resultUrl: ev.resultUrl } : e,
-      );
-      return { state: { ...state, entries }, revoked: [] };
+      // Replacing a result (the interim preview → the refined final) frees the
+      // old URL so a refinement never leaks a blob for the tab's lifetime.
+      const revoked: string[] = [];
+      const entries = state.entries.map((e) => {
+        if (e.id !== ev.id) return e;
+        if (e.resultUrl) revoked.push(e.resultUrl);
+        return { ...e, resultUrl: ev.resultUrl };
+      });
+      return { state: { ...state, entries }, revoked };
     }
     case 'activate':
       return { state: { ...state, activeId: ev.id }, revoked: [] };

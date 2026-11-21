@@ -30,6 +30,15 @@ KEPT_OPAQUE_FRACTION = 0.995
 WASHED_MIN_COVERAGE = 0.9
 MIN_BIMODAL_TAIL = 0.4
 
+# Mirrored from src/features/background-removal/refine-mask.ts
+# (`MIN_ISLAND_FRACTION`) and mask-recovery.ts (`MIN_RECOVERY_ISLAND_FRACTION`):
+# the area bar, as a fraction of the image, below which a disconnected
+# foreground island counts as speckle. The app's Stage-4 cleanup and the
+# flood-recovery despeckle drop islands below it, and `component_stats` counts
+# them here — one number for all three, asserted by `--self-test` and by
+# src/features/background-removal/threshold-sync.test.ts.
+SPECKLE_ISLAND_FRACTION = 5e-4
+
 
 # ——— Descriptive metrics (no ground truth) ———
 
@@ -159,7 +168,7 @@ def component_stats(fg: np.ndarray) -> dict:
     if n == 0:
         return {"components": 0, "speckle_frac": 0.0, "largest_component_frac": 0.0}
     sizes = np.bincount(labels.ravel())[1:]
-    tiny = sizes < 0.0005 * total
+    tiny = sizes < SPECKLE_ISLAND_FRACTION * total
     return {
         "components": n,
         "speckle_frac": round(float(tiny.sum() / n), 4),

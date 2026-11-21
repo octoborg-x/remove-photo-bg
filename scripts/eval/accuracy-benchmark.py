@@ -36,6 +36,7 @@ from quality_metrics import (  # noqa: E402
     KEPT_OPAQUE_FRACTION,
     MIN_BIMODAL_TAIL,
     NEAR_OPAQUE_ALPHA,
+    SPECKLE_ISLAND_FRACTION,
     WASHED_MIN_COVERAGE,
     accuracy_metrics,
     component_stats,
@@ -185,6 +186,14 @@ def _selftest_components() -> list[str]:
     return errors
 
 
+def _ts_constant(text: str, name: str) -> float | None:
+    """Read an `export const NAME = <number>` value out of TypeScript source."""
+    import re
+
+    m = re.search(rf"export const {name}\s*=\s*([0-9.eE+-]+)", text)
+    return float(m.group(1)) if m else None
+
+
 def _selftest_constants() -> list[str]:
     """Assert the mirrored app constants still match their TypeScript source."""
     errors = []
@@ -199,6 +208,24 @@ def _selftest_constants() -> list[str]:
     for decl, ok in expected.items():
         if not ok or decl not in text:
             errors.append(f"constant drifted: {decl}")
+
+    # The speckle/island area bar is one number shared by the app's Stage-4
+    # cleanup, the flood-recovery despeckle and this benchmark's speckle gate
+    # (issue #145). Compare values, not formatting, so 5e-4 and 0.0005 agree.
+    bg = ROOT / "src" / "features" / "background-removal"
+    for filename, name in (
+        ("refine-mask.ts", "MIN_ISLAND_FRACTION"),
+        ("mask-recovery.ts", "MIN_RECOVERY_ISLAND_FRACTION"),
+    ):
+        path = bg / filename
+        value = _ts_constant(path.read_text(), name) if path.exists() else None
+        if value is None:
+            errors.append(f"constant not found: {name} in {filename}")
+        elif abs(value - SPECKLE_ISLAND_FRACTION) > 1e-12:
+            errors.append(
+                f"constant drifted: {name} = {value} != SPECKLE_ISLAND_FRACTION "
+                f"= {SPECKLE_ISLAND_FRACTION}"
+            )
     return errors
 
 

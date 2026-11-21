@@ -68,9 +68,42 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : Number.isFinite(v) ? v : 0;
 }
 
-/** Smallest isolated island worth keeping, scaled to the image size. */
-export function minIslandArea(width: number, height: number): number {
-  return Math.max(16, Math.round(width * height * 2e-5));
+/**
+ * Smallest isolated island worth keeping, as a fraction of the **output** image
+ * area. Single source of truth for the Stage-4 cleanup; the accuracy benchmark's
+ * speckle gate (`scripts/eval/quality_metrics.py`, `SPECKLE_ISLAND_FRACTION`)
+ * and the flood-recovery despeckle (`mask-recovery.ts`,
+ * `MIN_RECOVERY_ISLAND_FRACTION`) use the same number, and
+ * `threshold-sync.test.ts` plus `accuracy-benchmark.py --self-test` fail if the
+ * three drift apart. See `docs/accuracy-benchmark.md` §3.8.
+ *
+ * 5e-4 (0.05 % of the frame) is the smallest island that still reads as part of
+ * the subject: on a 1920x2939 photo it is ~2800 px, i.e. a ~53 px square. Only
+ * *disconnected* blobs below it are dropped, so a jewellery chain, a hair
+ * strand, a bouquet or a cutlery set survives — their parts are either
+ * connected or individually larger. Anything smaller is grain, reflections or
+ * gaps between product parts, which is exactly what the benchmark counts as
+ * speckle.
+ */
+export const MIN_ISLAND_FRACTION = 5e-4;
+
+/** Absolute floor, in output pixels, so 1-2 px specks go even on thumbnails. */
+const MIN_ISLAND_PIXELS = 16;
+
+/**
+ * Island-area bar in the pixel grid being cleaned, `width * height`.
+ * `referenceArea` is the **output** image area; Stage 4 may run on a copy
+ * downscaled to `performance.maxProcessingPixels`, so the bar is rescaled into
+ * that grid instead of being recomputed from it. The effective fraction is
+ * therefore identical at any working resolution.
+ */
+export function minIslandArea(
+  width: number,
+  height: number,
+  referenceArea: number = width * height,
+): number {
+  const bar = Math.max(MIN_ISLAND_PIXELS, referenceArea * MIN_ISLAND_FRACTION);
+  return Math.max(1, Math.round((bar * width * height) / referenceArea));
 }
 
 /**
@@ -243,7 +276,10 @@ export async function refineMask(input: RefineInput, hooks: RefineHooks = {}): P
   const tClean = now();
   if (config.enabled && config.cleanup.enabled) {
     if (config.cleanup.removeTinyIsolatedNoise) {
-      removeTinyIslands(alpha, workW, workH, minIslandArea(workW, workH));
+      // `pixels` is the output area, not the (possibly downscaled) work area:
+      // the island bar is defined on the delivered image so a downscale cannot
+      // silently change it. See minIslandArea() and docs/accuracy-benchmark.md.
+      removeTinyIslands(alpha, workW, workH, minIslandArea(workW, workH, pixels));
     }
     smoothTransitionZone(alpha, guide, workW, workH, Math.max(2, config.edgeRefinement.radius >> 1));
     const lo = config.cleanup.minAlpha;

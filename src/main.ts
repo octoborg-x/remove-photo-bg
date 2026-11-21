@@ -414,7 +414,12 @@ function setConsoleVisible(visible: boolean): void {
   studioGridEl.dataset.console = visible ? 'shown' : 'hidden';
   consoleToggleBtn.setAttribute('aria-pressed', String(visible));
   consoleToggleBtn.setAttribute('aria-label', visible ? 'Hide console' : 'Show console');
-  if (visible) applyConsoleHeight(consoleHeightPx);
+  if (visible) {
+    applyConsoleHeight(consoleHeightPx);
+    // Lines printed while the console was hidden left it at the top; a terminal
+    // opens on its newest line.
+    scrollConsoleToBottom();
+  }
 }
 
 // Pins the console to an explicit pixel height (or back to the default) so a

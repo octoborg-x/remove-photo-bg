@@ -529,6 +529,13 @@
     cursor: pointer;
     transition: border-color 0.12s ease, box-shadow 0.12s ease;
   }
+  /* Icon-only transparent toggle: the checkerboard chip is the label. */
+  .bgTransparentBtn {
+    width: 2.1rem;
+    height: 2.1rem;
+    justify-content: center;
+    padding: 0;
+  }
   .bgTransparentBtn[aria-pressed='true'] {
     border-color: var(--color-blue-600);
     box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-blue-600) 45%, transparent);
@@ -575,10 +582,24 @@
     cursor: pointer;
     opacity: 0;
   }
+  /* The solid-colour control reads as a colour wheel: a continuous red→violet
+     spectrum, with the picked colour in the centre. */
   .bgColorSwatch {
     position: absolute;
     inset: 0;
-    background: #ffffff;
+    background:
+      radial-gradient(circle at 50% 50%, var(--picked, #ffffff) 0 26%, transparent 27%),
+      conic-gradient(
+        from 0deg,
+        #ff0000,
+        #ff7f00,
+        #ffff00,
+        #00ff00,
+        #00ffff,
+        #0000ff,
+        #8b00ff,
+        #ff0000
+      );
     pointer-events: none;
   }
   .paletteAlpha {
@@ -1150,7 +1171,20 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-300) transparent;
     padding: 0.9rem;
+  }
+  .studioTabBody::-webkit-scrollbar {
+    width: 8px;
+  }
+  .studioTabBody::-webkit-scrollbar-thumb {
+    background: var(--color-slate-300);
+    border-radius: 9999px;
+  }
+  .studioTabBody::-webkit-scrollbar-track {
+    background: transparent;
   }
   #panelInput,
   #panelResult {
@@ -1264,6 +1298,7 @@
      button below the fold on shorter viewports (the result looked like "just the
      colour picker" with no image). A floor keeps it visible on very short ones. */
   #outputFrame {
+    flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 12rem;
@@ -1271,6 +1306,53 @@
   }
   #outputFrame #outputBox {
     min-height: 0 !important;
+  }
+  /* The Result editor's own before/after slider, built from the same compare
+     wiring as the Compare tab. The composite is the full-size layer; the
+     original sits on top, clipped to the left of the divider. */
+  .resultCompare {
+    width: auto;
+    max-width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  /* The checkerboard belongs behind the photo, not across the whole panel. */
+  #outputBox.hasResultCompare {
+    background-color: transparent;
+    background-image: none;
+  }
+  .resultCompare .compareStage {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    background-color: var(--checker-b);
+    background-image:
+      linear-gradient(45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--checker-a) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--checker-a) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  }
+  .resultCompare .compareImg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .resultCompare .compareAfter {
+    clip-path: none;
+  }
+  .resultCompare .compareBefore {
+    clip-path: inset(0 calc(100% - var(--pos, 50%)) 0 0);
+  }
+  .resultCompare .compareRange {
+    flex: none;
+    margin-top: 0.5rem;
   }
   /* ——— Studio workspace: engine settings sidebar (left) + active panel (right).
      The sidebar is shared by every editor tab; it collapses to a thin rail via
@@ -1461,9 +1543,13 @@
     outline: 2px solid var(--color-blue-500);
     outline-offset: 1px;
   }
-  /* The expanded explanation, in place under the control it belongs to. */
+  /* The expanded explanation is a floating popover: it never takes space in the
+     sidebar, so opening it cannot move the controls below it. main.ts positions
+     it next to its "?" (fixed coordinates, clamped to the viewport). */
   .infoPanel {
-    margin-top: 0.5rem;
+    position: fixed;
+    z-index: 90;
+    margin: 0;
     padding: 0.6rem 0.7rem;
     border-radius: 0.7rem;
     border: 1px solid var(--color-blue-200, #bfdbfe);
@@ -1471,6 +1557,9 @@
     color: var(--color-slate-700);
     font-size: 0.7rem;
     line-height: 1.5;
+    max-height: min(60vh, 24rem);
+    overflow-y: auto;
+    box-shadow: 0 12px 30px -8px rgb(15 23 42 / 0.3);
   }
   .infoPanel[hidden] {
     display: none;
@@ -1513,21 +1602,136 @@
     pointer-events: none;
   }
 
-  /* ——— Export bar: output format + download, below the workspace ——— */
-  .exportBar {
+  /* ——— Bottom sidebar: background + output format + download ———
+     Mirrors the left settings sidebar: a header with a collapse chevron and a
+     body that scrolls inside a bounded height, so it can never push the editor
+     past the studio shell. Toggled from the top bar and collapsed in place. */
+  .bottomBar {
     flex: none;
     margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    max-height: 38%;
+    overflow: hidden;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 1rem;
+    background: var(--color-slate-50);
   }
-  .exportBar[hidden] {
+  .bottomBar[hidden] {
     display: none;
   }
-  .exportBar .formatPicker {
-    margin: 0;
+  .bottomBarHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.55rem 0.8rem;
+    border-bottom: 1px solid var(--color-slate-200);
+    flex: none;
   }
-  .exportBar .exportActions {
+  .bottomBarHeadTitle {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-width: 0;
+  }
+  .bottomBarTitle {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-slate-900);
+  }
+  .bottomBarBody {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 0.7rem 0.8rem 0.8rem;
+  }
+  .bottomBar[data-collapsed='true'] .bottomBarBody {
+    display: none;
+  }
+  .bottomBar[data-collapsed='true'] .bottomBarHead {
+    border-bottom: 0;
+  }
+  .bottomBar[data-collapsed='true'] .sidebarToggle svg {
+    transform: rotate(180deg);
+  }
+  .bottomBarSection {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .bottomBarSectionHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .bottomBarLabel {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-slate-700);
+  }
+  .bottomBarExport {
+    border-top: 1px solid var(--color-slate-200);
+    padding-top: 0.7rem;
+  }
+  .bottomBarExport .formatPicker {
+    margin: 0;
+  }
+  .bottomBarExport .exportActions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  @media (min-width: 640px) {
+    .bottomBarBody {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .bottomBarSection {
+      flex: 1 1 14rem;
+    }
+    .bottomBarExport {
+      border-top: 0;
+      border-left: 1px solid var(--color-slate-200);
+      padding-top: 0;
+      padding-left: 0.8rem;
+    }
+    .bottomBarExport .exportActions .btn {
+      width: 100%;
+    }
+  }
+
+  /* Restore every engine control to its default. */
+  .resetEngineBtn {
+    margin-top: 0.5rem;
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-slate-300);
+    background: var(--color-white);
+    color: var(--color-slate-700);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+  .resetEngineBtn:hover {
+    border-color: var(--color-blue-500);
+    color: var(--color-blue-700);
+    background: var(--color-blue-50);
   }
 
   /* ——— Library tab: this session's images ——— */
@@ -1628,6 +1832,17 @@
     font-size: 0.62rem;
     color: var(--color-slate-400);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .libraryBadge {
+    align-self: flex-start;
+    padding: 0.05rem 0.4rem;
+    border-radius: 9999px;
+    background: var(--color-blue-50);
+    color: var(--color-blue-700);
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
   }
   .libraryRemove {
     position: absolute;
@@ -2378,6 +2593,61 @@
   from { background-position: 0 0, 0 0; }
   to { background-position: 34px 34px, 34px 34px; }
 }
+  /* ——— Narrow screens: the engine sidebar stacks above the editor panel ———
+     Side-by-side leaves the panel too narrow to show a cut-out (the result
+     image shrank to a thumbnail while the format and download controls stayed
+     full width). Stacking gives the editor the full width; the sidebar is
+     collapsed to its header by default on first open (main.ts), so the result
+     gets the height too. The tab body keeps its own vertical scrollbar. */
+  @media (max-width: 767px) {
+    .studioWorkspace {
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .settingsSidebar {
+      width: 100% !important;
+      max-width: 100%;
+      max-height: 42%;
+    }
+    .settingsSidebar[data-collapsed='true'] {
+      width: 100%;
+      min-width: 0;
+      max-height: none;
+    }
+    .settingsSidebar[data-collapsed='true'] .sidebarHead {
+      border-bottom: 0;
+    }
+    .sidebarResize {
+      display: none;
+    }
+    .bottomBar {
+      max-height: 46%;
+    }
+    .bottomBarBody {
+      flex-direction: column;
+    }
+    .bottomBarExport {
+      border-top: 1px solid var(--color-slate-200);
+      border-left: 0;
+      padding-top: 0.7rem;
+      padding-left: 0;
+    }
+    /* Keep the background controls on one row so the bar stays short. */
+    .bgPicker {
+      gap: 0.45rem;
+    }
+    .paletteAlpha {
+      gap: 0.35rem;
+    }
+    .paletteAlpha input[type='range'] {
+      width: 3.5rem;
+    }
+    #outputFrame {
+      flex: 1;
+      max-height: none;
+    }
+  }
+
 @keyframes procGlowPulse {
   0%, 100% { opacity: 0.75; transform: translate(-50%, -50%) scale(1); }
   50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }

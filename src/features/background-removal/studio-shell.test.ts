@@ -9,6 +9,7 @@ import { resolve } from 'node:path';
 const ROOT = resolve(__dirname, '..', '..', '..');
 const MAIN = readFileSync(resolve(ROOT, 'src/main.ts'), 'utf8');
 const HTML = readFileSync(resolve(ROOT, 'index.html'), 'utf8');
+const CSS = readFileSync(resolve(ROOT, 'src/style.css'), 'utf8');
 
 describe('studio shell wiring (main.ts + index.html)', () => {
   it('registers a tab button and panel for every tab in STUDIO_TABS', () => {
@@ -133,5 +134,71 @@ describe('studio shell wiring (main.ts + index.html)', () => {
     expect(refine.indexOf('despeckleRecoveredMask(refinedMask')).toBeLessThan(
       refine.indexOf('composeResult(image, refinedMask)'),
     );
+  });
+});
+
+describe('studio UI refinements', () => {
+  it('floats the info panels so opening one never reflows the sidebar', () => {
+    expect(CSS).toMatch(/\.infoPanel\s*\{[^}]*position:\s*fixed/s);
+    expect(MAIN).toMatch(/function positionInfoPanel\(/);
+    expect(MAIN).toMatch(/positionInfoPanel\(target, bubble\)/);
+    expect(MAIN).toMatch(/window\.addEventListener\('resize', repositionOpenInfoPanel\)/);
+  });
+
+  it('shows only the format name for PNG/JPG/WebP', () => {
+    // No description is rendered next to the format name.
+    expect(MAIN).not.toMatch(/— \$\{available \? format\.description/);
+    expect(MAIN).not.toMatch(/Download \$\{info\.label\} \(\$\{info\.description\}\)/);
+    expect(MAIN).toMatch(/downloadImageBtn\.textContent = `Download \$\{info\.label\}`/);
+  });
+
+  it('uses an icon-only transparent toggle and a multicolour solid-colour control', () => {
+    expect(HTML).toMatch(/id="bgTransparentBtn"[^>]*>\s*<span class="bgTransparentChip"/);
+    expect(HTML).not.toMatch(/id="bgTransparentBtn"[\s\S]{0,400}?Transparent\s*<\/button>/);
+    expect(CSS).toMatch(/\.bgColorSwatch\s*\{[^}]*conic-gradient/s);
+    expect(MAIN).toMatch(/bgColorSwatch\.style\.setProperty\('--picked', background\.hex\)/);
+  });
+
+  it('adds the before/after slider to the Result editor', () => {
+    expect(MAIN).toMatch(/figure\.className = 'compare resultCompare'/);
+    expect(MAIN).toMatch(/compareImg compareAfter/);
+    expect(MAIN).toMatch(/compareImg compareBefore/);
+    expect(CSS).toMatch(/\.resultCompare \.compareBefore\s*\{[^}]*clip-path/s);
+    // Reuses the shared compare wiring rather than duplicating drag logic.
+    expect(MAIN).toMatch(/initCompareSliders\(outputBox\)/);
+  });
+
+  it('keeps every re-processed cut-out as its own library version', () => {
+    expect(MAIN).toMatch(/type: 'add-version'/);
+    expect(MAIN).toMatch(/libraryResultBlobs/);
+    expect(MAIN).toMatch(/function openLibraryResult\(/);
+    expect(MAIN).toMatch(/function beginLibraryRun\(/);
+    // A re-opened result loads the stored PNG instead of re-running inference.
+    expect(MAIN).toMatch(/entry\.resultUrl && libraryResultBlobs\.has\(id\)/);
+  });
+
+  it('offers a reset-to-defaults control for every engine option', () => {
+    expect(HTML).toContain('id="resetEngineBtn"');
+    expect(MAIN).toMatch(/function resetEngineOptions\(/);
+    expect(MAIN).toMatch(/maskAdjust = \{ \.\.\.DEFAULT_MASK_ADJUST \}/);
+    expect(MAIN).toMatch(/tileGrid = 1/);
+    expect(MAIN).toMatch(/Object\.assign\(refineConfig, resolveRefinementConfig\(\)\)/);
+  });
+
+  it('moves background, format and download into a collapsible bottom sidebar', () => {
+    expect(HTML).toMatch(/id="exportBar" class="exportBar bottomBar"/);
+    expect(HTML).toContain('id="bottomBarCollapse"');
+    // The background block now lives in the bottom bar, not the result panel.
+    const resultPanel = HTML.slice(HTML.indexOf('id="panelResult"'), HTML.indexOf('id="panelCompare"'));
+    expect(resultPanel).not.toContain('id="bgTransparentBtn"');
+    expect(HTML).toMatch(/id="exportToggle"[\s\S]*?<line x1="3" y1="15" x2="21" y2="15"/);
+  });
+
+  it('gives the editor the full width on mobile and keeps it scrollable', () => {
+    expect(CSS).toMatch(/@media \(max-width: 767px\)\s*\{[\s\S]*?\.studioWorkspace\s*\{\s*flex-direction: column/s);
+    expect(CSS).toMatch(/\.studioTabBody\s*\{[^}]*overflow-y: auto/s);
+    expect(MAIN).toMatch(/matchMedia\('\(max-width: 767px\)'\)/);
+    expect(MAIN).toMatch(/setSidebarCollapsed\(true\)/);
+    expect(MAIN).toMatch(/setConsoleVisible\(false\)/);
   });
 });

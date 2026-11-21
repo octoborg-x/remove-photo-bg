@@ -56,6 +56,34 @@ describe('reduceSession', () => {
     expect(state.entries[0].resultUrl).toBe('blob:a-cut');
   });
 
+  it('replaces a result and revokes the superseded URL', () => {
+    let state = add(initialSession(), 'a.jpg');
+    const id = state.entries[0].id;
+    state = reduceSession(state, { type: 'set-result', id, resultUrl: 'blob:preview' }).state;
+    const res = reduceSession(state, { type: 'set-result', id, resultUrl: 'blob:final' });
+    expect(res.revoked).toEqual(['blob:preview']);
+    expect(res.state.entries[0].resultUrl).toBe('blob:final');
+  });
+
+  it('adds a re-processed result as a new, active version', () => {
+    let state = add(initialSession(), 'a.jpg');
+    const sourceId = state.entries[0].id;
+    state = reduceSession(state, { type: 'set-result', id: sourceId, resultUrl: 'blob:cut-1' }).state;
+    state = reduceSession(state, {
+      type: 'add-version',
+      name: 'a.jpg',
+      width: 100,
+      height: 100,
+      originalUrl: 'blob:a-copy',
+      resultUrl: 'blob:cut-2',
+      createdAt: 1,
+    }).state;
+    expect(state.entries).toHaveLength(2);
+    expect(state.entries[0].resultUrl).toBe('blob:cut-2');
+    expect(state.entries[1].resultUrl).toBe('blob:cut-1');
+    expect(activeEntry(state)?.id).toBe(state.entries[0].id);
+  });
+
   it('removes an entry and revokes its URLs, falling back the active id', () => {
     let state = add(initialSession(), 'a.jpg');
     state = add(state, 'b.jpg');

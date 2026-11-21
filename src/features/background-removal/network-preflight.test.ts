@@ -136,6 +136,12 @@ describe('confirmation copy', () => {
     expect(text).toMatch(/never uploaded/i);
   });
 
+  it('does not claim the download only ever happens once', () => {
+    const text = downloadConfirmationText(68 * 1024 * 1024);
+    expect(text).not.toMatch(/only happens once/i);
+    expect(text).not.toMatch(/kept on this device/i);
+  });
+
   it('handles an unknown size without printing "0 B"', () => {
     expect(downloadConfirmationText(0)).toContain('large file');
   });

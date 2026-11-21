@@ -659,6 +659,11 @@
   }
 
   /* ——— Toasts ——— */
+  /* Fixed to the viewport's top-right corner. The host itself is the scroll
+     container: a long error or a stack of notices scrolls inside the corner
+     instead of running off the screen (a phone in landscape is only ~350 px
+     tall). `pointer-events: none` keeps the empty column click-through; each
+     toast re-enables pointer events so a wheel/touch drag over it scrolls. */
   .toastHost {
     position: fixed;
     top: 1.25rem;
@@ -668,7 +673,11 @@
     flex-direction: column;
     align-items: flex-end;
     gap: 0.6rem;
-    max-width: min(380px, calc(100vw - 2.5rem));
+    width: min(380px, calc(100vw - 2.5rem));
+    max-height: calc(100dvh - 2.5rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     pointer-events: none;
   }
   .toast {
@@ -676,6 +685,9 @@
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
+    flex: none;
+    max-width: 100%;
+    overflow-wrap: anywhere;
     background: var(--color-white);
     border: 1px solid var(--color-slate-200);
     border-left: 4px solid var(--color-blue-600);
@@ -705,8 +717,10 @@
   }
   .toast .toastBody {
     flex: 1;
+    min-width: 0;
     font-size: 0.88rem;
     color: var(--color-slate-800);
+    overflow-wrap: anywhere;
   }
   .toast .toastTitle {
     display: block;
@@ -725,6 +739,15 @@
   }
   .toast .toastClose:hover {
     color: var(--color-slate-700);
+  }
+  @media (max-width: 767px) {
+    /* Tighter corner on a phone so the notice keeps as much width as possible. */
+    .toastHost {
+      top: 0.75rem;
+      right: 0.75rem;
+      width: min(380px, calc(100vw - 1.5rem));
+      max-height: calc(100dvh - 1.5rem);
+    }
   }
   /* ——— Recovery panel ——— */
   .recovery .actions {
@@ -2745,19 +2768,39 @@
   }
 
   /* ——— Metered-connection preflight warning ——— */
+  /* A floating notice in the same top-right corner as the toasts, not an inline
+     banner: on a short phone viewport it must stay reachable and scroll its own
+     text instead of pushing the workspace (or being clipped by it). */
   .netWarn {
-    margin-bottom: 0.75rem;
+    position: fixed;
+    top: 3.5rem;
+    right: 1.25rem;
+    z-index: 1001;
+    width: min(380px, calc(100vw - 2.5rem));
+    max-height: calc(100dvh - 4.75rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: 0;
     padding: 0.9rem;
     border-radius: 0.9rem;
     background: var(--color-amber-50);
     border: 1px solid var(--color-amber-100);
     color: var(--color-amber-900);
     font-size: 0.85rem;
+    overflow-wrap: anywhere;
     box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
-    flex: none;
   }
   .netWarn[hidden] {
     display: none;
+  }
+  @media (max-width: 767px) {
+    .netWarn {
+      top: 3.25rem;
+      right: 0.75rem;
+      width: min(380px, calc(100vw - 1.5rem));
+      max-height: calc(100dvh - 4rem);
+    }
   }
 
   /* ——— Analytics consent banner ——— */

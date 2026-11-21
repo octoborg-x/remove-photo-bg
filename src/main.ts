@@ -3279,6 +3279,7 @@ async function processBulkBatch(): Promise<void> {
   protectedObjectUrl = currentObjectUrl;
   bulkBatchRunning = true;
   bulkTabPinned = true;
+  downloadConsentDeclined = false;
   setStudioTab('bulk', true);
   renderBulk();
   const total = pending.length;
@@ -3302,6 +3303,14 @@ async function processBulkBatch(): Promise<void> {
       await loadImageFromFile(file, librarySavingEnabled);
       const run = activeRunPromise;
       if (run) await run;
+      if (downloadConsentDeclined) {
+        bulkState = updateBulkItem(bulkState, item.id, {
+          status: 'error',
+          error: 'Model download not confirmed',
+        });
+        log('Bulk run stopped: the model download was not confirmed.');
+        break;
+      }
       await waitForJobSettled();
       // The library write is queued behind a PNG encode; let it finish before the
       // next run bumps the run token, or the write would be dropped.
@@ -3763,10 +3772,17 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
     error('No image loaded');
     return null;
   }
-  // A model download that was paused at the metered-connection prompt resumes
-  // here: running is an explicit request to use the model.
+  // A photo run is not consent to spend the user's mobile data. On a metered
+  // link the download waits for the confirmation prompt, exactly as it does on
+  // a cold visit; dismissing it ends the run quietly.
   if (!modelReady && !modelError) {
-    sessionStorage.setItem('remove-bg:download-confirmed', '1');
+    if (await needsDownloadConfirmation()) {
+      const confirmed = await requestDownloadConsent();
+      if (!confirmed) {
+        log('Model download not confirmed; the run was cancelled.');
+        return null;
+      }
+    }
     netWarnEl.hidden = true;
     if (!modelLoadInFlight) loadSelectedModel();
   }
@@ -4231,8 +4247,10 @@ async function modelFetchTick(): Promise<void> {
     return;
   }
   // An unmetered link is available and the model is still absent, so the earlier
-  // "may be metered" prompt no longer applies.
+  // "may be metered" prompt no longer applies. Settle any run that was waiting
+  // on that prompt so it resumes with the download instead of hanging.
   netWarnEl.hidden = true;
+  settleDownloadConsent(true);
   log(`Unmetered connection detected and the model is not on this device yet; downloading it now (${connection}).`);
   loadSelectedModel();
 }
@@ -4269,6 +4287,31 @@ function showNetWarn(): void {
   netWarnConfirm.focus();
 }
 
+// Resolves true when the user confirms the download, false when they dismiss
+// it. A run that needs the model on a metered link awaits this instead of
+// starting the transfer on its own.
+let pendingDownloadConsent: ((confirmed: boolean) => void) | null = null;
+// Set when the prompt is dismissed, so a bulk batch can stop instead of
+// prompting again for every remaining photo.
+let downloadConsentDeclined = false;
+
+function requestDownloadConsent(): Promise<boolean> {
+  downloadConsentDeclined = false;
+  pendingDownloadConsent?.(false);
+  return new Promise<boolean>((resolve) => {
+    pendingDownloadConsent = resolve;
+    showNetWarn();
+    log('Waiting for confirmation before the model download (metered connection).');
+  });
+}
+
+function settleDownloadConsent(confirmed: boolean): void {
+  const resolve = pendingDownloadConsent;
+  pendingDownloadConsent = null;
+  downloadConsentDeclined = !confirmed;
+  resolve?.(confirmed);
+}
+
 // The prompt shown after the connection switched to metered mid-download. The
 // copy is different from the cold-visit one: it explains that the transfer was
 // stopped, not that it never began.
@@ -4284,6 +4327,7 @@ function confirmDownload(): void {
   sessionStorage.setItem('remove-bg:download-confirmed', '1');
   netWarnEl.hidden = true;
   log('Download confirmed by the user; starting the model download.');
+  settleDownloadConsent(true);
   autoLoadModel();
 }
 
@@ -4291,8 +4335,9 @@ netWarnConfirm.addEventListener('click', confirmDownload);
 netWarnDismiss.addEventListener('click', () => {
   netWarnEl.hidden = true;
   setStage('Paused — choose a photo to download the model and remove its background.');
-  // A dismissal is not a dead end: choosing a photo starts the download and the
-  // run automatically.
+  // A dismissal is not a dead end: choosing a photo asks again, and a
+  // confirmed download starts the run automatically.
+  settleDownloadConsent(false);
 });
 
 boot().catch((e) => error(e instanceof Error ? e.message : String(e)));

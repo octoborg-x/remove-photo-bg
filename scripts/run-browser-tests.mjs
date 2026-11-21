@@ -547,6 +547,52 @@ try {
       bgState.afterTransparent.current,
     );
 
+    // PNG/WebP are the alpha-capable formats, so choosing one after a solid
+    // colour must hand back a transparent cut-out instead of an opaque file
+    // (the "PNG and WebP don't take alpha" report).
+    const alphaFormatState = await page.evaluate(async () => {
+      const picker = document.getElementById('bgColorPicker');
+      picker.value = '#ffffff';
+      picker.dispatchEvent(new Event('input', { bubbles: true }));
+      const solid = document.getElementById('downloadImage')?.getAttribute('download') ?? '';
+      document.querySelector('#formatOptions input[value=png]').click();
+      const dl = document.getElementById('downloadImage');
+      const href = dl?.getAttribute('href') ?? '';
+      const img = new Image();
+      img.src = href;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let transparent = 0;
+      for (let i = 3; i < data.length; i += 4 * 97) if (data[i] === 0) transparent += 1;
+      const alpha = document.getElementById('bgAlpha');
+      return {
+        solid,
+        download: dl?.getAttribute('download') ?? '',
+        current: document.getElementById('bgCurrent')?.textContent ?? '',
+        transparent,
+        alphaDisabled: alpha.disabled,
+        alphaValue: document.getElementById('bgAlphaValue')?.textContent ?? '',
+      };
+    });
+    record(
+      'selecting PNG after a solid colour restores a transparent cut-out',
+      alphaFormatState.solid.endsWith('.jpg') &&
+        alphaFormatState.download.endsWith('.png') &&
+        alphaFormatState.current === 'transparent' &&
+        alphaFormatState.transparent > 0,
+      `${alphaFormatState.solid} → ${alphaFormatState.download} (${alphaFormatState.current}, transparent samples=${alphaFormatState.transparent})`,
+    );
+    record(
+      'the alpha slider is inert on a transparent background',
+      alphaFormatState.alphaDisabled && alphaFormatState.alphaValue === '—',
+      `disabled=${alphaFormatState.alphaDisabled} value=${alphaFormatState.alphaValue}`,
+    );
+
     // Theme: the toggle pins an explicit mode and flips the page surface. The
     // colour change is transitioned, so read it after the swap settles.
     const themeBefore = await page.evaluate(() => ({

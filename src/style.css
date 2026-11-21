@@ -613,6 +613,13 @@
     width: 7rem;
     accent-color: var(--color-blue-600);
   }
+  /* Inert until a colour is picked: the slider refines a background colour, it
+     is not a second transparency control. */
+  .paletteAlpha input[type='range']:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    accent-color: var(--color-slate-400);
+  }
 
   /* ——— Format options ——— */
   .formatOptions {
@@ -1206,7 +1213,16 @@
     justify-content: center;
     border-radius: 0.9rem;
     overflow: hidden;
-    background: var(--color-slate-50);
+    /* A transparent PNG/WebP upload must read as transparent instead of a flat
+       slate box that looks like its alpha was dropped. */
+    background-color: var(--checker-b);
+    background-image:
+      linear-gradient(45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--checker-a) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--checker-a) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
     border: 1px solid var(--color-slate-200);
     cursor: pointer;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;

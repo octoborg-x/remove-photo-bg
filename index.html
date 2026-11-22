@@ -1406,6 +1406,23 @@
                   <span class="refineSpinner" aria-hidden="true"></span>
                   <span>Refining edges…</span>
                 </div>
+
+                <!-- Manual retouch entry point. Only the Result tab shows it,
+                     and only once a result exists. It opens the brush panel in
+                     place of the background & export block. -->
+                <button
+                  id="resultEditToggle"
+                  type="button"
+                  class="resultEditToggle"
+                  aria-label="Retouch the cut-out"
+                  title="Retouch the cut-out"
+                  hidden
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
+                </button>
               </div>
 
               <!-- Report a quality problem: an explicit, optional action in the
@@ -1621,6 +1638,44 @@
                       <button id="bulkDownloadAll" type="button" class="bulkDownloadAll" title="Download every cut-out as one ZIP archive" hidden>
                         Download all
                       </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- Manual retouch: swaps in for the background & export block
+                   while editing the alpha mask. No new dependencies, no upload. -->
+              <div id="retouchPanel" class="bottomBar retouchPanel" hidden role="region" aria-label="Retouch">
+                <div class="bottomBarHead">
+                  <div class="bottomBarHeadTitle">
+                    <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                    <h4 class="bottomBarTitle">Retouch</h4>
+                  </div>
+                  <span class="retouchHint">Edits the mask only — photo colours are never changed.</span>
+                </div>
+                <div class="bottomBarBody retouchBody">
+                  <div class="bottomBarSection retouchTools">
+                    <div class="retouchToolGroup" role="group" aria-label="Brush tool">
+                      <button id="retouchRestore" type="button" class="retouchTool" aria-pressed="true">Restore</button>
+                      <button id="retouchErase" type="button" class="retouchTool" aria-pressed="false">Erase</button>
+                    </div>
+                    <label class="retouchSlider">
+                      <span>Brush size <span id="retouchSizeValue" class="retouchValue">48px</span></span>
+                      <input id="retouchSize" type="range" min="4" max="160" step="1" value="48" aria-label="Brush size" />
+                    </label>
+                    <label class="retouchSlider">
+                      <span>Stroke feather <span id="retouchFeatherValue" class="retouchValue">40%</span></span>
+                      <input id="retouchFeather" type="range" min="0" max="100" step="1" value="40" aria-label="Stroke feather" />
+                    </label>
+                  </div>
+                  <div class="bottomBarSection retouchActions">
+                    <button id="retouchAutoCleanup" type="button" class="retouchAction" title="Tighten the mask edge to the photo's real colour edges">Auto color contour cleanup</button>
+                    <div class="retouchHistory">
+                      <button id="retouchUndo" type="button" class="retouchAction" disabled>Undo</button>
+                      <button id="retouchRedo" type="button" class="retouchAction" disabled>Redo</button>
+                    </div>
+                    <div class="retouchCommit">
+                      <button id="retouchCancel" type="button" class="retouchAction">Cancel</button>
+                      <button id="retouchSave" type="button" class="retouchAction retouchSave">Save</button>
                     </div>
                   </div>
                 </div>

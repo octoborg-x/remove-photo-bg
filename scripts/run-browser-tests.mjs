@@ -662,6 +662,208 @@ try {
       `disabled=${alphaFormatState.alphaDisabled} value=${alphaFormatState.alphaValue}`,
     );
 
+    // ——— Manual retouch: open → stroke → Save, then open → Cancel ———
+    // The edit icon lives only on the Result tab. Opening it swaps the
+    // background & export block for the retouch panel in the same slot; Save
+    // commits the edited alpha and restores the block, Cancel restores it
+    // pixel-for-pixel.
+    const retouchEntry = await page.evaluate(() => {
+      const btn = document.getElementById('resultEditToggle');
+      const panel = document.getElementById('retouchPanel');
+      const exportBar = document.getElementById('exportBar');
+      const rect = btn?.getBoundingClientRect();
+      return {
+        hasBtn: !!btn,
+        hidden: btn ? btn.hidden : true,
+        visible: !!rect && rect.width > 0 && rect.height > 0,
+        panelHidden: panel ? panel.hidden : true,
+        sameSlot:
+          panel?.parentElement === exportBar?.parentElement &&
+          panel?.parentElement?.classList.contains('studioTabBody') === true,
+      };
+    });
+    record(
+      'the retouch edit icon appears on the Result tab in the export slot',
+      retouchEntry.hasBtn &&
+        retouchEntry.hidden === false &&
+        retouchEntry.visible &&
+        retouchEntry.panelHidden &&
+        retouchEntry.sameSlot,
+      `btn ${retouchEntry.hasBtn} hidden ${retouchEntry.hidden} visible ${retouchEntry.visible} sameSlot ${retouchEntry.sameSlot}`,
+    );
+
+    const retouchSave = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const loadPixels = async (href) => {
+        const img = new Image();
+        img.src = href;
+        await img.decode();
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        return { c, ctx, data: ctx.getImageData(0, 0, c.width, c.height).data };
+      };
+      const alphaAt = async (href, fx, fy) => {
+        const { c, data } = await loadPixels(href);
+        const x = Math.min(c.width - 1, Math.max(0, Math.round(c.width * fx)));
+        const y = Math.min(c.height - 1, Math.max(0, Math.round(c.height * fy)));
+        return data[(y * c.width + x) * 4 + 3];
+      };
+      const findOpaque = async (href) => {
+        const { c, data } = await loadPixels(href);
+        const stepX = Math.max(8, Math.floor(c.width / 24));
+        const stepY = Math.max(8, Math.floor(c.height / 24));
+        for (let y = 8; y < c.height; y += stepY) {
+          for (let x = 8; x < c.width; x += stepX) {
+            const a = data[(y * c.width + x) * 4 + 3];
+            if (a > 200) return { fx: x / c.width, fy: y / c.height };
+          }
+        }
+        return { fx: 0.5, fy: 0.5 };
+      };
+      const dl = document.getElementById('downloadImage');
+      const beforeHref = dl.getAttribute('href');
+      const pt = await findOpaque(beforeHref);
+      const beforeAlpha = await alphaAt(beforeHref, pt.fx, pt.fy);
+
+      document.getElementById('resultEditToggle').click();
+      await sleep(40);
+      const panel = document.getElementById('retouchPanel');
+      const exportBar = document.getElementById('exportBar');
+      const canvas = document.getElementById('retouchCanvas');
+      const openState = {
+        panelHidden: panel?.hidden,
+        exportHidden: exportBar?.hidden,
+        canvas: !!canvas,
+      };
+
+      // Erase is guaranteed to change an opaque centre pixel.
+      document.getElementById('retouchErase').click();
+      const rect = canvas.getBoundingClientRect();
+      const cx = rect.left + rect.width * pt.fx;
+      const cy = rect.top + rect.height * pt.fy;
+      const ev = (type, x, y) =>
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          pointerId: 7,
+          pointerType: 'mouse',
+          isPrimary: true,
+          buttons: type === 'pointerup' ? 0 : 1,
+        });
+      canvas.dispatchEvent(ev('pointerdown', cx, cy));
+      canvas.dispatchEvent(ev('pointermove', cx + Math.max(4, rect.width * 0.06), cy));
+      canvas.dispatchEvent(ev('pointerup', cx + Math.max(4, rect.width * 0.06), cy));
+
+      const undo = document.getElementById('retouchUndo');
+      const redo = document.getElementById('retouchRedo');
+      const undoEnabled = !undo.disabled;
+      undo.click();
+      const redoEnabled = !redo.disabled;
+      redo.click();
+
+      document.getElementById('retouchSave').click();
+      for (let i = 0; i < 200 && !panel.hidden; i++) await sleep(50);
+
+      const afterHref = dl.getAttribute('href');
+      const afterAlpha = await alphaAt(afterHref, pt.fx, pt.fy);
+      return {
+        beforeAlpha,
+        afterAlpha,
+        undoEnabled,
+        redoEnabled,
+        openState,
+        panelHiddenAfter: panel.hidden,
+        exportHiddenAfter: exportBar.hidden,
+        download: dl.getAttribute('download'),
+        log: document.getElementById('consoleOutput')?.textContent ?? '',
+      };
+    });
+    record(
+      'opening retouch hides the background & export block and shows the brush canvas',
+      retouchSave.openState.panelHidden === false &&
+        retouchSave.openState.exportHidden === true &&
+        retouchSave.openState.canvas === true,
+      `panel ${retouchSave.openState.panelHidden} export ${retouchSave.openState.exportHidden} canvas ${retouchSave.openState.canvas}`,
+    );
+    record(
+      'undo/redo toggles per stroke while retouching',
+      retouchSave.undoEnabled === true && retouchSave.redoEnabled === true,
+      `undo ${retouchSave.undoEnabled} redo ${retouchSave.redoEnabled}`,
+    );
+    record(
+      'a retouch stroke + Save changes the exported alpha and restores the export block',
+      retouchSave.beforeAlpha > 200 &&
+        retouchSave.afterAlpha < 50 &&
+        retouchSave.panelHiddenAfter === true &&
+        retouchSave.exportHiddenAfter === false &&
+        retouchSave.download.endsWith('.png') &&
+        /Manual retouch saved: 1 stroke/.test(retouchSave.log),
+      `alpha ${retouchSave.beforeAlpha} → ${retouchSave.afterAlpha}, panel ${retouchSave.panelHiddenAfter}, export ${retouchSave.exportHiddenAfter}`,
+    );
+
+    const retouchCancel = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const dl = document.getElementById('downloadImage');
+      const beforeHref = dl.getAttribute('href');
+      document.getElementById('resultEditToggle').click();
+      await sleep(40);
+      const canvas = document.getElementById('retouchCanvas');
+      const rect = canvas.getBoundingClientRect();
+      const cx = rect.left + rect.width * 0.5;
+      const cy = rect.top + rect.height * 0.5;
+      const ev = (type, x, y) =>
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          pointerId: 8,
+          pointerType: 'mouse',
+          isPrimary: true,
+          buttons: type === 'pointerup' ? 0 : 1,
+        });
+      document.getElementById('retouchErase').click();
+      canvas.dispatchEvent(ev('pointerdown', cx, cy));
+      canvas.dispatchEvent(ev('pointerup', cx, cy));
+      document.getElementById('retouchCancel').click();
+      await sleep(60);
+      return {
+        unchanged: dl.getAttribute('href') === beforeHref,
+        panelHidden: document.getElementById('retouchPanel').hidden,
+        exportHidden: document.getElementById('exportBar').hidden,
+        overlayGone: !document.getElementById('retouchCanvas'),
+        editVisible: document.getElementById('resultEditToggle').hidden === false,
+      };
+    });
+    record(
+      'Cancel restores the pre-edit export pixel-for-pixel',
+      retouchCancel.unchanged &&
+        retouchCancel.panelHidden === true &&
+        retouchCancel.exportHidden === false &&
+        retouchCancel.overlayGone === true &&
+        retouchCancel.editVisible === true,
+      `unchanged ${retouchCancel.unchanged} panel ${retouchCancel.panelHidden} export ${retouchCancel.exportHidden} overlayGone ${retouchCancel.overlayGone}`,
+    );
+
+    const retouchTabs = await page.evaluate(() => {
+      const btn = document.getElementById('resultEditToggle');
+      document.getElementById('tabBulk').click();
+      const bulkHidden = btn.hidden;
+      document.getElementById('tabStep').click();
+      const stepHidden = btn.hidden;
+      return { bulkHidden, stepHidden };
+    });
+    record(
+      'the retouch edit icon is hidden outside the Result tab',
+      retouchTabs.bulkHidden === true && retouchTabs.stepHidden === false,
+      `bulk ${retouchTabs.bulkHidden} step ${retouchTabs.stepHidden}`,
+    );
+
     // Theme: the toggle pins an explicit mode and flips the page surface. The
     // colour change is transitioned, so read it after the swap settles.
     const themeBefore = await page.evaluate(() => ({

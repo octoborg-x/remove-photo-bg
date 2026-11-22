@@ -21,6 +21,19 @@ import {
   type MaskAdjust,
 } from './features/background-removal/mask-postprocess';
 import { composeResult, previewSize } from './features/background-removal/composite';
+import {
+  initialBrushHistory,
+  pushBrushStroke,
+  redoBrushStroke,
+  replayBrushStrokes,
+  undoBrushStroke,
+  canRedoBrush,
+  canUndoBrush,
+  type BrushHistory,
+  type BrushStroke,
+  type BrushTool,
+} from './features/background-removal/brush-edit';
+import { autoContourCleanup } from './features/background-removal/contour-cleanup';
 import { recoverForegroundMask, despeckleRecoveredMask } from './features/background-removal/mask-recovery';
 import { isIslandCleanup, islandFraction } from './features/background-removal/island-cleanup';
 import {
@@ -258,6 +271,23 @@ const sidebarResizeEl = document.getElementById('sidebarResize');
 // the settings sidebar inside the active tab body.
 const exportBarEl = document.getElementById('exportBar') as HTMLElement | null;
 const bottomBarCollapseBtn = document.getElementById('bottomBarCollapse') as HTMLButtonElement | null;
+// Manual retouch layer (Result tab only): an overlay edit button on the image
+// and a compact panel that swaps in for the background/export block.
+const resultEditToggleBtn = document.getElementById('resultEditToggle') as HTMLButtonElement | null;
+const retouchPanelEl = document.getElementById('retouchPanel') as HTMLElement | null;
+const retouchToolButtons: Record<BrushTool, HTMLButtonElement | null> = {
+  restore: document.getElementById('retouchRestore') as HTMLButtonElement | null,
+  erase: document.getElementById('retouchErase') as HTMLButtonElement | null,
+};
+const retouchSizeInput = document.getElementById('retouchSize') as HTMLInputElement | null;
+const retouchSizeValueEl = document.getElementById('retouchSizeValue');
+const retouchFeatherInput = document.getElementById('retouchFeather') as HTMLInputElement | null;
+const retouchFeatherValueEl = document.getElementById('retouchFeatherValue');
+const retouchAutoCleanupBtn = document.getElementById('retouchAutoCleanup') as HTMLButtonElement | null;
+const retouchUndoBtn = document.getElementById('retouchUndo') as HTMLButtonElement | null;
+const retouchRedoBtn = document.getElementById('retouchRedo') as HTMLButtonElement | null;
+const retouchSaveBtn = document.getElementById('retouchSave') as HTMLButtonElement | null;
+const retouchCancelBtn = document.getElementById('retouchCancel') as HTMLButtonElement | null;
 // Bulk queue: up to five photos processed one after another.
 const bulkPickBtn = document.getElementById('bulkPick') as HTMLButtonElement | null;
 const bulkProcessBtn = document.getElementById('bulkProcess') as HTMLButtonElement | null;
@@ -304,6 +334,21 @@ const refineEdgeSensitivityValueEl = document.getElementById('refineEdgeSensitiv
 const islandCleanupSelect = document.getElementById('islandCleanupSelect') as HTMLSelectElement | null;
 const islandCleanupValueEl = document.getElementById('islandCleanupValue');
 let studioView = initialStudioView();
+
+// ——— Manual retouch state (declared before the first render) ———
+// The session is a working copy of the mask at preview and full resolution. The
+// committed result canvases are never touched until Save, so Cancel is exactly
+// pixel-for-pixel. Strokes are recorded in the preview canvas's coordinate
+// space and replayed onto the full-resolution grid on Save.
+let lastResultAlpha: Uint8ClampedArray | null = null;
+let retouchSession: RetouchSession | null = null;
+let retouchModeOpen = false;
+let retouchOverlay: HTMLCanvasElement | null = null;
+const RETOUCH_DEFAULT_SIZE = 48;
+const RETOUCH_DEFAULT_FEATHER = 40; // percent
+// Read by updateRetouchUi() during the first render, so declared here too.
+let resultCompareFigure: HTMLElement | null = null;
+let resultCompareOn = false;
 
 // ——— Bulk queue ———
 // The source blobs and full-resolution cut-outs are kept here, keyed by the ids
@@ -386,11 +431,15 @@ function renderStudioView(): void {
   consoleToggleBtn.disabled = !engineTab;
   if (sidebarToggleBtn) sidebarToggleBtn.disabled = !engineTab;
   updateExportBarVisibility();
+  updateRetouchUi();
   updateBulkStatus();
 }
 
 function setStudioTab(tab: StudioTab, force = false): void {
   if (!force && !tabEnabled(studioView, tab)) return;
+  // Retouch belongs to the step result; leaving the step tab discards an open
+  // session exactly like Cancel.
+  if (retouchModeOpen && tab !== 'step') cancelRetouchMode(true);
   if (bulkBatchRunning && tab !== 'bulk') bulkTabPinned = false;
   studioView = { ...studioView, tab };
   renderStudioView();
@@ -906,6 +955,9 @@ function applyMaskUi(): void {
 // Clears a previous result so a newly chosen photo never sits above a stale
 // export, and hides the download section until a fresh mask is rendered.
 function clearOutput(): void {
+  // A new photo or a re-process discards any in-progress retouch session. The
+  // edit was never committed, so dropping it is exactly a Cancel.
+  if (retouchSession || retouchModeOpen) discardRetouchSession();
   // Cancel any queued library write from the result being replaced.
   libraryRunToken += 1;
   outputBox.innerHTML = '';
@@ -915,6 +967,7 @@ function clearOutput(): void {
   downloadImageBtn.removeAttribute('href');
   lastResultCanvas = null;
   lastPreviewCanvas = null;
+  lastResultAlpha = null;
   setResultCompare(false);
   if (resultCompareToggleBtn) resultCompareToggleBtn.hidden = true;
   outputSection.hidden = true;
@@ -933,11 +986,30 @@ let resultRevision = 0;
 // the display. Rebuilt whenever a new result is composited.
 let lastPreviewCanvas: HTMLCanvasElement | null = null;
 // The before/after slider in the Result editor, reused across background changes.
-let resultCompareFigure: HTMLElement | null = null;
-// The slider is off by default: the Result tab shows only the cut-out until the
-// compare button is pressed.
-let resultCompareOn = false;
+// (`resultCompareFigure`/`resultCompareOn` are declared before the first render.)
 let exportFormat: ExportFormat = initExportFormat();
+
+// ——— Manual retouch session ———
+interface RetouchSession {
+  fullImage: ImageData;
+  fullWidth: number;
+  fullHeight: number;
+  fullBaseAlpha: Float32Array;
+  previewImage: ImageData;
+  previewWidth: number;
+  previewHeight: number;
+  previewBaseAlpha: Float32Array;
+  previewCleanupAlpha: Float32Array | null;
+  history: BrushHistory;
+  tool: BrushTool;
+  /** Brush diameter in preview-canvas pixels. */
+  size: number;
+  /** Soft-edge fraction of the brush radius, 0..1. */
+  feather: number;
+  cleanupApplied: boolean;
+  drawing: BrushStroke | null;
+  saving: boolean;
+}
 
 function setResultCompare(on: boolean): void {
   resultCompareOn = on;
@@ -1094,8 +1166,10 @@ function updateExportBarVisibility(): void {
       : studioView.tab === 'bulk'
         ? bulkDoneCount(bulkState) > 0
         : false;
-  exportBarEl.hidden = !visible;
-  if (visible) refreshExportActions();
+  // The retouch panel takes this slot while editing; the background & export
+  // block returns untouched when the session closes.
+  exportBarEl.hidden = !visible || retouchModeOpen;
+  if (visible && !retouchModeOpen) refreshExportActions();
 }
 
 // The Background & Export header can collapse its own body, mirroring the
@@ -1266,6 +1340,405 @@ bgEyeDropperBtn.addEventListener('click', async () => {
 if (!urlParams.has('bg')) dropOpaqueBackgroundForAlpha(exportFormat);
 
 updateBackgroundUi();
+
+// ——— Manual retouch (Result tab only) ———
+// Edits the alpha mask already produced by inference. It never runs the worker,
+// never modifies the photo's RGB pixels, and never leaves the device. The
+// background & export block is replaced in place by a compact brush panel while
+// the session is open; closing it restores the block exactly.
+
+function canvasAlphaFloat(canvas: HTMLCanvasElement): Float32Array {
+  const { width, height } = canvas;
+  const data = canvas
+    .getContext('2d', { willReadFrequently: true })!
+    .getImageData(0, 0, width, height).data;
+  const out = new Float32Array(width * height);
+  for (let i = 0; i < out.length; i++) out[i] = data[i * 4 + 3] / 255;
+  return out;
+}
+
+function canvasAlphaBytes(canvas: HTMLCanvasElement): Uint8ClampedArray {
+  const { width, height } = canvas;
+  const data = canvas
+    .getContext('2d', { willReadFrequently: true })!
+    .getImageData(0, 0, width, height).data;
+  const out = new Uint8ClampedArray(width * height);
+  for (let i = 0; i < out.length; i++) out[i] = data[i * 4 + 3];
+  return out;
+}
+
+/** The original RGB at the preview resolution, used for the live brush canvas. */
+function scaledImageData(source: ImageData, width: number, height: number): ImageData {
+  if (source.width === width && source.height === height) return source;
+  const src = document.createElement('canvas');
+  src.width = source.width;
+  src.height = source.height;
+  src.getContext('2d')!.putImageData(source, 0, 0);
+  const dst = document.createElement('canvas');
+  dst.width = width;
+  dst.height = height;
+  const ctx = dst.getContext('2d', { willReadFrequently: true })!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, 0, 0, width, height);
+  return ctx.getImageData(0, 0, width, height);
+}
+
+function updateRetouchHistoryUi(): void {
+  if (retouchUndoBtn) {
+    retouchUndoBtn.disabled = !retouchSession || !canUndoBrush(retouchSession.history);
+  }
+  if (retouchRedoBtn) {
+    retouchRedoBtn.disabled = !retouchSession || !canRedoBrush(retouchSession.history);
+  }
+}
+
+/** Shows the edit icon only on the Result tab, and the panel only while open. */
+function updateRetouchUi(): void {
+  // The interim Stage-1 preview is replaced by the refined final moments later;
+  // editing it would leave the session on a stale base, so wait for the settle.
+  const canEdit =
+    studioView.tab === 'step' && studioView.hasResult && !studioView.refining && !!lastResultAlpha;
+  if (resultEditToggleBtn) resultEditToggleBtn.hidden = !canEdit || retouchModeOpen;
+  if (retouchPanelEl) retouchPanelEl.hidden = !retouchModeOpen;
+  // The before/after slider cannot be used while the brush canvas covers the
+  // stage, so its toggle is hidden for the duration of the session.
+  if (resultCompareToggleBtn) {
+    resultCompareToggleBtn.hidden = retouchModeOpen || !resultCompareFigure;
+  }
+  updateRetouchHistoryUi();
+}
+
+function setRetouchMode(open: boolean): void {
+  retouchModeOpen = open;
+  if (!open) {
+    retouchOverlay?.remove();
+    retouchOverlay = null;
+    resultCompareFigure?.classList.remove('retouchOn');
+  }
+  updateExportBarVisibility();
+  updateRetouchUi();
+}
+
+/** Drops the session without a log; used when a new photo replaces the result. */
+function discardRetouchSession(): void {
+  retouchSession = null;
+  retouchModeOpen = false;
+  retouchOverlay?.remove();
+  retouchOverlay = null;
+  resultCompareFigure?.classList.remove('retouchOn');
+  if (retouchPanelEl) retouchPanelEl.hidden = true;
+}
+
+function cancelRetouchMode(silent = false): void {
+  if (!retouchSession) {
+    setRetouchMode(false);
+    return;
+  }
+  retouchSession = null;
+  setRetouchMode(false);
+  if (!silent) log('Retouch cancelled — the cut-out is unchanged.');
+}
+
+function applyRetouchControls(): void {
+  const s = retouchSession;
+  if (!s) return;
+  for (const tool of ['restore', 'erase'] as const) {
+    retouchToolButtons[tool]?.setAttribute('aria-pressed', String(s.tool === tool));
+  }
+  if (retouchSizeInput) retouchSizeInput.value = String(Math.round(s.size));
+  if (retouchSizeValueEl) retouchSizeValueEl.textContent = `${Math.round(s.size)}px`;
+  if (retouchFeatherInput) retouchFeatherInput.value = String(Math.round(s.feather * 100));
+  if (retouchFeatherValueEl) {
+    retouchFeatherValueEl.textContent = `${Math.round(s.feather * 100)}%`;
+  }
+  if (retouchAutoCleanupBtn) {
+    retouchAutoCleanupBtn.disabled = false;
+    retouchAutoCleanupBtn.textContent = 'Auto color contour cleanup';
+  }
+  updateRetouchHistoryUi();
+}
+
+function setRetouchBusy(busy: boolean): void {
+  if (retouchSaveBtn) {
+    retouchSaveBtn.disabled = busy;
+    retouchSaveBtn.textContent = busy ? 'Saving…' : 'Save';
+  }
+  if (retouchCancelBtn) retouchCancelBtn.disabled = busy;
+  if (retouchAutoCleanupBtn) retouchAutoCleanupBtn.disabled = busy;
+  if (busy) {
+    if (retouchUndoBtn) retouchUndoBtn.disabled = true;
+    if (retouchRedoBtn) retouchRedoBtn.disabled = true;
+  } else {
+    updateRetouchHistoryUi();
+  }
+}
+
+function retouchPointerPoint(
+  e: PointerEvent,
+  canvas: HTMLCanvasElement,
+): { x: number; y: number } {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (canvas.width / Math.max(1, rect.width)),
+    y: (e.clientY - rect.top) * (canvas.height / Math.max(1, rect.height)),
+  };
+}
+
+function onRetouchPointerDown(e: PointerEvent): void {
+  const s = retouchSession;
+  if (!s || !retouchOverlay) return;
+  e.preventDefault();
+  // Synthetic pointer events (tests) have no active pointer to capture.
+  try {
+    retouchOverlay.setPointerCapture(e.pointerId);
+  } catch {
+    /* no active pointer */
+  }
+  s.drawing = {
+    tool: s.tool,
+    points: [retouchPointerPoint(e, retouchOverlay)],
+    size: s.size,
+    feather: s.feather,
+  };
+  renderRetouchPreview();
+}
+
+function onRetouchPointerMove(e: PointerEvent): void {
+  const s = retouchSession;
+  if (!s || !s.drawing || !retouchOverlay) return;
+  const p = retouchPointerPoint(e, retouchOverlay);
+  const points = s.drawing.points;
+  const last = points[points.length - 1];
+  if (Math.hypot(p.x - last.x, p.y - last.y) < 1.5) return;
+  points.push(p);
+  renderRetouchPreview();
+}
+
+function onRetouchPointerUp(e: PointerEvent): void {
+  const s = retouchSession;
+  if (!s || !s.drawing) return;
+  const stroke = s.drawing;
+  s.drawing = null;
+  try {
+    retouchOverlay?.releasePointerCapture(e.pointerId);
+  } catch {
+    /* no capture */
+  }
+  s.history = pushBrushStroke(s.history, stroke);
+  renderRetouchPreview();
+  updateRetouchHistoryUi();
+}
+
+/** Paints the current working alpha over the stage's checkerboard. */
+function paintRetouchOverlay(s: RetouchSession, alpha: Float32Array): void {
+  const canvas = retouchOverlay;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const out = ctx.createImageData(s.previewWidth, s.previewHeight);
+  const rgb = s.previewImage.data;
+  for (let i = 0; i < alpha.length; i++) {
+    const o = i * 4;
+    out.data[o] = rgb[o];
+    out.data[o + 1] = rgb[o + 1];
+    out.data[o + 2] = rgb[o + 2];
+    const a = alpha[i];
+    out.data[o + 3] = Math.round((a < 0 ? 0 : a > 1 ? 1 : a) * 255);
+  }
+  ctx.putImageData(out, 0, 0);
+}
+
+function renderRetouchPreview(): void {
+  const s = retouchSession;
+  if (!s) return;
+  const base = s.cleanupApplied && s.previewCleanupAlpha ? s.previewCleanupAlpha : s.previewBaseAlpha;
+  const strokes = s.drawing ? [...s.history.strokes, s.drawing] : s.history.strokes;
+  const alpha = replayBrushStrokes(
+    base,
+    s.previewWidth,
+    s.previewHeight,
+    strokes,
+    s.previewWidth,
+    s.previewHeight,
+  );
+  paintRetouchOverlay(s, alpha);
+}
+
+function buildRetouchOverlay(s: RetouchSession): void {
+  retouchOverlay?.remove();
+  const stage = resultCompareFigure?.querySelector<HTMLElement>('.compareStage');
+  if (!stage) return;
+  const canvas = document.createElement('canvas');
+  canvas.id = 'retouchCanvas';
+  canvas.className = 'retouchCanvas';
+  canvas.width = s.previewWidth;
+  canvas.height = s.previewHeight;
+  canvas.setAttribute('aria-label', 'Retouch canvas: paint to restore or erase the cut-out');
+  stage.appendChild(canvas);
+  retouchOverlay = canvas;
+  resultCompareFigure?.classList.add('retouchOn');
+  canvas.addEventListener('pointerdown', onRetouchPointerDown);
+  canvas.addEventListener('pointermove', onRetouchPointerMove);
+  canvas.addEventListener('pointerup', onRetouchPointerUp);
+  canvas.addEventListener('pointercancel', onRetouchPointerUp);
+}
+
+function enterRetouchMode(): void {
+  if (retouchModeOpen) return;
+  if (studioView.tab !== 'step' || !studioView.hasResult || studioView.refining) return;
+  if (!lastResultAlpha || !lastPreviewCanvas || !currentImageData) return;
+  // Make sure the compare figure exists before we attach the overlay to it.
+  renderResultPreview();
+  const previewWidth = lastPreviewCanvas.width;
+  const previewHeight = lastPreviewCanvas.height;
+  const session: RetouchSession = {
+    fullImage: currentImageData,
+    fullWidth: currentImageData.width,
+    fullHeight: currentImageData.height,
+    fullBaseAlpha: bytesToAlpha(lastResultAlpha),
+    previewImage: scaledImageData(currentImageData, previewWidth, previewHeight),
+    previewWidth,
+    previewHeight,
+    previewBaseAlpha: canvasAlphaFloat(lastPreviewCanvas),
+    previewCleanupAlpha: null,
+    history: initialBrushHistory(),
+    tool: 'restore',
+    size: RETOUCH_DEFAULT_SIZE,
+    feather: RETOUCH_DEFAULT_FEATHER / 100,
+    cleanupApplied: false,
+    drawing: null,
+    saving: false,
+  };
+  retouchSession = session;
+  applyRetouchControls();
+  buildRetouchOverlay(session);
+  setRetouchMode(true);
+  renderRetouchPreview();
+  log('Retouch: paint to restore or erase the mask, then Save or Cancel.');
+}
+
+async function runRetouchCleanup(): Promise<void> {
+  const s = retouchSession;
+  if (!s || s.saving) return;
+  if (retouchAutoCleanupBtn) {
+    retouchAutoCleanupBtn.disabled = true;
+    retouchAutoCleanupBtn.textContent = 'Cleaning…';
+  }
+  try {
+    const cleaned = await autoContourCleanup(s.previewImage, s.previewBaseAlpha);
+    if (retouchSession !== s) return;
+    s.previewCleanupAlpha = cleaned;
+    s.cleanupApplied = true;
+    renderRetouchPreview();
+    log('Retouch: automatic colour contour cleanup applied.');
+  } catch (e) {
+    if (retouchSession === s) {
+      log(
+        `WARNING: contour cleanup failed (${e instanceof Error ? e.message : String(e)}).`,
+      );
+    }
+  } finally {
+    if (retouchSession === s && retouchAutoCleanupBtn) {
+      retouchAutoCleanupBtn.disabled = false;
+      retouchAutoCleanupBtn.textContent = 'Auto color contour cleanup';
+    }
+  }
+}
+
+async function saveRetouch(): Promise<void> {
+  const s = retouchSession;
+  if (!s || s.saving) return;
+  const jobId = activeJobId;
+  s.saving = true;
+  setRetouchBusy(true);
+  try {
+    let base = s.fullBaseAlpha;
+    if (s.cleanupApplied) {
+      base = await autoContourCleanup(s.fullImage, s.fullBaseAlpha);
+    }
+    // A new upload/re-process while the cleanup ran discards the session.
+    if (retouchSession !== s || jobId !== activeJobId) return;
+    const alpha = replayBrushStrokes(
+      base,
+      s.fullWidth,
+      s.fullHeight,
+      s.history.strokes,
+      s.previewWidth,
+      s.previewHeight,
+    );
+    const bytes = alphaToBytes(alpha);
+    const { canvas, preview } = await composeResult(s.fullImage, bytes);
+    if (retouchSession !== s || jobId !== activeJobId) return;
+
+    lastResultCanvas = canvas;
+    lastPreviewCanvas = preview;
+    lastResultAlpha = bytes;
+    resultRevision += 1;
+    outputSection.hidden = false;
+    renderResultPreview();
+    applyFormatUi();
+    updateExportBarVisibility();
+    updateReprocessButton();
+    storeLibraryResult(canvas);
+    log(
+      `Manual retouch saved: ${s.history.strokes.length} stroke${s.history.strokes.length === 1 ? '' : 's'}, ` +
+        `cleanup ${s.cleanupApplied ? 'applied' : 'not applied'}.`,
+    );
+  } catch (e) {
+    if (retouchSession === s) {
+      log(
+        `WARNING: could not save the retouch (${e instanceof Error ? e.message : String(e)}).`,
+      );
+      return;
+    }
+  } finally {
+    s.saving = false;
+    if (retouchSession === s) setRetouchBusy(false);
+  }
+  retouchSession = null;
+  setRetouchMode(false);
+}
+
+resultEditToggleBtn?.addEventListener('click', () => enterRetouchMode());
+retouchCancelBtn?.addEventListener('click', () => cancelRetouchMode());
+retouchSaveBtn?.addEventListener('click', () => void saveRetouch());
+retouchAutoCleanupBtn?.addEventListener('click', () => void runRetouchCleanup());
+retouchUndoBtn?.addEventListener('click', () => {
+  const s = retouchSession;
+  if (!s) return;
+  s.history = undoBrushStroke(s.history);
+  renderRetouchPreview();
+  updateRetouchHistoryUi();
+});
+retouchRedoBtn?.addEventListener('click', () => {
+  const s = retouchSession;
+  if (!s) return;
+  s.history = redoBrushStroke(s.history);
+  renderRetouchPreview();
+  updateRetouchHistoryUi();
+});
+for (const tool of ['restore', 'erase'] as const) {
+  retouchToolButtons[tool]?.addEventListener('click', () => {
+    const s = retouchSession;
+    if (!s) return;
+    s.tool = tool;
+    applyRetouchControls();
+  });
+}
+retouchSizeInput?.addEventListener('input', () => {
+  const s = retouchSession;
+  if (!s) return;
+  s.size = Math.max(2, Number(retouchSizeInput.value));
+  if (retouchSizeValueEl) retouchSizeValueEl.textContent = `${Math.round(s.size)}px`;
+});
+retouchFeatherInput?.addEventListener('input', () => {
+  const s = retouchSession;
+  if (!s) return;
+  const percent = Math.max(0, Math.min(100, Number(retouchFeatherInput.value)));
+  s.feather = percent / 100;
+  if (retouchFeatherValueEl) retouchFeatherValueEl.textContent = `${Math.round(percent)}%`;
+});
 
 function log(msg: string): void {
   // The log is rendered in the user-facing Console, so scrub internal commands
@@ -1896,6 +2369,7 @@ async function openLibraryResult(entry: SessionEntry): Promise<void> {
   currentImageName = entry.name;
   lastResultCanvas = canvas;
   lastPreviewCanvas = preview;
+  lastResultAlpha = canvasAlphaBytes(canvas);
   resultRevision += 1;
   resultSettingsKey = engineSettingsKey();
   applySession({ type: 'activate', id: entry.id });
@@ -2505,7 +2979,7 @@ function compositeAndRefine(
       // Paint the Stage-1 preview immediately (finishResult shows the Result tab
       // and enables export). With refinement enabled this is the interim beat;
       // disabled, it is the settled result.
-      finishResult(canvas, preview, size, refineEnabled ? 'preview' : 'final');
+      finishResult(canvas, preview, size, refineEnabled ? 'preview' : 'final', stage1Mask);
       if (!refineEnabled) return;
       return refineAndFinalize(jobId, image, refineInput.mask, refineInput.width, refineInput.height, guide, size, postprocessStart, recovered);
     })
@@ -2678,7 +3152,7 @@ async function refineAndFinalize(
     refinementSucceeded = true;
     // Full post-processing time: mask reconstruction + Stage-1 composite + refine.
     postprocessingMs = performance.now() - postprocessStart;
-    finishResult(canvas, preview, size, 'final');
+    finishResult(canvas, preview, size, 'final', refinedMask);
     const { timings } = outcome;
     smokeRefineStages = { ...timings, finalizeMs: performance.now() - t0 };
     log(
@@ -2711,9 +3185,11 @@ function finishResult(
   preview: HTMLCanvasElement,
   size: string,
   phase: 'preview' | 'final' = 'final',
+  mask: Uint8ClampedArray | null = null,
 ): void {
   lastResultCanvas = canvas;
   lastPreviewCanvas = preview;
+  lastResultAlpha = mask ? new Uint8ClampedArray(mask) : null;
   resultRevision += 1;
 
   const ctx = canvas.getContext('2d')!;
@@ -3497,6 +3973,7 @@ interface StepSnapshot {
   imageName: string;
   result: HTMLCanvasElement | null;
   preview: HTMLCanvasElement | null;
+  alpha: Uint8ClampedArray | null;
   view: typeof studioView;
   settingsKey: string | null;
 }
@@ -3509,6 +3986,7 @@ function snapshotStep(): StepSnapshot {
     imageName: currentImageName,
     result: lastResultCanvas,
     preview: lastPreviewCanvas,
+    alpha: lastResultAlpha,
     view: studioView,
     settingsKey: resultSettingsKey,
   };
@@ -3525,6 +4003,7 @@ function restoreStep(snapshot: StepSnapshot): void {
   currentImageName = snapshot.imageName;
   lastResultCanvas = snapshot.result;
   lastPreviewCanvas = snapshot.preview;
+  lastResultAlpha = snapshot.alpha;
   outputBox.innerHTML = '';
   outputBox.classList.remove('hasResultCompare');
   resultCompareFigure = null;

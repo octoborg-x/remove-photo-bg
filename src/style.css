@@ -1601,6 +1601,52 @@
     width: 0.95rem;
     height: 0.95rem;
   }
+  /* Manual retouch: a circular pencil button in the image's top-left corner. */
+  .resultEditToggle {
+    position: absolute;
+    top: 0.6rem;
+    left: 0.6rem;
+    z-index: 4;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: rgb(15 23 42 / 0.72);
+    color: #f8fafc;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: background 0.15s ease;
+  }
+  .resultEditToggle[hidden] {
+    display: none;
+  }
+  .resultEditToggle:hover {
+    background: rgb(15 23 42 / 0.88);
+  }
+  .resultEditToggle svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  /* While retouching, the stage shows the live brush canvas over its
+     checkerboard instead of the background-composited preview. */
+  .resultCompare.retouchOn .compareImg,
+  .resultCompare.retouchOn .compareDivider,
+  .resultCompare.retouchOn .compareRange {
+    display: none;
+  }
+  .retouchCanvas {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    cursor: crosshair;
+  }
   /* ——— Studio workspace: engine settings sidebar (left) + active panel (right).
      The sidebar belongs to the step tab, hides completely when collapsed, and
      its right edge drag-resizes up to 50% of the workspace (clamp in main.ts). */
@@ -1958,6 +2004,116 @@
     }
     .bottomBarExport .exportActions .btn {
       width: 100%;
+    }
+  }
+
+  /* ——— Manual retouch panel (Result tab only) ———
+     Shares the background & export block's slot and visual language: the same
+     header, sections, and field sizing, with a brush-specific layout. */
+  .retouchHint {
+    font-size: 0.66rem;
+    font-weight: 500;
+    color: var(--color-slate-500);
+  }
+  .retouchBody {
+    flex-direction: column;
+  }
+  .retouchTools {
+    gap: 0.55rem;
+  }
+  .retouchToolGroup {
+    display: inline-flex;
+    gap: 0.35rem;
+    padding: 0.2rem;
+    border-radius: 0.7rem;
+    background: var(--color-slate-100);
+  }
+  .retouchTool {
+    flex: 1;
+    padding: 0.38rem 0.8rem;
+    border: 0;
+    border-radius: 0.55rem;
+    background: transparent;
+    color: var(--color-slate-600);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .retouchTool[aria-pressed='true'] {
+    background: var(--color-white);
+    color: var(--color-blue-700);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.12);
+  }
+  .retouchSlider {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-slate-700);
+  }
+  .retouchSlider input[type='range'] {
+    width: 100%;
+  }
+  .retouchValue {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    color: var(--color-slate-500);
+  }
+  .retouchActions {
+    gap: 0.5rem;
+  }
+  .retouchAction {
+    padding: 0.45rem 0.7rem;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 0.65rem;
+    background: var(--color-white);
+    color: var(--color-slate-700);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .retouchAction:hover:not(:disabled) {
+    border-color: var(--color-blue-500);
+    color: var(--color-blue-700);
+    background: var(--color-blue-50);
+  }
+  .retouchAction:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .retouchHistory,
+  .retouchCommit {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .retouchHistory .retouchAction,
+  .retouchCommit .retouchAction {
+    flex: 1;
+  }
+  .retouchSave {
+    border-color: var(--color-blue-600);
+    background: var(--color-blue-600);
+    color: var(--color-white);
+  }
+  .retouchSave:hover:not(:disabled) {
+    border-color: var(--color-blue-700);
+    background: var(--color-blue-700);
+    color: var(--color-white);
+  }
+  @media (min-width: 640px) {
+    .retouchBody {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .retouchTools {
+      flex: 2 1 18rem;
+    }
+    .retouchActions {
+      flex: 1 1 14rem;
+      border-left: 1px solid var(--color-slate-200);
+      padding-left: 0.8rem;
     }
   }
 

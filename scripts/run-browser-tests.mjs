@@ -1698,9 +1698,9 @@ try {
   }
 
   // ——— Scenario: studio engine sidebar (settings) ———
-  // The gear popover is gone; the engine controls live in a left sidebar shared
-  // by every editor tab (Step, Bulk, Library). It collapses via a chevron and
-  // drag-resizes up to 50% of the workspace.
+  // The gear popover is gone; the engine controls live in a left sidebar on the
+  // Step tab. It collapses via a chevron and drag-resizes up to 50% of the
+  // workspace; the Bulk and Library tabs cannot open it or the console.
   {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 900 });
@@ -1710,18 +1710,22 @@ try {
 
     const markup = await page.evaluate(async () => {
       const sidebar = document.getElementById('settingsSidebar');
-      // The sidebar starts collapsed as a floating rail, which deliberately sits
-      // over the panel. Expand it to check the shared left-column geometry.
-      const collapse = document.getElementById('sidebarToggle');
-      collapse?.click();
-      await new Promise((r) => setTimeout(r, 320));
+      const toggle = document.getElementById('sidebarToggle');
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const collapsedDisplay = sidebar ? getComputedStyle(sidebar).display : '';
+      const collapsedVisible = !!sidebar && sidebar.offsetParent !== null;
+      // The sidebar starts hidden. Expand it to check the shared left-column
+      // geometry, then collapse it again.
+      toggle?.click();
+      await wait(320);
       const sidebarLeftOfBody = (() => {
         const sb = sidebar?.getBoundingClientRect();
         const body = document.querySelector('.studioTabBody')?.getBoundingClientRect();
         return !!sb && !!body && sb.right <= body.left + 1;
       })();
-      collapse?.click();
-      await new Promise((r) => setTimeout(r, 320));
+      const expandedVisible = !!sidebar && sidebar.offsetParent !== null && sidebar.getBoundingClientRect().width > 0;
+      toggle?.click();
+      await wait(320);
       return {
         hasSidebar: !!document.getElementById('settingsSidebar'),
         hasToggle: !!document.getElementById('sidebarToggle'),
@@ -1730,13 +1734,13 @@ try {
         gearGone: !document.getElementById('settingsGearBtn') && !document.getElementById('advancedMenu'),
         photoTab: document.getElementById('tabStep')?.textContent?.trim(),
         barToggleHiddenOnPhoto: document.getElementById('sidebarToggle')?.hidden,
-        // The sidebar is a sibling of the tab body (the panel area), always
-        // visible — not nested inside the Result panel as it once was.
+        barToggleDisabledOnPhoto: document.getElementById('sidebarToggle')?.disabled,
+        // The sidebar is a sibling of the tab body (the panel area) — not
+        // nested inside the Result panel as it once was.
         sidebarLeftOfBody,
-        sidebarVisibleOnPhotoTab: (() => {
-          const sb = document.getElementById('settingsSidebar');
-          return !!sb && sb.offsetParent !== null && sb.getBoundingClientRect().width > 0;
-        })(),
+        expandedVisible,
+        collapsedDisplay,
+        collapsedVisible,
         defaultCollapsed: document.getElementById('settingsSidebar')?.dataset.collapsed,
         experimentalTag: document.querySelector('#settingsSidebar .sidebarBadge')?.textContent?.trim(),
       };
@@ -1748,9 +1752,13 @@ try {
       `sidebar ${markup.hasSidebar} toggle ${markup.hasToggle} collapse ${markup.hasCollapse} resize ${markup.hasResize} gearGone ${markup.gearGone} leftOfBody ${markup.sidebarLeftOfBody}`,
     );
     record(
-      'the settings sidebar is available in every tab (reachable on the Photo tab)',
-      markup.barToggleHiddenOnPhoto === false && markup.sidebarVisibleOnPhotoTab === true,
-      `toggle hidden on photo tab: ${markup.barToggleHiddenOnPhoto} sidebar visible: ${markup.sidebarVisibleOnPhotoTab}`,
+      'the settings sidebar is hidden when collapsed and expands on the Step tab',
+      markup.barToggleHiddenOnPhoto === false &&
+        markup.barToggleDisabledOnPhoto === false &&
+        markup.collapsedDisplay === 'none' &&
+        markup.collapsedVisible === false &&
+        markup.expandedVisible === true,
+      `toggle hidden ${markup.barToggleHiddenOnPhoto} disabled ${markup.barToggleDisabledOnPhoto} collapsed display "${markup.collapsedDisplay}" visible ${markup.collapsedVisible} expanded visible ${markup.expandedVisible}`,
     );
     record(
       'the engine controls start collapsed and carry an experimental tag',
@@ -1823,6 +1831,69 @@ try {
       'the settings sidebar drag-resizes up to 50% of the workspace',
       resize.grownW <= resize.cap + 1 && resize.grownW >= resize.openW - 1 && resize.shrunkW < resize.grownW && resize.shrunkW > 0,
       `open ${Math.round(resize.openW)} cap ${Math.round(resize.cap)} grown ${Math.round(resize.grownW)} shrunk ${Math.round(resize.shrunkW)}`,
+    );
+
+    // The console and engine controls are step-editor tools: the Bulk and
+    // Library tabs close them and disable their top-bar toggles.
+    const gating = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const grid = document.querySelector('.studioGrid');
+      const consoleToggle = document.getElementById('consoleToggle');
+      const sidebarToggle = document.getElementById('sidebarToggle');
+      const consoleCol = document.getElementById('studioConsoleCol');
+      const sidebar = document.getElementById('settingsSidebar');
+      const snap = () => ({
+        consoleShown: grid?.dataset.console === 'shown',
+        consoleDisabled: consoleToggle?.disabled,
+        consoleDisplay: consoleCol ? getComputedStyle(consoleCol).display : '',
+        sidebarDisabled: sidebarToggle?.disabled,
+        sidebarCollapsed: sidebar?.dataset.collapsed === 'true',
+        sidebarDisplay: sidebar ? getComputedStyle(sidebar).display : '',
+      });
+      // On the Step tab both controls can be opened.
+      consoleToggle.click();
+      if (sidebar?.dataset.collapsed === 'true') sidebarToggle.click();
+      await wait(320);
+      const step = snap();
+      // Bulk: both are closed and their toggles are disabled.
+      document.getElementById('tabBulk').click();
+      await wait(320);
+      const bulk = snap();
+      // A disabled toggle must not reopen them.
+      consoleToggle.click();
+      sidebarToggle.click();
+      await wait(120);
+      const bulkAfterClicks = snap();
+      // Library behaves the same way.
+      document.getElementById('tabLibrary').click();
+      await wait(320);
+      const library = snap();
+      document.getElementById('tabStep').click();
+      await wait(120);
+      const backToStep = snap();
+      return { step, bulk, bulkAfterClicks, library, backToStep };
+    });
+    record(
+      'the Bulk and Library tabs cannot enable the console or engine controls',
+      gating.step.consoleShown &&
+        gating.step.consoleDisabled === false &&
+        gating.step.sidebarDisplay !== 'none' &&
+        gating.step.sidebarDisabled === false &&
+        gating.bulk.consoleShown === false &&
+        gating.bulk.consoleDisabled === true &&
+        gating.bulk.consoleDisplay === 'none' &&
+        gating.bulk.sidebarDisabled === true &&
+        gating.bulk.sidebarCollapsed === true &&
+        gating.bulk.sidebarDisplay === 'none' &&
+        gating.bulkAfterClicks.consoleShown === false &&
+        gating.bulkAfterClicks.sidebarCollapsed === true &&
+        gating.library.consoleDisabled === true &&
+        gating.library.consoleDisplay === 'none' &&
+        gating.library.sidebarDisabled === true &&
+        gating.library.sidebarDisplay === 'none' &&
+        gating.backToStep.consoleDisabled === false &&
+        gating.backToStep.sidebarDisabled === false,
+      JSON.stringify(gating),
     );
     await page.close();
   }

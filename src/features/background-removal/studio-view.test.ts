@@ -7,6 +7,7 @@ import {
   stepPhase,
   stepTitle,
   tabEnabled,
+  tabHasEngineControls,
   type StudioViewState,
 } from './studio-view';
 
@@ -98,6 +99,12 @@ describe('reduceStudio step transitions', () => {
     expect(tabEnabled(empty, 'library')).toBe(true);
     const running = run([{ type: 'select-image' }, { type: 'run-start' }]);
     expect(tabEnabled(running, 'library')).toBe(true);
+  });
+
+  it('the console and engine controls belong to the step tab only', () => {
+    expect(tabHasEngineControls('step')).toBe(true);
+    expect(tabHasEngineControls('bulk')).toBe(false);
+    expect(tabHasEngineControls('library')).toBe(false);
   });
 
   it('show-background keeps the current tab and result', () => {

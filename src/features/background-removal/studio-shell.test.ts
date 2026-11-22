@@ -43,10 +43,24 @@ describe('studio shell wiring (main.ts + index.html)', () => {
     expect(MAIN).toMatch(/newPhotoBtn\?\.addEventListener\('click', chooseFile\)/);
   });
 
-  it('keeps the settings sidebar available in every tab', () => {
-    // The top-bar toggle is no longer gated on the result tab.
-    expect(MAIN).toMatch(/sidebarToggleBtn\.hidden = false/);
-    expect(MAIN).not.toMatch(/sidebarToggleBtn\.hidden = studioView\.tab !== 'result'/);
+  it('shows the engine controls sidebar only on the step tab', () => {
+    // The top-bar toggle is enabled on the step editor and disabled on the
+    // Bulk and Library tabs, where the sidebar is forced closed.
+    expect(MAIN).toMatch(/const engineTab = tabHasEngineControls\(studioView\.tab\)/);
+    expect(MAIN).toMatch(/if \(!engineTab\) \{\s*setConsoleVisible\(false\);\s*setSidebarCollapsed\(true\);/);
+    expect(MAIN).toMatch(/sidebarToggleBtn\.disabled = !engineTab/);
+    expect(MAIN).not.toMatch(/sidebarToggleBtn\.hidden = false/);
+  });
+
+  it('hides the sidebar entirely when it is collapsed', () => {
+    // The collapsed sidebar used to leave a floating icon rail over the image.
+    expect(CSS).toMatch(/\.settingsSidebar\[data-collapsed='true'\]\s*\{\s*display:\s*none/s);
+    expect(CSS).not.toMatch(/\.settingsSidebar\[data-collapsed='true'\]\s*\{[^}]*position:\s*absolute/s);
+  });
+
+  it('disables the console toggle outside the step tab', () => {
+    expect(MAIN).toMatch(/consoleToggleBtn\.disabled = !engineTab/);
+    expect(MAIN).toMatch(/if \(visible && !tabHasEngineControls\(studioView\.tab\)\) return/);
   });
 
   it('drives the background & export section from the step result or a bulk batch', () => {

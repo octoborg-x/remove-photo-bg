@@ -80,7 +80,9 @@ export function classifyConnection(
   return 'unknown';
 }
 
-function readDeviceMobile(): boolean {
+/** Coarse mobile-device probe, shared by the metered-connection preflight and
+ *  the adaptive source downscaler so there is only one UA/UA-CH heuristic. */
+export function readDeviceMobile(): boolean {
   if (typeof navigator === 'undefined') return false;
   const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
   if (uaData && typeof uaData.mobile === 'boolean') return uaData.mobile;

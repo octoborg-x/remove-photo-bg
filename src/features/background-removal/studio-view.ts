@@ -108,6 +108,11 @@ export function tabEnabled(state: StudioViewState, tab: StudioTab): boolean {
   return true;
 }
 
+/** The console and engine controls belong to the step editor, not the queues. */
+export function tabHasEngineControls(tab: StudioTab): boolean {
+  return tab === 'step';
+}
+
 // The console is user-visible, so it must not leak the private repository, the
 // model host, or internal build commands. Raw log lines are filtered through
 // this before they are rendered.

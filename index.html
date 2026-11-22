@@ -976,8 +976,8 @@
               </svg>
             </button>
             <!-- Show/hide the engine settings sidebar (like the console toggle).
-                 The sidebar is visible in every tab, so this button is always
-                 available. -->
+                 Both belong to the step editor and are disabled on the Bulk and
+                 Library tabs. -->
             <button
               id="sidebarToggle"
               type="button"
@@ -1030,9 +1030,9 @@
                 <button id="tabBulk" class="editorTab" role="tab" data-tab="bulk" aria-selected="false" aria-controls="panelBulk">Bulk</button>
                 <button id="tabLibrary" class="editorTab" role="tab" data-tab="library" aria-selected="false" aria-controls="panelLibrary">Library</button>
               </div>
-              <!-- Workspace: the shared engine sidebar (visible in every tab) on the left,
-                   the active tab's panel on the right. On small screens the
-                   sidebar slides over the panel instead of reflowing it. -->
+              <!-- Workspace: the shared engine sidebar (Step tab only) on the
+                   left, the active tab's panel on the right. On small screens
+                   the sidebar stacks above the panel instead of reflowing it. -->
               <div id="studioWorkspace" class="studioWorkspace">
               <aside id="settingsSidebar" class="settingsSidebar" data-collapsed="true" aria-label="Studio engine settings">
                 <div class="sidebarHead">

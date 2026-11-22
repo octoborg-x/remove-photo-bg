@@ -140,6 +140,7 @@ import {
   stepTitle,
   STUDIO_TABS,
   tabEnabled,
+  tabHasEngineControls,
   type StudioTab,
 } from './features/background-removal/studio-view';
 import {
@@ -346,9 +347,16 @@ function renderStudioView(): void {
   // The refinement banner sits over the already-usable preview while the edge
   // stage runs, and disappears the instant the refined result is swapped in.
   refineNoticeEl.hidden = !studioView.refining;
-  // The settings sidebar is shared by every editor tab, so its top-bar show/hide
-  // button is always available.
-  if (sidebarToggleBtn) sidebarToggleBtn.hidden = false;
+  // The console and engine controls belong to the step editor. Leaving that tab
+  // closes them and disables their top-bar toggles so a queue tab cannot turn
+  // them back on.
+  const engineTab = tabHasEngineControls(studioView.tab);
+  if (!engineTab) {
+    setConsoleVisible(false);
+    setSidebarCollapsed(true);
+  }
+  consoleToggleBtn.disabled = !engineTab;
+  if (sidebarToggleBtn) sidebarToggleBtn.disabled = !engineTab;
   updateExportBarVisibility();
   updateBulkStatus();
 }
@@ -495,6 +503,7 @@ const CONSOLE_MIN_PX = 96;
 let consoleHeightPx: number | null = null;
 
 function setConsoleVisible(visible: boolean): void {
+  if (visible && !tabHasEngineControls(studioView.tab)) return;
   studioGridEl.dataset.console = visible ? 'shown' : 'hidden';
   consoleToggleBtn.setAttribute('aria-pressed', String(visible));
   consoleToggleBtn.setAttribute('aria-label', visible ? 'Hide console' : 'Show console');
@@ -2876,11 +2885,11 @@ function bindMaskControl(input: HTMLInputElement, valueEl: Element, kind: 'thres
 bindMaskControl(maskThresholdInput, maskThresholdValue, 'threshold');
 bindMaskControl(maskFeatherInput, maskFeatherValue, 'feather');
 
-// ——— Result tab: engine settings sidebar ———
-// The advanced engine controls live in a sidebar in the result workspace. It
-// collapses to a floating icon rail via the header button (or the top-bar
-// show/hide button) and drag-resizes up to 50% of the workspace width (the
-// clamp mirrors the console's). `null` means the CSS default track width.
+// ——— Step editor: engine settings sidebar ———
+// The advanced engine controls live in a sidebar beside the step editor. It
+// hides completely via the header button (or the top-bar show/hide button) and
+// drag-resizes up to 50% of the workspace width (the clamp mirrors the
+// console's). `null` means the CSS default track width.
 const SIDEBAR_MAX_FRACTION = 0.5;
 const SIDEBAR_MIN_PX = 200;
 let sidebarWidthPx: number | null = null;
@@ -2897,6 +2906,7 @@ function renderSidebarToggle(): void {
 
 function setSidebarCollapsed(collapsed: boolean): void {
   if (!settingsSidebarEl) return;
+  if (!collapsed && !tabHasEngineControls(studioView.tab)) return;
   settingsSidebarEl.dataset.collapsed = collapsed ? 'true' : 'false';
   if (sidebarCollapseBtn) {
     sidebarCollapseBtn.setAttribute('aria-pressed', String(!collapsed));
@@ -2964,7 +2974,7 @@ window.addEventListener('resize', () => {
 });
 
 // The top-bar button shows/hides the sidebar; the in-sidebar button collapses
-// it to its floating icon rail. Both drive the same state, so they stay in sync.
+// it too. Both drive the same state, so they stay in sync.
 sidebarToggleBtn?.addEventListener('click', () => {
   const collapsed = settingsSidebarEl?.dataset.collapsed === 'true';
   setSidebarCollapsed(!collapsed);

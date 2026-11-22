@@ -1602,9 +1602,8 @@
     height: 0.95rem;
   }
   /* ——— Studio workspace: engine settings sidebar (left) + active panel (right).
-     The sidebar is shared by every editor tab; it collapses to a floating icon
-     rail over the image block, and its right edge drag-resizes up to 50% of the
-     workspace (clamp in main.ts). */
+     The sidebar belongs to the step tab, hides completely when collapsed, and
+     its right edge drag-resizes up to 50% of the workspace (clamp in main.ts). */
   .studioWorkspace {
     flex: 1;
     min-height: 0;
@@ -1632,54 +1631,16 @@
     overflow: hidden;
     transition: width 0.18s ease;
   }
-  /* Collapsed: the sidebar leaves the layout entirely and becomes a floating
-     icon rail over the image block, so the editor keeps the full width. */
+  /* Collapsed: the sidebar is hidden entirely; the top-bar toggle brings it
+     back, so it no longer leaves a floating icon rail over the image. */
   .settingsSidebar[data-collapsed='true'] {
-    position: absolute;
-    top: 0.5rem;
-    left: 0.5rem;
-    width: auto;
-    min-width: 0;
-    max-width: none;
-    border: 0;
-    background: transparent;
-    overflow: visible;
-    z-index: 6;
-    pointer-events: none;
-    transition: none;
+    display: none;
   }
   .settingsSidebarBody {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     padding: 0.9rem;
-  }
-  .settingsSidebar[data-collapsed='true'] .settingsSidebarBody {
-    display: none;
-  }
-  .settingsSidebar[data-collapsed='true'] .sidebarHead {
-    justify-content: center;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    pointer-events: auto;
-  }
-  .settingsSidebar[data-collapsed='true'] .sidebarHeadTitle {
-    display: none;
-  }
-  .settingsSidebar[data-collapsed='true'] .sidebarToggle {
-    width: 2.25rem;
-    height: 2.25rem;
-    border-radius: 0.75rem;
-    background: color-mix(in oklab, var(--color-white) 92%, transparent);
-    border: 1px solid var(--color-slate-200);
-    color: var(--color-slate-600);
-    box-shadow: 0 6px 16px rgb(15 23 42 / 0.12);
-    backdrop-filter: blur(6px);
-  }
-  .settingsSidebar[data-collapsed='true'] .sidebarToggle:hover {
-    background: var(--color-white);
-    color: var(--color-slate-900);
   }
   .sidebarHead {
     display: flex;
@@ -1733,10 +1694,6 @@
     height: 1rem;
     transition: transform 0.18s ease;
   }
-  /* The collapsed rail reuses the top-bar sidebar glyph, so it must not mirror. */
-  .settingsSidebar[data-collapsed='true'] .sidebarToggle svg {
-    transform: none;
-  }
   /* Drag handle on the sidebar's right edge (col-resize). */
   .sidebarResize {
     position: absolute;
@@ -1763,9 +1720,6 @@
   .sidebarResize:focus-visible .sidebarResizeGrip {
     background: var(--color-blue-500);
     height: 3.6rem;
-  }
-  .settingsSidebar[data-collapsed='true'] .sidebarResize {
-    display: none;
   }
   body.sidebar-resizing,
   body.sidebar-resizing * {
@@ -3144,9 +3098,8 @@
      Side-by-side leaves the panel too narrow to show a cut-out (the result
      image shrank to a thumbnail while the format and download controls stayed
      full width). Stacking gives the editor the full width; the sidebar is
-     collapsed to its floating icon rail by default on first open (main.ts), so
-     the result gets the height too. The tab body keeps its own vertical
-     scrollbar. */
+     collapsed by default on first open (main.ts), so the result gets the height
+     too. The tab body keeps its own vertical scrollbar. */
   @media (max-width: 767px) {
     .studioWorkspace {
       flex-direction: column;
@@ -3156,15 +3109,6 @@
       width: 100% !important;
       max-width: 100%;
       max-height: 42%;
-    }
-    .settingsSidebar[data-collapsed='true'] {
-      width: auto !important;
-      min-width: 0;
-      max-width: none;
-      max-height: none;
-    }
-    .settingsSidebar[data-collapsed='true'] .sidebarHead {
-      border-bottom: 0;
     }
     .sidebarResize {
       display: none;

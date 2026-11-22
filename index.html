@@ -1663,29 +1663,56 @@
                   <!-- Library Tab -->
                   <div id="panelLibrary" class="editorPanel" role="tabpanel" aria-labelledby="tabLibrary" hidden>
                     <div class="libraryPanel">
-                      <div class="libraryHead">
-                        <h3 class="libraryTitle">This session</h3>
-                        <div class="libraryActions">
-                          <button id="librarySaveToggle" type="button" class="librarySaveToggle" aria-pressed="true">Saving on</button>
-                          <button id="libraryClear" type="button" class="libraryClear">Clear history</button>
+                      <div class="libraryToolbar" role="group" aria-label="Library operations">
+                        <div class="libraryToolbarLeft">
+                          <label class="librarySelectAll" title="Select all items">
+                            <input id="librarySelectAll" type="checkbox" />
+                          </label>
+                          <div class="libraryFilterWrap" title="Filter by name">
+                            <svg class="libraryFilterIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+                            </svg>
+                            <input id="libraryFilter" type="search" placeholder="Filter by name..." autocomplete="off" aria-label="Filter by name" />
+                          </div>
+                        </div>
+                        <div class="libraryToolbarRight">
+                          <button id="librarySaveToggle" type="button" class="libraryIconBtn" aria-pressed="true" title="Saving on">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                              <polyline points="9 12 11 14 15 10" />
+                            </svg>
+                          </button>
+                          <button id="libraryExportSelected" type="button" class="libraryIconBtn" disabled title="Export selected zipped">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                          </button>
+                          <div class="libraryUsageWrap">
+                            <button id="libraryUsageChartBtn" type="button" class="libraryUsageChartBtn" aria-expanded="false" aria-controls="libraryUsagePopup" title="Storage usage summary">
+                              <svg class="libraryUsageSvg" viewBox="0 0 36 36" aria-hidden="true">
+                                <circle class="usageBg" cx="18" cy="18" r="15.9155" fill="none" stroke="var(--color-slate-200)" stroke-width="3.5"></circle>
+                                <circle id="usageTotalCircle" class="usageSeg usageSegTotal" cx="18" cy="18" r="15.9155" fill="none" stroke="var(--color-blue-600)" stroke-width="3.5" stroke-dasharray="100 100" stroke-dashoffset="0"></circle>
+                                <circle id="usageUsedCircle" class="usageSeg usageSegUsed" cx="18" cy="18" r="15.9155" fill="none" stroke="var(--color-red-500)" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="0"></circle>
+                                <circle id="usageAvailCircle" class="usageSeg usageSegAvail" cx="18" cy="18" r="15.9155" fill="none" stroke="var(--color-emerald-500)" stroke-width="3.5" stroke-dasharray="100 100" stroke-dashoffset="0"></circle>
+                              </svg>
+                            </button>
+                            <div id="libraryUsagePopup" class="libraryUsagePopup" role="region" aria-label="Storage details" hidden>
+                              <div class="libraryUsagePopupHead"><strong>Storage Usage</strong></div>
+                              <div id="libraryStats" class="libraryStats" role="status" aria-live="polite">No images yet · Total 256.0 MB · Used 0 B · Left 256.0 MB</div>
+                            </div>
+                          </div>
+                          <button id="libraryClear" type="button" class="libraryIconBtn" title="Clear history">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            </svg>
+                          </button>
                         </div>
                       </div>
-                      <p id="librarySaveHint" class="libraryHint">Photos you process stay on this device, in this tab only. They are gone when you close or reload the page.</p>
-                      <div id="libraryStats" class="libraryStats" role="status" aria-live="polite">No images yet · Total 256.0 MB · Used 0 B · Left 256.0 MB · Types PNG 0 / JPG 0 / WebP 0</div>
-                      <div class="libraryToolbar" role="group" aria-label="Library operations">
-                        <label class="libraryFilterField">
-                          <span class="sr-only">Filter by name</span>
-                          <input id="libraryFilter" type="search" placeholder="Filter by name" autocomplete="off" />
-                        </label>
-                        <label class="librarySelectAll">
-                          <input id="librarySelectAll" type="checkbox" />
-                          <span>Select all</span>
-                        </label>
-                        <span id="librarySelectionCount" class="librarySelectionCount">0 selected</span>
-                        <button id="libraryExportSelected" type="button" class="libraryExportSelected" disabled>Export selected</button>
-                      </div>
                       <div id="libraryGrid" class="libraryGrid"></div>
-                      <p id="libraryEmpty" class="libraryEmpty">Nothing here yet — process a photo to keep its cut-out in this session.</p>
+                      <p id="libraryEmpty" class="libraryEmpty">Photos you process stay on this device, in this tab only. They are gone when you close or reload the page.</p>
                     </div>
                   </div>
 
@@ -1725,21 +1752,20 @@
                           <button id="bgTransparentBtn" type="button" class="bgTransparentBtn" aria-pressed="true" aria-label="Transparent background" title="Transparent">
                             <span class="bgTransparentChip" aria-hidden="true"></span>
                           </button>
-                          <label class="bgColorField" title="Pick a solid background colour">
-                            <input id="bgColorPicker" type="color" value="#ffffff" aria-label="Background colour" />
-                            <span id="bgColorSwatch" class="bgColorSwatch" aria-hidden="true"></span>
-                          </label>
-                          <button id="bgEyeDropper" type="button" class="bgEyeDropperBtn" aria-label="Pick a colour from the screen" title="Pick a colour from the screen">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                              <path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z" />
-                              <path d="m5 2 5 5" /><path d="M2 13h15" /><path d="M22 22l-3-3" />
-                            </svg>
-                          </button>
-                          <label class="paletteAlpha">
-                            Alpha
-                            <input id="bgAlpha" type="range" min="0" max="100" step="1" value="100" aria-label="Background opacity" />
-                            <span id="bgAlphaValue" class="font-mono text-slate-500 w-9 text-right tabular-nums">100%</span>
-                          </label>
+                          <div class="colorSetPickerBlock">
+                            <div class="colorSetInputRow">
+                              <label class="bgColorField" title="Pick background color">
+                                <input id="bgColorPicker" type="color" value="#ffffff" aria-label="Background colour" />
+                                <span id="bgColorSwatch" class="bgColorSwatch" aria-hidden="true"></span>
+                              </label>
+                              <input id="bgHexAlphaInput" type="text" class="bgHexAlphaInput" value="#ffffffff" placeholder="#rrggbbff" maxlength="9" title="Hex color with alpha (8 digits)" aria-label="Hex color with alpha" />
+                              <span id="bgAlphaPctLabel" class="bgAlphaPctLabel font-mono text-[11px] text-slate-600">100%</span>
+                            </div>
+                            <div class="bgSpectrumMap" id="bgSpectrumMap" title="Continuous color map (red to violet)">
+                              <div class="bgSpectrumBar"></div>
+                              <div id="bgSpectrumHandle" class="bgSpectrumHandle" style="left: 0%;"></div>
+                            </div>
+                          </div>
                         </div>
                       </div>
 

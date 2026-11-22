@@ -1307,22 +1307,29 @@ function renderResultPreview(): void {
   if (before) before.src = currentObjectUrl ?? '';
 }
 
+const bgHexAlphaInput = document.getElementById('bgHexAlphaInput') as HTMLInputElement | null;
+const bgAlphaPctLabel = document.getElementById('bgAlphaPctLabel');
+const bgSpectrumMap = document.getElementById('bgSpectrumMap');
+const bgSpectrumHandle = document.getElementById('bgSpectrumHandle');
+
 function updateBackgroundUi(): void {
   const color = background.kind === 'color';
   bgTransparentBtn.setAttribute('aria-pressed', String(isTransparent(background)));
   bgCurrentEl.textContent = describeChoice(background);
-  // The alpha slider refines a chosen colour and is inert for a transparent
-  // background. Leaving it live let a stray drag paint an opaque white
-  // background, which silently flattened PNG/WebP exports.
-  bgAlphaInput.disabled = !color;
   if (color) {
     bgColorPicker.value = background.hex;
     bgColorSwatch.style.setProperty('--picked', background.hex);
-    bgAlphaInput.value = String(background.alpha);
-    bgAlphaValue.textContent = `${background.alpha}%`;
+    const alphaHex = Math.round((background.alpha / 100) * 255).toString(16).padStart(2, '0');
+    if (bgHexAlphaInput) bgHexAlphaInput.value = `${background.hex}${alphaHex}`;
+    if (bgAlphaPctLabel) bgAlphaPctLabel.textContent = `${background.alpha}%`;
+    if (bgSpectrumHandle) {
+      // Map hex or hue approx to spectrum position 0-100%
+      bgSpectrumHandle.style.left = `${background.alpha}%`;
+    }
   } else {
-    bgAlphaInput.value = '100';
-    bgAlphaValue.textContent = '—';
+    if (bgHexAlphaInput) bgHexAlphaInput.value = '#ffffffff';
+    if (bgAlphaPctLabel) bgAlphaPctLabel.textContent = '100%';
+    if (bgSpectrumHandle) bgSpectrumHandle.style.left = '100%';
   }
 }
 
@@ -1345,27 +1352,46 @@ function setBackground(choice: BackgroundChoice): void {
 bgTransparentBtn.addEventListener('click', () =>
   setBackground({ kind: 'transparent', hex: background.hex, alpha: 100 }),
 );
-/** Alpha for a newly picked colour: keep the current colour's alpha, else 100. */
-function colourPickAlpha(): number {
-  return background.kind === 'color' ? Number(bgAlphaInput.value) : 100;
-}
-bgColorPicker.addEventListener('input', () =>
-  setBackground({ kind: 'color', hex: bgColorPicker.value, alpha: colourPickAlpha() }),
-);
-bgAlphaInput.addEventListener('input', () => {
-  if (background.kind !== 'color') return;
-  setBackground({ kind: 'color', hex: background.hex, alpha: Number(bgAlphaInput.value) });
+
+bgColorPicker.addEventListener('input', () => {
+  const alpha = background.kind === 'color' ? background.alpha : 100;
+  setBackground({ kind: 'color', hex: bgColorPicker.value, alpha });
 });
-// Screen eyedropper: sample any pixel on the display. The button is disabled
-// when the browser has no EyeDropper API, so it never looks broken.
-if (!supportsScreenPicker()) {
-  bgEyeDropperBtn.disabled = true;
-  bgEyeDropperBtn.title = 'Screen colour picking is not supported by this browser';
-}
-bgEyeDropperBtn.addEventListener('click', async () => {
-  const picked = await pickColorFromScreen();
-  if (!picked) return;
-  setBackground({ kind: 'color', hex: picked, alpha: colourPickAlpha() });
+
+bgHexAlphaInput?.addEventListener('input', () => {
+  const val = bgHexAlphaInput.value.trim();
+  const hexMatch = val.match(/^#([0-9a-f]{6})([0-9a-f]{2})?$/i);
+  if (hexMatch) {
+    const hex = `#${hexMatch[1].toLowerCase()}`;
+    const alpha = hexMatch[2] ? Math.round((parseInt(hexMatch[2], 16) / 255) * 100) : 100;
+    setBackground({ kind: 'color', hex, alpha: Math.max(0, Math.min(100, alpha)) });
+  }
+});
+
+bgSpectrumMap?.addEventListener('click', (e) => {
+  const rect = bgSpectrumMap.getBoundingClientRect();
+  const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+  const ratio = x / rect.width;
+  // Map ratio 0..1 to a hue in HSL or approximate red->violet spectrum
+  const hue = Math.round(ratio * 300); // 0 red to 300 violet
+  // Convert HSL to Hex
+  const h = hue / 360;
+  const i = Math.floor(h * 6);
+  const f = h * 6 - i;
+  const q = 1 - f;
+  let r = 1, g = 0, b = 0;
+  switch (i % 6) {
+    case 0: r = 1; g = f; b = 0; break;
+    case 1: r = q; g = 1; b = 0; break;
+    case 2: r = 0; g = 1; b = f; break;
+    case 3: r = 0; g = q; b = 1; break;
+    case 4: r = f; g = 0; b = 1; break;
+    case 5: r = 1; g = 0; b = q; break;
+  }
+  const toHex = (n: number) => Math.round(n * 255).toString(16).padStart(2, '0');
+  const hex = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  const alpha = background.kind === 'color' ? background.alpha : 100;
+  setBackground({ kind: 'color', hex, alpha });
 });
 
 // Restore consistency after a reload: an alpha-capable persisted format means
@@ -2179,13 +2205,30 @@ function libraryUsageItems(): { bytes: number; type: string }[] {
 }
 
 function updateLibraryStats(): void {
-  if (!libraryStatsEl) return;
   const usage = summarizeLibrary(libraryUsageItems());
   const images = usage.count === 1 ? '1 image' : `${usage.count} images`;
-  libraryStatsEl.textContent =
-    `${images} · Total ${formatBytes(usage.budgetBytes)} · Used ${formatBytes(usage.usedBytes)} · ` +
-    `Left ${formatBytes(usage.leftBytes)} · Types PNG ${usage.types.PNG} / JPG ${usage.types.JPG} / ` +
-    `WebP ${usage.types.WebP}`;
+  if (libraryStatsEl) {
+    libraryStatsEl.textContent =
+      `${images} · Total ${formatBytes(usage.budgetBytes)} · Used ${formatBytes(usage.usedBytes)} · ` +
+      `Left ${formatBytes(usage.leftBytes)} · Types PNG ${usage.types.PNG} / JPG ${usage.types.JPG} / ` +
+      `WebP ${usage.types.WebP}`;
+  }
+  // SVG circular chart update (total, used, available)
+  const totalCircle = document.getElementById('usageTotalCircle') as HTMLElement | null;
+  const usedCircle = document.getElementById('usageUsedCircle') as HTMLElement | null;
+  const availCircle = document.getElementById('usageAvailCircle') as HTMLElement | null;
+  if (totalCircle && usedCircle && availCircle) {
+    const budget = usage.budgetBytes || 1;
+    const usedFrac = Math.min(1, Math.max(0, usage.usedBytes / budget));
+    const availFrac = Math.max(0, 1 - usedFrac);
+    const circ = 100;
+    const usedLen = usedFrac * circ;
+    const availLen = availFrac * circ;
+    usedCircle.style.strokeDasharray = `${usedLen} ${circ}`;
+    usedCircle.style.strokeDashoffset = '0';
+    availCircle.style.strokeDasharray = `${availLen} ${circ}`;
+    availCircle.style.strokeDashoffset = `${-usedLen}`;
+  }
 }
 
 function visibleLibraryEntries(): SessionEntry[] {
@@ -2531,6 +2574,23 @@ function clearLibrary(): void {
   renderLibrary();
   log('Library history cleared.');
 }
+
+const libraryUsageChartBtn = document.getElementById('libraryUsageChartBtn');
+const libraryUsagePopup = document.getElementById('libraryUsagePopup');
+libraryUsageChartBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (libraryUsagePopup) {
+    const hidden = libraryUsagePopup.hidden;
+    libraryUsagePopup.hidden = !hidden;
+    libraryUsageChartBtn.setAttribute('aria-expanded', String(hidden));
+  }
+});
+document.addEventListener('click', (e) => {
+  if (libraryUsagePopup && !libraryUsagePopup.hidden && !libraryUsagePopup.contains(e.target as Node) && e.target !== libraryUsageChartBtn) {
+    libraryUsagePopup.hidden = true;
+    libraryUsageChartBtn?.setAttribute('aria-expanded', 'false');
+  }
+});
 
 libraryClearBtn?.addEventListener('click', clearLibrary);
 librarySaveToggleEl?.addEventListener('click', () => {

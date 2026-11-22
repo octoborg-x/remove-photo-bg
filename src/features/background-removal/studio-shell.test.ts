@@ -334,14 +334,10 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/dropOpaqueBackgroundForAlpha\(exportFormat\)/);
   });
 
-  it('makes the alpha slider inert unless a colour background is active', () => {
-    // Dragging "Alpha" on a transparent background used to paint an opaque white
-    // one, which flattened PNG/WebP exports.
-    expect(MAIN).toMatch(/bgAlphaInput\.disabled = !color/);
-    expect(MAIN).toMatch(/if \(background\.kind !== 'color'\) return;/);
-    // A colour first picked from transparent starts fully opaque, not at the
-    // slider's stale value.
-    expect(MAIN).toMatch(/background\.kind === 'color' \? Number\(bgAlphaInput\.value\) : 100/);
+  it('uses a color set picker with hex+alpha input and continuous spectrum map', () => {
+    expect(MAIN).toMatch(/bgHexAlphaInput/);
+    expect(MAIN).toMatch(/bgSpectrumMap/);
+    expect(MAIN).toMatch(/bgHexAlphaInput\.value/);
   });
 });
 

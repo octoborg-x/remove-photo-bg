@@ -2538,75 +2538,206 @@
   .libraryEmpty[hidden] {
     display: none;
   }
-  .libraryStats {
-    font-size: 0.68rem;
-    line-height: 1.4;
-    color: var(--color-slate-500);
-    background: var(--color-slate-50);
-    border: 1px solid var(--color-slate-200);
-    border-radius: 0.6rem;
-    padding: 0.45rem 0.6rem;
-    margin-bottom: 0.6rem;
-  }
+  /* ——— Library tab icon toolbar & storage chart ——— */
   .libraryToolbar {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-bottom: 0.65rem;
     margin-bottom: 0.65rem;
+    border-bottom: 1px solid var(--color-slate-200);
   }
-  .libraryFilterField {
-    flex: 1 1 10rem;
-    min-width: 8rem;
-  }
-  .libraryFilterField input {
-    width: 100%;
-    padding: 0.35rem 0.55rem;
-    border-radius: 0.55rem;
-    border: 1px solid var(--color-slate-200);
-    background: var(--color-white);
-    color: var(--color-slate-700);
-    font-size: 0.72rem;
-  }
-  .libraryFilterField input:focus {
-    outline: 2px solid color-mix(in oklab, var(--color-blue-500) 45%, transparent);
-    outline-offset: 1px;
-  }
-  .librarySelectAll,
-  .bulkSelectAll {
+  .libraryToolbarLeft {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: var(--color-slate-600);
+    gap: 0.6rem;
+    min-width: 0;
+    flex: 1;
+  }
+  .libraryToolbarRight {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex: none;
+  }
+  .librarySelectAll {
+    display: flex;
+    align-items: center;
     cursor: pointer;
   }
-  .librarySelectionCount,
-  .bulkSelectionCount {
-    font-size: 0.68rem;
-    color: var(--color-slate-400);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  .librarySelectAll input[type='checkbox'] {
+    width: 1.05rem;
+    height: 1.05rem;
+    accent-color: var(--color-blue-600);
+    cursor: pointer;
   }
-  .libraryExportSelected,
-  .bulkToolBtn {
-    padding: 0.32rem 0.65rem;
-    border-radius: 0.55rem;
+  .libraryFilterWrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    max-width: 16rem;
+  }
+  .libraryFilterIcon {
+    position: absolute;
+    left: 0.6rem;
+    width: 0.95rem;
+    height: 0.95rem;
+    color: var(--color-slate-400);
+    pointer-events: none;
+  }
+  .libraryFilterWrap input {
+    width: 100%;
+    height: 2.2rem;
+    padding-left: 2rem;
+    padding-right: 0.75rem;
+    border-radius: 0.65rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-white);
+    color: var(--color-slate-900);
+    font-size: 0.78rem;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .libraryFilterWrap input:focus {
+    border-color: var(--color-blue-600);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-blue-600) 20%, transparent);
+  }
+  .libraryIconBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 0.65rem;
     border: 1px solid var(--color-slate-200);
     background: var(--color-white);
     color: var(--color-slate-700);
-    font-size: 0.7rem;
-    font-weight: 600;
     cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   }
-  .libraryExportSelected:hover,
-  .bulkToolBtn:hover {
+  .libraryIconBtn:hover {
+    background: var(--color-slate-100);
+    color: var(--color-slate-900);
+    border-color: var(--color-slate-300);
+  }
+  .libraryIconBtn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .libraryIconBtn svg {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+  .libraryUsageWrap {
+    position: relative;
+  }
+  .libraryUsageChartBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 0.65rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-white);
+    cursor: pointer;
+    padding: 0.3rem;
+  }
+  .libraryUsageChartBtn:hover {
+    border-color: var(--color-slate-300);
     background: var(--color-slate-100);
   }
-  .libraryExportSelected:disabled,
-  .bulkToolBtn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .libraryUsageSvg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+  .usageSeg {
+    transition: stroke-dasharray 0.3s ease;
+  }
+  .libraryUsagePopup {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    z-index: 30;
+    width: 15rem;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    background: var(--color-white);
+    border: 1px solid var(--color-slate-200);
+    box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.12);
+  }
+  .libraryUsagePopup[hidden] {
+    display: none;
+  }
+  .libraryUsagePopupHead {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--color-slate-900);
+    margin-bottom: 0.4rem;
+  }
+  .libraryStats {
+    font-size: 0.7rem;
+    line-height: 1.4;
+    color: var(--color-slate-600);
+  }
+
+  /* ——— Color set picker widget (single picker block, hex+alpha 8-digits, spectrum map) ——— */
+  .colorSetPickerBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    flex: 1;
+    min-width: 14rem;
+  }
+  .colorSetInputRow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .bgHexAlphaInput {
+    flex: 1;
+    height: 2.1rem;
+    padding-inline: 0.6rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--color-slate-300);
+    background: var(--color-white);
+    color: var(--color-slate-900);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    outline: none;
+  }
+  .bgHexAlphaInput:focus {
+    border-color: var(--color-blue-600);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-blue-600) 20%, transparent);
+  }
+  .bgSpectrumMap {
+    position: relative;
+    width: 100%;
+    height: 0.9rem;
+    border-radius: 9999px;
+    border: 1px solid var(--color-slate-300);
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .bgSpectrumBar {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #00ffff, #0000ff, #8b00ff, #ff0000);
+  }
+  .bgSpectrumHandle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    margin-left: -3px;
+    background: #ffffff;
+    border: 1px solid #09090b;
+    border-radius: 3px;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+    pointer-events: none;
   }
   .libraryCheck,
   .bulkCheck {

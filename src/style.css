@@ -24,34 +24,43 @@
    few non-colour tweaks, e.g. shadows, that tokens cannot express). */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-/* ——— Palette: neutral ramp + brand accents, resolved per mode ——— */
+/* ——— Palette: Clean Light SaaS zinc ramp + obsidian/cobalt accents ——— */
 :root {
   color-scheme: light dark;
 
-  /* Surfaces (white is the card/panel surface, so it inverts with the theme) */
-  --color-white: light-dark(#ffffff, #0f172a);
+  /* Elevated surfaces (pure white cards in light mode, deep zinc in dark mode) */
+  --color-white: light-dark(#ffffff, #111113);
 
-  /* Neutral ramp — inverted in dark mode so text/borders/surfaces stay legible */
-  --color-slate-50: light-dark(#f8fafc, #0b1220);
-  --color-slate-100: light-dark(#f1f5f9, #131c31);
-  --color-slate-200: light-dark(#e2e8f0, #243044);
-  --color-slate-300: light-dark(#cbd5e1, #334155);
-  --color-slate-400: light-dark(#94a3b8, #8b98ab);
-  --color-slate-500: light-dark(#64748b, #94a3b8);
-  --color-slate-600: light-dark(#475569, #cbd5e1);
-  --color-slate-700: light-dark(#334155, #e2e8f0);
-  --color-slate-800: light-dark(#1e293b, #f1f5f9);
-  --color-slate-900: light-dark(#0f172a, #f8fafc);
+  /* Zinc neutral ramp — alabaster canvas (#FAFAFA), muted wells (#F4F4F5), 1px borders (#E4E4E7), obsidian ink (#09090B) */
+  --color-slate-50: light-dark(#fafafa, #09090b);
+  --color-slate-100: light-dark(#f4f4f5, #18181b);
+  --color-slate-200: light-dark(#e4e4e7, #27272a);
+  --color-slate-300: light-dark(#d4d4d8, #3f3f46);
+  --color-slate-400: light-dark(#a1a1aa, #71717a);
+  --color-slate-500: light-dark(#71717a, #a1a1aa);
+  --color-slate-600: light-dark(#52525b, #d4d4d8);
+  --color-slate-700: light-dark(#3f3f46, #e4e4e7);
+  --color-slate-800: light-dark(#18181b, #f4f4f5);
+  --color-slate-900: light-dark(#09090b, #fafafa);
 
-  /* Brand blue — lightened in dark mode for contrast on dark surfaces */
-  --color-blue-50: light-dark(#eff6ff, #12233f);
-  --color-blue-100: light-dark(#dbeafe, #1b3a63);
+  /* Refined Cobalt brand accent */
+  --color-blue-50: light-dark(#eff6ff, #172554);
+  --color-blue-100: light-dark(#dbeafe, #1e3a8a);
   --color-blue-500: light-dark(#3b82f6, #60a5fa);
   --color-blue-600: light-dark(#2563eb, #3b82f6);
   --color-blue-700: light-dark(#1d4ed8, #93c5fd);
   --color-blue-900: light-dark(#1e3a8a, #bfdbfe);
 
-  /* Accent tints (icon chips + alerts) — dark, translucent equivalents */
+  /* Obsidian primary CTA tokens */
+  --obsidian-bg: light-dark(#09090b, #fafafa);
+  --obsidian-bg-hover: light-dark(#27272a, #e4e4e7);
+  --obsidian-fg: light-dark(#ffffff, #09090b);
+
+  /* Ultra-soft ambient shadow reserved for floating overlays/modals/header */
+  --shadow-float: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-modal: 0 18px 40px -12px rgba(9, 9, 11, 0.14), 0 4px 12px rgba(9, 9, 11, 0.06);
+
+  /* Accent tints (icon chips + alerts) */
   --color-emerald-50: light-dark(#ecfdf5, #0c2a22);
   --color-emerald-100: light-dark(#d1fae5, #0f3b2f);
   --color-emerald-500: light-dark(#10b981, #34d399);
@@ -86,21 +95,19 @@
   color-scheme: dark;
 }
 
-/* Regions that are intentionally dark in BOTH modes (the benchmark panel, the
-   processing wallpaper/pill, the console). Pinning the ramp back to its light
-   values keeps their text legible and their surface dark. */
+/* Regions that stay dark in both modes (processing stage). */
 .theme-inverse {
   --color-white: #ffffff;
-  --color-slate-50: #f8fafc;
-  --color-slate-100: #f1f5f9;
-  --color-slate-200: #e2e8f0;
-  --color-slate-300: #cbd5e1;
-  --color-slate-400: #94a3b8;
-  --color-slate-500: #64748b;
-  --color-slate-600: #475569;
-  --color-slate-700: #334155;
-  --color-slate-800: #1e293b;
-  --color-slate-900: #0f172a;
+  --color-slate-50: #fafafa;
+  --color-slate-100: #f4f4f5;
+  --color-slate-200: #e4e4e7;
+  --color-slate-300: #d4d4d8;
+  --color-slate-400: #a1a1aa;
+  --color-slate-500: #71717a;
+  --color-slate-600: #52525b;
+  --color-slate-700: #3f3f46;
+  --color-slate-800: #18181b;
+  --color-slate-900: #09090b;
   --color-blue-400: #60a5fa;
   --color-cyan-400: #22d3ee;
   --color-emerald-400: #34d399;
@@ -142,12 +149,238 @@
 }
 
 @layer components {
-  /* ——— Surfaces & cards ——— */
-  .card {
+  /* ——— Clean Light SaaS Surfaces & Buttons ——— */
+  .card,
+  .saas-card {
+    background: var(--color-white);
+    border: 1px solid color-mix(in oklab, var(--color-slate-200) 85%, transparent);
+    border-radius: 1rem;
+    transition: border-color 0.16s ease;
+  }
+  .saas-card-interactive:hover {
+    border-color: var(--color-slate-300);
+  }
+  .saas-well {
+    background: color-mix(in oklab, var(--color-slate-100) 70%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-slate-200) 80%, transparent);
+    border-radius: 0.75rem;
+  }
+  .btn-obsidian {
+    background: var(--obsidian-bg);
+    color: var(--obsidian-fg);
+    border: 1px solid var(--obsidian-bg);
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+  }
+  .btn-obsidian:hover {
+    background: var(--obsidian-bg-hover);
+    border-color: var(--obsidian-bg-hover);
+  }
+  .btn-surface {
+    background: var(--color-white);
+    color: var(--color-slate-800);
+    border: 1px solid var(--color-slate-200);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+  .btn-surface:hover {
+    background: var(--color-slate-100);
+    border-color: var(--color-slate-300);
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  .shadow-float {
+    box-shadow: var(--shadow-float);
+  }
+
+  /* ——— Hero Workspace Shell & Tabs ——— */
+  .heroShell {
+    background: var(--color-white);
+    border: 1px solid color-mix(in oklab, var(--color-slate-200) 90%, transparent);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-float);
+    overflow: hidden;
+  }
+  .heroShellBar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem;
+    background: color-mix(in oklab, var(--color-slate-100) 65%, transparent);
+    border-bottom: 1px solid color-mix(in oklab, var(--color-slate-200) 85%, transparent);
+  }
+  .heroSampleTabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem;
+    border-radius: 0.55rem;
     background: var(--color-white);
     border: 1px solid var(--color-slate-200);
-    border-radius: 1.5rem;
-    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  }
+  .heroSampleTab,
+  .bentoFormatTab {
+    padding: 0.28rem 0.65rem;
+    border-radius: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-slate-600);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .heroSampleTab:hover,
+  .bentoFormatTab:hover {
+    color: var(--color-slate-900);
+  }
+  .heroSampleTab.is-active,
+  .bentoFormatTab.is-active {
+    background: var(--obsidian-bg);
+    color: var(--obsidian-fg);
+  }
+  .heroCompareFigure {
+    max-width: 20.5rem;
+    margin-inline: auto;
+  }
+  .heroCompareFigure .compareStage {
+    border-radius: 0.75rem;
+  }
+
+  /* ——— Command Palette (⌘K) ——— */
+  .cmdPalette {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: min(12vh, 5.5rem) 1rem 1rem;
+  }
+  .cmdPalette[hidden] {
+    display: none;
+  }
+  .cmdBackdrop {
+    position: fixed;
+    inset: 0;
+    background: rgb(9 9 11 / 0.32);
+    backdrop-filter: blur(3px);
+  }
+  .cmdDialog {
+    position: relative;
+    z-index: 1;
+    width: min(36rem, 100%);
+    max-height: min(32rem, 78dvh);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 0.9rem;
+    background: var(--color-white);
+    border: 1px solid var(--color-slate-200);
+    box-shadow: var(--shadow-modal);
+  }
+  .cmdSearchRow {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--color-slate-200);
+  }
+  .cmdInput {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-slate-900);
+    font-size: 0.9rem;
+    font-weight: 500;
+    outline: none;
+  }
+  .cmdInput::placeholder {
+    color: var(--color-slate-400);
+  }
+  .cmdList {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem;
+  }
+  .cmdGroupLabel {
+    padding: 0.45rem 0.65rem 0.25rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-slate-400);
+  }
+  .cmdOption {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 0.55rem;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+  }
+  .cmdOption:hover,
+  .cmdOption.is-active {
+    background: var(--color-slate-100);
+  }
+  .cmdOptionMain {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+  .cmdOptionTitle {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-slate-900);
+  }
+  .cmdOptionDesc {
+    font-size: 0.72rem;
+    color: var(--color-slate-500);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cmdKbd {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.14rem 0.4rem;
+    border-radius: 0.35rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-slate-50);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--color-slate-500);
+    font-variant-numeric: tabular-nums;
+  }
+  .cmdEmpty {
+    padding: 2rem 1rem;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--color-slate-500);
+  }
+  .cmdFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.55rem 0.9rem;
+    border-top: 1px solid var(--color-slate-200);
+    background: var(--color-slate-50);
+    font-size: 0.7rem;
+    color: var(--color-slate-500);
   }
 
   /* Transparency Checkerboard */
@@ -908,26 +1141,30 @@
      opacity animate; the label is removed from the flow (width: 0) so the
      button shrinks smoothly. */
   .siteHeaderInner {
-    height: 4.5rem;
-    transition: height 0.3s ease;
+    height: 3.75rem;
+    transition: height 0.2s ease;
   }
   .siteHeader[data-collapsed='true'] .siteHeaderInner {
-    height: 3.5rem; /* shrinks by ~1rem on scroll */
+    height: 3.25rem;
   }
   .studioLaunchText {
     display: inline-block;
-    max-width: 6rem;
+    max-width: 7rem;
     overflow: hidden;
     white-space: nowrap;
-    transition: max-width 0.3s ease, opacity 0.3s ease;
+    transition: max-width 0.2s ease, opacity 0.2s ease;
   }
   .siteHeader[data-collapsed='true'] .studioLaunchText {
     max-width: 0;
     opacity: 0;
   }
+  .studioLaunchBtn {
+    gap: 0.5rem;
+    padding-inline: 1rem;
+  }
   .siteHeader[data-collapsed='true'] .studioLaunchBtn {
-    padding-left: 0.7rem;
-    padding-right: 0.7rem;
+    gap: 0;
+    padding-inline: 0.625rem;
   }
 
   /* ——— Menu toggle (burger) + slide-in panel ——— */
@@ -1297,6 +1534,7 @@
     display: flex;
     flex-direction: column;
     background: var(--color-white);
+    border: 1px solid color-mix(in oklab, var(--color-slate-200) 85%, transparent);
     border-radius: 0.85rem;
     overflow: hidden;
   }
@@ -1667,7 +1905,7 @@
   .settingsSidebar {
     position: relative;
     flex: none;
-    width: var(--sidebar-w, 15rem);
+    width: var(--sidebar-w, 17.5rem);
     max-width: 50%;
     display: flex;
     flex-direction: column;
@@ -1686,35 +1924,36 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 0.9rem;
+    padding: 0.75rem;
   }
   .sidebarHead {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    padding: 0.7rem 0.8rem;
+    padding: 0.65rem 0.75rem;
     border-bottom: 1px solid var(--color-slate-200);
     flex: none;
   }
   .sidebarHeadTitle {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.45rem;
     min-width: 0;
+    overflow: hidden;
   }
   /* The engine controls are still experimental; the tag is part of the header
      so it disappears with the header when the sidebar is collapsed. */
   .sidebarBadge {
     flex: none;
-    padding: 0.08rem 0.4rem;
+    padding: 0.08rem 0.35rem;
     border: 1px solid var(--color-amber-100);
-    border-radius: 999px;
+    border-radius: 0.35rem;
     background: var(--color-amber-50);
     color: var(--color-amber-800);
     font-size: 0.55rem;
     font-weight: 700;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
     text-transform: uppercase;
   }
   .sidebarToggle {
@@ -2438,12 +2677,13 @@
     background: var(--color-slate-100);
   }
   .bulkProcess {
-    border-color: transparent;
-    background: var(--color-blue-600);
-    color: #fff;
+    border-color: var(--obsidian-bg);
+    background: var(--obsidian-bg);
+    color: var(--obsidian-fg);
   }
   .bulkProcess:hover {
-    background: var(--color-blue-700);
+    background: var(--obsidian-bg-hover);
+    border-color: var(--obsidian-bg-hover);
   }
   .bulkPick:disabled,
   .bulkProcess:disabled,

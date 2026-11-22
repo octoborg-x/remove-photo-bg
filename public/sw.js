@@ -133,7 +133,7 @@ async function fetchAsset(request, relativePath) {
   return fetch(target, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
 }
 
-self.addEventListener('install', () => {
+self.addEventListener('install', (event) => {
   event.waitUntil(loadModelManifest());
   // Take over as soon as possible; there is no stale app shell to protect
   // because only model/WASM artifacts are cached.

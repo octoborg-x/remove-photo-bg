@@ -135,6 +135,8 @@ import {
 import { initCompareSliders } from './features/compare-slider';
 import { initShowcaseGallery } from './features/showcase-gallery';
 import { initSupportCarousel } from './features/support-carousel';
+import { initCommandPalette } from './features/command-palette';
+import { initLandingWorkspace } from './features/workspace-preview';
 import {
   isThemePreference,
   nextTheme,
@@ -698,6 +700,8 @@ menuPanelEl.querySelectorAll('a[href^="#"]').forEach((link) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  const cmdDialog = document.getElementById('cmdPalette');
+  if (cmdDialog && !cmdDialog.hidden) return;
   if (menuPanelEl.classList.contains('is-open')) closeMenu();
   else if (studioEl.classList.contains('is-open')) closeStudio();
 });
@@ -4894,6 +4898,50 @@ log('Detecting GPU…');
 initCompareSliders();
 initShowcaseGallery();
 initSupportCarousel();
+
+async function loadSampleIntoStudio(url: string, filename: string): Promise<void> {
+  setStudioTab('step', true);
+  openStudio();
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
+    await loadImageFromFile(file);
+  } catch {
+    showToast('Could not load sample image into Studio.', { kind: 'warn', title: 'Sample unavailable' });
+  }
+}
+
+initLandingWorkspace((url, filename) => {
+  void loadSampleIntoStudio(url, filename);
+});
+
+initCommandPalette({
+  onAction: (action) => {
+    switch (action.type) {
+      case 'open-studio': {
+        openStudio();
+        if (action.tab) setStudioTab(action.tab, true);
+        break;
+      }
+      case 'load-sample': {
+        void loadSampleIntoStudio(action.url, action.filename);
+        break;
+      }
+      case 'scroll-to': {
+        if (studioEl.classList.contains('is-open')) closeStudio();
+        const target = document.querySelector(action.selector);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        break;
+      }
+      case 'set-theme': {
+        setThemePreference(action.mode);
+        break;
+      }
+    }
+  },
+});
 
 // The console and the engine sidebar both start hidden so the first photo gets
 // the whole workspace; each stays one tap away in the studio top bar.

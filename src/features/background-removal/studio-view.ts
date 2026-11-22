@@ -26,6 +26,14 @@ export function stepTitle(state: StudioViewState): string {
   }
 }
 
+/** Floating overlays that stay interactive while the studio inerts the page. */
+export const STUDIO_KEEP_INTERACTIVE_IDS: readonly string[] = ['toastHost'];
+
+/** True when a sibling of the studio should be made inert while it is open. */
+export function shouldInertSibling(siblingId: string, isActiveSibling: boolean): boolean {
+  return !isActiveSibling && !STUDIO_KEEP_INTERACTIVE_IDS.includes(siblingId);
+}
+
 export interface StudioViewState {
   tab: StudioTab;
   hasInput: boolean;

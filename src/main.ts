@@ -135,6 +135,7 @@ import {
   initialStudioView,
   reduceStudio,
   scrubConsoleLine,
+  shouldInertSibling,
   stepPhase,
   stepTitle,
   STUDIO_TABS,
@@ -407,7 +408,8 @@ function setBackgroundInert(on: boolean): void {
   let node: HTMLElement = studioEl;
   while (node.parentElement) {
     for (const sibling of Array.from(node.parentElement.children)) {
-      if (sibling !== node) (sibling as HTMLElement).inert = on;
+      const el = sibling as HTMLElement;
+      if (shouldInertSibling(el.id, el === node)) el.inert = on;
     }
     node = node.parentElement;
   }

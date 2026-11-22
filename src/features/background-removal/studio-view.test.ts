@@ -3,6 +3,7 @@ import {
   initialStudioView,
   reduceStudio,
   scrubConsoleLine,
+  shouldInertSibling,
   stepPhase,
   stepTitle,
   tabEnabled,
@@ -146,5 +147,16 @@ describe('scrubConsoleLine', () => {
   it('leaves ordinary diagnostics untouched', () => {
     const line = 'Inference 1: 812.4 ms';
     expect(scrubConsoleLine(line)).toBe(line);
+  });
+});
+
+describe('studio background inerting', () => {
+  it('keeps the floating notification host interactive while the studio is open', () => {
+    // The host is a body sibling of the studio. Inerting it makes the toast
+    // close button hit-test through to the studio controls underneath, so a
+    // dismissed error used to close the studio instead.
+    expect(shouldInertSibling('toastHost', false)).toBe(false);
+    expect(shouldInertSibling('siteHeader', false)).toBe(true);
+    expect(shouldInertSibling('studio', true)).toBe(false);
   });
 });

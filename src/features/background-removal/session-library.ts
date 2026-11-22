@@ -125,3 +125,61 @@ export function reduceSession(state: SessionState, ev: SessionEvent): SessionRes
 export function activeEntry(state: SessionState): SessionEntry | null {
   return state.entries.find((e) => e.id === state.activeId) ?? null;
 }
+
+/** Session-only memory budget shown in the Library stats line. */
+export const LIBRARY_STORAGE_BUDGET_BYTES = 256 * 1024 * 1024;
+
+export interface LibraryUsageItem {
+  bytes: number;
+  /** Source MIME type, e.g. `image/png`. */
+  type: string;
+}
+
+export interface LibraryUsage {
+  count: number;
+  usedBytes: number;
+  budgetBytes: number;
+  leftBytes: number;
+  types: { PNG: number; JPG: number; WebP: number; Other: number };
+}
+
+/** Human-readable byte size, rounded to one decimal for KB/MB. */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function typeBucket(type: string): keyof LibraryUsage['types'] {
+  switch (type.toLowerCase()) {
+    case 'image/png':
+      return 'PNG';
+    case 'image/jpeg':
+      return 'JPG';
+    case 'image/webp':
+      return 'WebP';
+    default:
+      return 'Other';
+  }
+}
+
+/** Summarises the bytes and source types held by the session library. */
+export function summarizeLibrary(
+  items: readonly LibraryUsageItem[],
+  budgetBytes: number = LIBRARY_STORAGE_BUDGET_BYTES,
+): LibraryUsage {
+  const types: LibraryUsage['types'] = { PNG: 0, JPG: 0, WebP: 0, Other: 0 };
+  let usedBytes = 0;
+  for (const item of items) {
+    usedBytes += Math.max(0, item.bytes);
+    types[typeBucket(item.type)] += 1;
+  }
+  return {
+    count: items.length,
+    usedBytes,
+    budgetBytes,
+    leftBytes: Math.max(0, budgetBytes - usedBytes),
+    types,
+  };
+}

@@ -1484,14 +1484,37 @@
                 <div class="bulkHead">
                   <div class="bulkHeadText">
                     <h3 class="bulkTitle">Bulk <span id="bulkCount" class="bulkCount">0 / 5</span></h3>
-                    <p class="bulkHint">Pick up to five photos. Each cut-out is saved to the Library unless saving is off.</p>
+                    <p class="bulkHint">Pick up to five photos per batch. Once a batch finishes, choose the next five without clearing the results.</p>
                   </div>
                   <div class="bulkActions">
                     <button id="bulkPick" type="button" class="bulkPick">Choose images</button>
                     <button id="bulkProcess" type="button" class="bulkProcess" disabled>Process all</button>
                   </div>
                 </div>
+                <p class="bulkHint bulkDefaultsHint">Bulk always runs with the default engine settings (single pass, standard refinement, no threshold or feather). The experimental engine controls apply to the Photo/Result tab only.</p>
                 <p id="bulkStatus" class="bulkStatus" role="status" hidden></p>
+                <div class="bulkToolbar" role="group" aria-label="Bulk operations">
+                  <label class="bulkSelectAll">
+                    <input id="bulkSelectAll" type="checkbox" />
+                    <span>Select all</span>
+                  </label>
+                  <span id="bulkSelectionCount" class="bulkSelectionCount">0 selected</span>
+                  <button id="bulkDeleteSelected" type="button" class="bulkToolBtn" disabled>Delete selected</button>
+                  <button id="bulkClearFinished" type="button" class="bulkToolBtn">Clear finished</button>
+                  <span class="bulkBgEdit">
+                    <label class="bulkBgField" title="Background colour for the selected images">
+                      <span class="bulkBgLabel">BG</span>
+                      <input id="bulkBgColor" type="color" value="#ffffff" aria-label="Bulk background colour" />
+                    </label>
+                    <label class="bulkBgAlpha">
+                      Alpha
+                      <input id="bulkBgAlpha" type="range" min="0" max="100" step="1" value="100" aria-label="Bulk background opacity" />
+                      <span id="bulkBgAlphaValue" class="bulkBgAlphaValue">100%</span>
+                    </label>
+                    <button id="bulkBgApply" type="button" class="bulkToolBtn">Apply to selected</button>
+                    <button id="bulkBgTransparent" type="button" class="bulkToolBtn">Transparent</button>
+                  </span>
+                </div>
                 <div id="bulkGrid" class="bulkGrid"></div>
                 <p id="bulkEmpty" class="bulkEmpty">No images selected yet — choose up to five photos to process them together.</p>
               </div>
@@ -1507,6 +1530,19 @@
                   </div>
                 </div>
                 <p id="librarySaveHint" class="libraryHint">Photos you process stay on this device, in this tab only. They are gone when you close or reload the page.</p>
+                <div id="libraryStats" class="libraryStats" role="status" aria-live="polite">No images yet · Total 256.0 MB · Used 0 B · Left 256.0 MB · Types PNG 0 / JPG 0 / WebP 0</div>
+                <div class="libraryToolbar" role="group" aria-label="Library operations">
+                  <label class="libraryFilterField">
+                    <span class="sr-only">Filter by name</span>
+                    <input id="libraryFilter" type="search" placeholder="Filter by name" autocomplete="off" />
+                  </label>
+                  <label class="librarySelectAll">
+                    <input id="librarySelectAll" type="checkbox" />
+                    <span>Select all</span>
+                  </label>
+                  <span id="librarySelectionCount" class="librarySelectionCount">0 selected</span>
+                  <button id="libraryExportSelected" type="button" class="libraryExportSelected" disabled>Export selected</button>
+                </div>
                 <div id="libraryGrid" class="libraryGrid"></div>
                 <p id="libraryEmpty" class="libraryEmpty">Nothing here yet — process a photo to keep its cut-out in this session.</p>
               </div>

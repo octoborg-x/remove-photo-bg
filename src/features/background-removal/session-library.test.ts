@@ -3,6 +3,8 @@ import {
   reduceSession,
   initialSession,
   activeEntry,
+  formatBytes,
+  summarizeLibrary,
   SESSION_LIMIT,
   type SessionState,
 } from './session-library';
@@ -111,5 +113,36 @@ describe('reduceSession', () => {
     expect(res.revoked).toEqual(expect.arrayContaining(['blob:a.jpg', 'blob:a-cut', 'blob:b.jpg']));
     // The id counter is kept so a later entry can never reuse an old id.
     expect(res.state.nextId).toBe(state.nextId);
+  });
+});
+
+describe('library usage summary', () => {
+  it('counts bytes, remaining budget and source types', () => {
+    const usage = summarizeLibrary(
+      [
+        { bytes: 1024, type: 'image/png' },
+        { bytes: 2048, type: 'image/jpeg' },
+        { bytes: 4096, type: 'image/webp' },
+        { bytes: 512, type: 'image/gif' },
+      ],
+      10_000,
+    );
+    expect(usage.count).toBe(4);
+    expect(usage.usedBytes).toBe(7680);
+    expect(usage.budgetBytes).toBe(10_000);
+    expect(usage.leftBytes).toBe(2320);
+    expect(usage.types).toEqual({ PNG: 1, JPG: 1, WebP: 1, Other: 1 });
+  });
+
+  it('never reports negative remaining space', () => {
+    const usage = summarizeLibrary([{ bytes: 900, type: 'image/png' }], 500);
+    expect(usage.leftBytes).toBe(0);
+  });
+
+  it('formats byte counts for the stats line', () => {
+    expect(formatBytes(0)).toBe('0 B');
+    expect(formatBytes(512)).toBe('512 B');
+    expect(formatBytes(1536)).toBe('1.5 KB');
+    expect(formatBytes(2 * 1024 * 1024)).toBe('2.0 MB');
   });
 });

@@ -2143,6 +2143,92 @@
   .libraryEmpty[hidden] {
     display: none;
   }
+  .libraryStats {
+    font-size: 0.68rem;
+    line-height: 1.4;
+    color: var(--color-slate-500);
+    background: var(--color-slate-50);
+    border: 1px solid var(--color-slate-200);
+    border-radius: 0.6rem;
+    padding: 0.45rem 0.6rem;
+    margin-bottom: 0.6rem;
+  }
+  .libraryToolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.65rem;
+  }
+  .libraryFilterField {
+    flex: 1 1 10rem;
+    min-width: 8rem;
+  }
+  .libraryFilterField input {
+    width: 100%;
+    padding: 0.35rem 0.55rem;
+    border-radius: 0.55rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-white);
+    color: var(--color-slate-700);
+    font-size: 0.72rem;
+  }
+  .libraryFilterField input:focus {
+    outline: 2px solid color-mix(in oklab, var(--color-blue-500) 45%, transparent);
+    outline-offset: 1px;
+  }
+  .librarySelectAll,
+  .bulkSelectAll {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-slate-600);
+    cursor: pointer;
+  }
+  .librarySelectionCount,
+  .bulkSelectionCount {
+    font-size: 0.68rem;
+    color: var(--color-slate-400);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .libraryExportSelected,
+  .bulkToolBtn {
+    padding: 0.32rem 0.65rem;
+    border-radius: 0.55rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-white);
+    color: var(--color-slate-700);
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .libraryExportSelected:hover,
+  .bulkToolBtn:hover {
+    background: var(--color-slate-100);
+  }
+  .libraryExportSelected:disabled,
+  .bulkToolBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .libraryCheck,
+  .bulkCheck {
+    position: absolute;
+    top: 0.35rem;
+    left: 0.35rem;
+    z-index: 2;
+    width: 1.05rem;
+    height: 1.05rem;
+    accent-color: var(--color-blue-600);
+    cursor: pointer;
+  }
+  .libraryCard[data-checked='true'],
+  .bulkCard[data-checked='true'] {
+    border-color: var(--color-blue-400, #60a5fa);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-blue-500) 16%, transparent);
+  }
 
   /* ——— Bulk tab: up to five photos, processed one after another ——— */
   .bulkPanel {
@@ -2329,6 +2415,58 @@
   }
   .bulkEmpty[hidden] {
     display: none;
+  }
+  .bulkDefaultsHint {
+    margin-top: -0.15rem;
+  }
+  .bulkToolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 0.65rem;
+    background: var(--color-slate-50);
+  }
+  .bulkBgEdit {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
+  .bulkBgField {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--color-slate-500);
+  }
+  .bulkBgField input[type='color'] {
+    width: 1.6rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 1px solid var(--color-slate-300);
+    border-radius: 0.35rem;
+    background: none;
+    cursor: pointer;
+  }
+  .bulkBgAlpha {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.68rem;
+    color: var(--color-slate-500);
+  }
+  .bulkBgAlpha input[type='range'] {
+    width: 5rem;
+  }
+  .bulkBgAlphaValue {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.62rem;
+    color: var(--color-slate-400);
   }
   /* A small, indeterminate banner over the already-usable preview while the edge
      refinement sharpens it. No percentage is shown (the stage has none). */

@@ -53,6 +53,8 @@ import {
   initialSession,
   reduceSession,
   activeEntry,
+  summarizeLibrary,
+  formatBytes,
   type SessionEntry,
   type SessionState,
 } from './features/background-removal/session-library';
@@ -129,6 +131,8 @@ import {
   isTransparent,
   describeChoice,
   formatForChoice,
+  toRgba,
+  TRANSPARENT,
   type BackgroundChoice,
 } from './features/background-removal/background-color';
 import {
@@ -146,13 +150,20 @@ import {
 import {
   BULK_LIMIT,
   addBulkItem,
+  bulkActiveCount,
   bulkCapacity,
+  bulkCheckedCount,
   bulkDoneCount,
   bulkPendingCount,
+  clearFinishedBulkItems,
   initialBulkState,
   removeBulkItem,
+  removeBulkItems,
   selectBulkItem,
   selectedBulkItem,
+  setBulkBackground,
+  setBulkChecked,
+  setBulkCheckedAll,
   updateBulkItem,
   type BulkItem,
   type BulkState,
@@ -255,12 +266,26 @@ const bulkEmptyEl = document.getElementById('bulkEmpty');
 const bulkCountEl = document.getElementById('bulkCount');
 const bulkStatusEl = document.getElementById('bulkStatus');
 const bulkDownloadAllBtn = document.getElementById('bulkDownloadAll') as HTMLButtonElement | null;
+const bulkSelectAllEl = document.getElementById('bulkSelectAll') as HTMLInputElement | null;
+const bulkSelectionCountEl = document.getElementById('bulkSelectionCount');
+const bulkDeleteSelectedBtn = document.getElementById('bulkDeleteSelected') as HTMLButtonElement | null;
+const bulkClearFinishedBtn = document.getElementById('bulkClearFinished') as HTMLButtonElement | null;
+const bulkBgColorInput = document.getElementById('bulkBgColor') as HTMLInputElement | null;
+const bulkBgAlphaInput = document.getElementById('bulkBgAlpha') as HTMLInputElement | null;
+const bulkBgAlphaValueEl = document.getElementById('bulkBgAlphaValue');
+const bulkBgApplyBtn = document.getElementById('bulkBgApply') as HTMLButtonElement | null;
+const bulkBgTransparentBtn = document.getElementById('bulkBgTransparent') as HTMLButtonElement | null;
 // Session library controls.
 const libraryGridEl = document.getElementById('libraryGrid');
 const libraryEmptyEl = document.getElementById('libraryEmpty');
 const libraryClearBtn = document.getElementById('libraryClear') as HTMLButtonElement | null;
 const librarySaveToggleEl = document.getElementById('librarySaveToggle') as HTMLButtonElement | null;
 const librarySaveHintEl = document.getElementById('librarySaveHint');
+const libraryStatsEl = document.getElementById('libraryStats');
+const libraryFilterInput = document.getElementById('libraryFilter') as HTMLInputElement | null;
+const librarySelectAllEl = document.getElementById('librarySelectAll') as HTMLInputElement | null;
+const librarySelectionCountEl = document.getElementById('librarySelectionCount');
+const libraryExportSelectedBtn = document.getElementById('libraryExportSelected') as HTMLButtonElement | null;
 // The workspace whose width bounds the sidebar drag (it is shared by all tabs).
 const resultWorkspaceEl = document.getElementById('studioWorkspace');
 // Tiled-inference + edge-refinement engine controls (shared sidebar).
@@ -314,6 +339,9 @@ const LS_LIBRARY_SAVE = 'remove-bg:library-save';
 let librarySavingEnabled =
   loadPref<boolean>(LS_LIBRARY_SAVE, (v): v is boolean => typeof v === 'boolean') ?? true;
 let currentImageName = 'Photo';
+// Library view state: the name filter and the entries ticked for export.
+let libraryFilterQuery = '';
+const libraryChecked = new Set<number>();
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
 // markup, so a changed limit never leaves stale copy on the page.
@@ -1024,7 +1052,8 @@ function refreshExportActions(): void {
   const bulkItem = onBulk ? selectedBulkItem(bulkState) : null;
   const canvas = onBulk ? (bulkItem ? bulkResults.get(bulkItem.id) ?? null : null) : lastResultCanvas;
   if (canvas) {
-    const bgKey = `${background.kind}|${background.hex}|${background.alpha}`;
+    const bg = onBulk ? bulkItem?.background ?? background : background;
+    const bgKey = `${bg.kind}|${bg.hex}|${bg.alpha}`;
     const cached =
       exportCache &&
       exportCache.canvas === canvas &&
@@ -1033,7 +1062,7 @@ function refreshExportActions(): void {
       exportCache.bg === bgKey
         ? exportCache.href
         : null;
-    const href = cached ?? canvasToDataUrl(canvas, exportFormat, background);
+    const href = cached ?? canvasToDataUrl(canvas, exportFormat, bg);
     exportCache = { canvas, revision: resultRevision, format: exportFormat, bg: bgKey, href };
     downloadImageBtn.textContent = `Download ${info.label}`;
     downloadImageBtn.href = href;
@@ -1047,9 +1076,11 @@ function refreshExportActions(): void {
   }
   if (bulkDownloadAllBtn) {
     const done = bulkDoneCount(bulkState);
+    const targets = bulkExportTargets();
     bulkDownloadAllBtn.hidden = !onBulk || done === 0;
-    bulkDownloadAllBtn.textContent = `Download ZIP (${done})`;
-    bulkDownloadAllBtn.disabled = done === 0;
+    bulkDownloadAllBtn.textContent =
+      targets.length < done ? `Download selected ZIP (${targets.length})` : `Download ZIP (${done})`;
+    bulkDownloadAllBtn.disabled = targets.length === 0;
   }
 }
 
@@ -1620,6 +1651,7 @@ function applySession(ev: Parameters<typeof reduceSession>[1]): void {
   const live = new Set(session.entries.map((e) => e.id));
   for (const id of [...libraryBlobs.keys()]) if (!live.has(id)) libraryBlobs.delete(id);
   for (const id of [...libraryResultBlobs.keys()]) if (!live.has(id)) libraryResultBlobs.delete(id);
+  for (const id of [...libraryChecked]) if (!live.has(id)) libraryChecked.delete(id);
   renderLibrary();
 }
 
@@ -1627,17 +1659,85 @@ function formatDims(w: number, h: number): string {
   return `${w}×${h}`;
 }
 
+function libraryUsageItems(): { bytes: number; type: string }[] {
+  return session.entries.map((entry) => {
+    const original = libraryBlobs.get(entry.id);
+    const result = libraryResultBlobs.get(entry.id);
+    return {
+      bytes: (original?.size ?? 0) + (result?.size ?? 0),
+      type: original?.type || result?.type || '',
+    };
+  });
+}
+
+function updateLibraryStats(): void {
+  if (!libraryStatsEl) return;
+  const usage = summarizeLibrary(libraryUsageItems());
+  const images = usage.count === 1 ? '1 image' : `${usage.count} images`;
+  libraryStatsEl.textContent =
+    `${images} · Total ${formatBytes(usage.budgetBytes)} · Used ${formatBytes(usage.usedBytes)} · ` +
+    `Left ${formatBytes(usage.leftBytes)} · Types PNG ${usage.types.PNG} / JPG ${usage.types.JPG} / ` +
+    `WebP ${usage.types.WebP}`;
+}
+
+function visibleLibraryEntries(): SessionEntry[] {
+  const query = libraryFilterQuery.trim().toLowerCase();
+  return query
+    ? session.entries.filter((entry) => entry.name.toLowerCase().includes(query))
+    : session.entries;
+}
+
+function updateLibrarySelectionUi(visible: SessionEntry[]): void {
+  const checkedVisible = visible.filter((entry) => libraryChecked.has(entry.id)).length;
+  if (librarySelectAllEl) {
+    librarySelectAllEl.disabled = visible.length === 0;
+    librarySelectAllEl.checked = visible.length > 0 && checkedVisible === visible.length;
+    librarySelectAllEl.indeterminate = checkedVisible > 0 && checkedVisible < visible.length;
+  }
+  if (librarySelectionCountEl) librarySelectionCountEl.textContent = `${libraryChecked.size} selected`;
+  const exportable = session.entries.filter(
+    (entry) => libraryChecked.has(entry.id) && entry.resultUrl && libraryResultBlobs.has(entry.id),
+  ).length;
+  if (libraryExportSelectedBtn) {
+    libraryExportSelectedBtn.disabled = exportable === 0;
+    libraryExportSelectedBtn.textContent =
+      exportable > 0 ? `Export selected (${exportable})` : 'Export selected';
+  }
+}
+
 function renderLibrary(): void {
   if (!libraryGridEl) return;
+  const visible = visibleLibraryEntries();
   libraryGridEl.innerHTML = '';
-  if (libraryEmptyEl) libraryEmptyEl.hidden = session.entries.length > 0;
-  for (const entry of session.entries) {
+  if (libraryEmptyEl) {
+    libraryEmptyEl.hidden = visible.length > 0;
+    libraryEmptyEl.textContent =
+      session.entries.length === 0
+        ? 'Nothing here yet — process a photo to keep its cut-out in this session.'
+        : 'No images match that name.';
+  }
+  for (const entry of visible) {
+    const checked = libraryChecked.has(entry.id);
     const card = document.createElement('div');
     card.className = 'libraryCard';
     card.dataset.active = String(entry.id === session.activeId);
+    card.dataset.checked = String(checked);
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
     card.setAttribute('aria-label', `Open ${entry.name}`);
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'libraryCheck';
+    check.checked = checked;
+    check.setAttribute('aria-label', `Select ${entry.name} for export`);
+    check.addEventListener('click', (e) => e.stopPropagation());
+    check.addEventListener('change', () => {
+      if (check.checked) libraryChecked.add(entry.id);
+      else libraryChecked.delete(entry.id);
+      renderLibrary();
+    });
+    card.appendChild(check);
 
     const thumb = document.createElement('img');
     thumb.className = 'libraryThumb';
@@ -1687,6 +1787,44 @@ function renderLibrary(): void {
     });
     libraryGridEl.appendChild(card);
   }
+  updateLibraryStats();
+  updateLibrarySelectionUi(visible);
+}
+
+function libraryDownloadName(entry: SessionEntry, extension: string): string {
+  const base = entry.name.replace(/\.[^.]+$/, '') || `photo-${entry.id}`;
+  return `${base}-background-removed-${entry.width}x${entry.height}.${extension}`;
+}
+
+async function exportSelectedLibrary(): Promise<void> {
+  const selected = session.entries.filter((entry) => libraryChecked.has(entry.id));
+  const exportable = selected.filter((entry) => entry.resultUrl && libraryResultBlobs.has(entry.id));
+  if (!exportable.length) {
+    showToast('Select at least one finished cut-out to export.', { kind: 'warn' });
+    return;
+  }
+  const used = new Set<string>();
+  const entries: { name: string; data: Uint8Array }[] = [];
+  for (const entry of exportable) {
+    if (!entry.resultUrl) continue;
+    const img = await loadImageElement(entry.resultUrl);
+    const canvas = canvasFromImage(img);
+    const dataUrl = canvasToDataUrl(canvas, exportFormat, background);
+    const extension = dataUrlExtension(dataUrl, exportFormatInfo(exportFormat).extension);
+    entries.push({
+      name: uniqueZipName(libraryDownloadName(entry, extension), used),
+      data: dataUrlToBytes(dataUrl),
+    });
+  }
+  if (!entries.length) return;
+  log(`Downloading ${entries.length} library cut-out(s) as a ZIP archive.`);
+  const url = URL.createObjectURL(createZipBlob(entries));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `library-${entries.length}-photos.zip`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  trackDownloadInitiated();
 }
 
 function loadImageElement(src: string): Promise<HTMLImageElement> {
@@ -1880,6 +2018,7 @@ function clearLibrary(): void {
   for (const url of revoked) URL.revokeObjectURL(url);
   libraryBlobs.clear();
   libraryResultBlobs.clear();
+  libraryChecked.clear();
   renderLibrary();
   log('Library history cleared.');
 }
@@ -1891,7 +2030,22 @@ librarySaveToggleEl?.addEventListener('click', () => {
   applyLibrarySaveUi();
   log(librarySavingEnabled ? 'Library saving enabled.' : 'Library saving disabled.');
 });
+libraryFilterInput?.addEventListener('input', () => {
+  libraryFilterQuery = libraryFilterInput.value;
+  renderLibrary();
+});
+librarySelectAllEl?.addEventListener('change', () => {
+  const visible = visibleLibraryEntries();
+  if (librarySelectAllEl.checked) {
+    for (const entry of visible) libraryChecked.add(entry.id);
+  } else {
+    for (const entry of visible) libraryChecked.delete(entry.id);
+  }
+  renderLibrary();
+});
+libraryExportSelectedBtn?.addEventListener('click', () => void exportSelectedLibrary());
 applyLibrarySaveUi();
+renderLibrary();
 
 async function loadImageFromFile(file: File, addToLibrary = librarySavingEnabled): Promise<void> {
   // Validate the declared type/size before decoding (never trust the extension),
@@ -3009,14 +3163,20 @@ function uniqueZipName(name: string, used: Set<string>): string {
   return candidate;
 }
 
-function downloadAllBulk(): void {
+function bulkExportTargets(): BulkItem[] {
   const done = bulkState.items.filter((item) => item.status === 'done' && bulkResults.has(item.id));
-  if (!done.length) return;
+  const checked = done.filter((item) => bulkState.checkedIds.includes(item.id));
+  return checked.length ? checked : done;
+}
+
+function downloadAllBulk(): void {
+  const targets = bulkExportTargets();
+  if (!targets.length) return;
   const used = new Set<string>();
-  const entries = done.flatMap((item) => {
+  const entries = targets.flatMap((item) => {
     const canvas = bulkResults.get(item.id);
     if (!canvas) return [];
-    const dataUrl = canvasToDataUrl(canvas, exportFormat, background);
+    const dataUrl = canvasToDataUrl(canvas, exportFormat, item.background ?? background);
     const extension = dataUrlExtension(dataUrl, exportFormatInfo(exportFormat).extension);
     return [
       {
@@ -3045,12 +3205,12 @@ function updateBulkStatus(): void {
     bulkStatusEl.hidden = true;
     return;
   }
-  const total = bulkState.items.length;
+  const active = bulkActiveCount(bulkState);
   const done = bulkDoneCount(bulkState);
   const pct = studioView.percent;
   bulkStatusEl.hidden = false;
   bulkStatusEl.textContent =
-    `Processing ${Math.min(done + 1, total)} of ${total}` + (pct === null ? '…' : ` — ${pct}%`);
+    `Processing — ${done} cut-out(s) ready, ${active} left` + (pct === null ? '…' : ` — ${pct}%`);
 }
 
 function bulkStatusLabel(item: BulkItem): string {
@@ -3066,14 +3226,43 @@ function bulkStatusLabel(item: BulkItem): string {
   }
 }
 
+function bulkBackgroundChoice(): BackgroundChoice {
+  return {
+    kind: 'color',
+    hex: bulkBgColorInput?.value ?? '#ffffff',
+    alpha: Number(bulkBgAlphaInput?.value ?? 100),
+  };
+}
+
+function updateBulkToolbar(): void {
+  const total = bulkState.items.length;
+  const checked = bulkCheckedCount(bulkState);
+  const done = bulkDoneCount(bulkState);
+  if (bulkSelectAllEl) {
+    bulkSelectAllEl.disabled = total === 0;
+    bulkSelectAllEl.checked = total > 0 && checked === total;
+    bulkSelectAllEl.indeterminate = checked > 0 && checked < total;
+  }
+  if (bulkSelectionCountEl) bulkSelectionCountEl.textContent = `${checked} selected`;
+  if (bulkDeleteSelectedBtn) bulkDeleteSelectedBtn.disabled = bulkBatchRunning || checked === 0;
+  if (bulkClearFinishedBtn) bulkClearFinishedBtn.disabled = bulkBatchRunning || done === 0;
+  if (bulkBgApplyBtn) bulkBgApplyBtn.disabled = bulkBatchRunning || total === 0;
+  if (bulkBgTransparentBtn) bulkBgTransparentBtn.disabled = bulkBatchRunning || total === 0;
+}
+
 function renderBulk(): void {
   if (!bulkGridEl) return;
   bulkGridEl.innerHTML = '';
   if (bulkEmptyEl) bulkEmptyEl.hidden = bulkState.items.length > 0;
-  if (bulkCountEl) bulkCountEl.textContent = `${bulkState.items.length} / ${BULK_LIMIT}`;
+  const active = bulkActiveCount(bulkState);
+  const done = bulkDoneCount(bulkState);
+  if (bulkCountEl) {
+    bulkCountEl.textContent = `${active} / ${BULK_LIMIT}` + (done ? ` · ${done} done` : '');
+  }
+  const capacity = bulkCapacity(bulkState);
   if (bulkPickBtn) {
-    bulkPickBtn.disabled = bulkBatchRunning || bulkCapacity(bulkState) === 0;
-    bulkPickBtn.textContent = bulkCapacity(bulkState) === 0 ? `Maximum ${BULK_LIMIT}` : 'Choose images';
+    bulkPickBtn.disabled = bulkBatchRunning || capacity === 0;
+    bulkPickBtn.textContent = capacity === 0 ? `Maximum ${BULK_LIMIT} active` : 'Choose images';
   }
   if (bulkProcessBtn) {
     const pending = bulkPendingCount(bulkState);
@@ -3086,9 +3275,11 @@ function renderBulk(): void {
   }
 
   for (const item of bulkState.items) {
+    const checked = bulkState.checkedIds.includes(item.id);
     const card = document.createElement('div');
     card.className = 'bulkCard';
     card.dataset.selected = String(item.id === bulkState.selectedId);
+    card.dataset.checked = String(checked);
     card.dataset.status = item.status;
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
@@ -3105,10 +3296,26 @@ function renderBulk(): void {
       }
     });
 
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'bulkCheck';
+    check.checked = checked;
+    check.setAttribute('aria-label', `Select ${item.name} for bulk actions`);
+    check.addEventListener('click', (e) => e.stopPropagation());
+    check.addEventListener('change', () => {
+      bulkState = setBulkChecked(bulkState, item.id, check.checked);
+      renderBulk();
+    });
+    card.appendChild(check);
+
     const thumb = document.createElement('img');
     thumb.className = 'bulkThumb';
     thumb.alt = '';
     thumb.src = item.resultUrl ?? item.originalUrl;
+    if (item.resultUrl && item.background && !isTransparent(item.background)) {
+      thumb.style.backgroundImage = 'none';
+      thumb.style.backgroundColor = toRgba(item.background);
+    }
     card.appendChild(thumb);
 
     const meta = document.createElement('div');
@@ -3141,6 +3348,7 @@ function renderBulk(): void {
     card.appendChild(remove);
     bulkGridEl.appendChild(card);
   }
+  updateBulkToolbar();
   updateBulkStatus();
   updateExportBarVisibility();
 }
@@ -3154,9 +3362,54 @@ function removeBulkFile(id: number): void {
   renderBulk();
 }
 
+function removeSelectedBulkFiles(): void {
+  const ids = [...bulkState.checkedIds];
+  if (!ids.length) return;
+  const { state, revoked } = removeBulkItems(bulkState, ids);
+  bulkState = state;
+  for (const url of revoked) URL.revokeObjectURL(url);
+  for (const id of ids) {
+    bulkBlobs.delete(id);
+    bulkResults.delete(id);
+  }
+  renderBulk();
+  log(`Bulk: removed ${ids.length} image(s).`);
+}
+
+function clearFinishedBulk(): void {
+  const { state, revoked } = clearFinishedBulkItems(bulkState);
+  const dropped = new Set(bulkState.items.filter((item) => item.status === 'done').map((item) => item.id));
+  bulkState = state;
+  for (const url of revoked) URL.revokeObjectURL(url);
+  for (const id of dropped) {
+    bulkBlobs.delete(id);
+    bulkResults.delete(id);
+  }
+  renderBulk();
+  if (dropped.size) log(`Bulk: cleared ${dropped.size} finished image(s).`);
+}
+
+function applyBulkBackground(choice: BackgroundChoice | null): void {
+  const targets = bulkCheckedCount(bulkState) ? bulkState.checkedIds : bulkState.items.map((item) => item.id);
+  if (!targets.length) {
+    showToast('Add or select an image first.', { kind: 'warn' });
+    return;
+  }
+  bulkState = setBulkBackground(bulkState, targets, choice);
+  renderBulk();
+  log(
+    choice
+      ? `Bulk background: ${describeChoice(choice)} for ${targets.length} image(s).`
+      : `Bulk background: cleared for ${targets.length} image(s).`,
+  );
+}
+
 function pickBulkFiles(): void {
   if (bulkCapacity(bulkState) === 0) {
-    showToast(`Bulk handles up to ${BULK_LIMIT} images. Remove one to add another.`, { kind: 'warn' });
+    showToast(
+      `Bulk handles up to ${BULK_LIMIT} active images. Wait for the batch to finish or remove one.`,
+      { kind: 'warn' },
+    );
     return;
   }
   const input = document.createElement('input');
@@ -3170,11 +3423,16 @@ function pickBulkFiles(): void {
 async function addBulkFiles(files: File[]): Promise<void> {
   const capacity = bulkCapacity(bulkState);
   if (capacity === 0) {
-    showToast(`Bulk handles up to ${BULK_LIMIT} images. Remove one to add another.`, { kind: 'warn' });
+    showToast(
+      `Bulk handles up to ${BULK_LIMIT} active images. Wait for the batch to finish or remove one.`,
+      { kind: 'warn' },
+    );
     return;
   }
   if (files.length > capacity) {
-    showToast(`Bulk handles up to ${BULK_LIMIT} images; adding the first ${capacity}.`, { kind: 'warn' });
+    showToast(`Bulk handles up to ${BULK_LIMIT} active images; adding the first ${capacity}.`, {
+      kind: 'warn',
+    });
   }
   for (const file of files.slice(0, capacity)) {
     const typeCheck = validateFileTypeAndSize(file);
@@ -3211,11 +3469,23 @@ async function addBulkFiles(files: File[]): Promise<void> {
     bulkBlobs.set(added.item.id, file);
   }
   renderBulk();
-  log(`Bulk: ${bulkState.items.length} image(s) selected.`);
+  log(`Bulk: ${bulkState.items.length} image(s) in the queue.`);
 }
 
 bulkPickBtn?.addEventListener('click', pickBulkFiles);
 bulkProcessBtn?.addEventListener('click', () => void processBulkBatch());
+bulkSelectAllEl?.addEventListener('change', () => {
+  bulkState = setBulkCheckedAll(bulkState, bulkSelectAllEl.checked);
+  renderBulk();
+});
+bulkDeleteSelectedBtn?.addEventListener('click', removeSelectedBulkFiles);
+bulkClearFinishedBtn?.addEventListener('click', clearFinishedBulk);
+bulkBgAlphaInput?.addEventListener('input', () => {
+  if (bulkBgAlphaValueEl) bulkBgAlphaValueEl.textContent = `${bulkBgAlphaInput.value}%`;
+});
+bulkBgApplyBtn?.addEventListener('click', () => applyBulkBackground(bulkBackgroundChoice()));
+bulkBgTransparentBtn?.addEventListener('click', () => applyBulkBackground(TRANSPARENT));
+renderBulk();
 
 // A bulk batch drives the same single-image pipeline, so it temporarily takes
 // over the step editor. Snapshot the step photo/result and put them back when the
@@ -3228,6 +3498,7 @@ interface StepSnapshot {
   result: HTMLCanvasElement | null;
   preview: HTMLCanvasElement | null;
   view: typeof studioView;
+  settingsKey: string | null;
 }
 
 function snapshotStep(): StepSnapshot {
@@ -3239,6 +3510,7 @@ function snapshotStep(): StepSnapshot {
     result: lastResultCanvas,
     preview: lastPreviewCanvas,
     view: studioView,
+    settingsKey: resultSettingsKey,
   };
 }
 
@@ -3269,11 +3541,55 @@ function restoreStep(snapshot: StepSnapshot): void {
   // Keep whatever tab the user is on: the batch normally leaves them on Bulk to
   // download, but a manual tab switch during the run is respected.
   studioView = { ...snapshot.view, tab: studioView.tab };
+  resultSettingsKey = snapshot.settingsKey;
   applyStudioView();
   if (snapshot.result) {
     renderResultPreview();
     applyFormatUi();
   }
+}
+
+interface EngineSnapshot {
+  maskAdjust: MaskAdjust;
+  tileGrid: TileGrid;
+  refine: FastRefinementConfig;
+}
+
+function snapshotEngine(): EngineSnapshot {
+  return {
+    maskAdjust: { ...maskAdjust },
+    tileGrid,
+    refine: {
+      ...refineConfig,
+      maskUpscale: { ...refineConfig.maskUpscale },
+      edgeRefinement: { ...refineConfig.edgeRefinement },
+      cleanup: { ...refineConfig.cleanup },
+      performance: { ...refineConfig.performance },
+    },
+  };
+}
+
+// Bulk runs never inherit the experimental Photo/Result engine controls: the
+// batch uses the stock mask adjustment, a single full-image pass, and the
+// default refinement config. The user's settings are restored when it ends.
+function applyDefaultEngine(): void {
+  maskAdjust = { ...DEFAULT_MASK_ADJUST };
+  tileGrid = 1;
+  Object.assign(refineConfig, resolveRefinementConfig());
+  applyMaskUi();
+  applyTilingUi();
+  applyRefineUi();
+  updateReprocessButton();
+}
+
+function restoreEngine(snapshot: EngineSnapshot): void {
+  maskAdjust = snapshot.maskAdjust;
+  tileGrid = snapshot.tileGrid;
+  Object.assign(refineConfig, snapshot.refine);
+  applyMaskUi();
+  applyTilingUi();
+  applyRefineUi();
+  updateReprocessButton();
 }
 
 async function processBulkBatch(): Promise<void> {
@@ -3290,11 +3606,14 @@ async function processBulkBatch(): Promise<void> {
   if (!pending.length) return;
 
   const snapshot = snapshotStep();
+  const engine = snapshotEngine();
   protectedObjectUrl = currentObjectUrl;
   bulkBatchRunning = true;
   bulkTabPinned = true;
   downloadConsentDeclined = false;
   setStudioTab('bulk', true);
+  applyDefaultEngine();
+  log('Bulk: using the default engine settings.');
   renderBulk();
   const total = pending.length;
   let index = 0;
@@ -3314,6 +3633,7 @@ async function processBulkBatch(): Promise<void> {
       }
       log(`Bulk ${index}/${total}: processing a ${item.width}x${item.height} photo.`);
       const file = new File([blob], item.name, { type: blob.type || 'image/png' });
+      const revisionBefore = resultRevision;
       await loadImageFromFile(file, librarySavingEnabled);
       const run = activeRunPromise;
       if (run) await run;
@@ -3329,7 +3649,9 @@ async function processBulkBatch(): Promise<void> {
       // The library write is queued behind a PNG encode; let it finish before the
       // next run bumps the run token, or the write would be dropped.
       await libraryWriteQueue;
-      const canvas = lastResultCanvas;
+      // A run that never painted a result must not reuse the previous item's
+      // canvas; resultRevision only moves when a fresh result lands.
+      const canvas = resultRevision !== revisionBefore ? lastResultCanvas : null;
       if (canvas) {
         bulkResults.set(item.id, canvas);
         const png = await canvasToPngBlob(previewFromCanvas(canvas));
@@ -3346,6 +3668,7 @@ async function processBulkBatch(): Promise<void> {
     bulkBatchRunning = false;
     bulkTabPinned = false;
     restoreStep(snapshot);
+    restoreEngine(engine);
     protectedObjectUrl = null;
     renderBulk();
     log(`Bulk finished: ${bulkDoneCount(bulkState)} of ${bulkState.items.length} cut-out(s).`);

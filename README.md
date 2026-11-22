@@ -42,10 +42,18 @@ No secret or account is required — inference is entirely local. See
 ### Browser requirements
 
 - A modern browser with **Web Workers + WebAssembly SIMD/threads**: Chrome/Edge
-  ≥ 90, Firefox ≥ 90, Safari ≥ 15. WebGPU is used automatically when an adapter
-  is present; otherwise the app runs on WASM (CPU).
+  ≥ 90, Firefox ≥ 90, Safari ≥ 15. WebGPU is used automatically on desktop when
+  a modern hardware adapter is present; a phone adapter the gate has no evidence
+  for defaults to WASM (CPU) and remains selectable. Otherwise the app runs on
+  WASM.
 - First visit downloads the model once (~68 MB by default) and caches it in the
   Cache API; later visits load it from the device.
+- **Adaptive source size.** A decoded source is capped before it is read into an
+  `ImageData`: 4096 px on desktop (the documented upload limit), 3072 px on a
+  phone, and 2048 px on a phone reporting ≤ 2 GB of memory (or ≤ 2 cores). The
+  original is never upscaled. A larger photo is reduced instead of rejected, and
+  the Console states the change. `?maxSourceSide=` overrides the cap for
+  scripted runs. See `MOBILE_OPTIMIZATION_REPORT.md`.
 
 ## Result — WASM path on a real phone
 
@@ -585,16 +593,20 @@ copyrighted materials. See [LICENSE](./LICENSE) for the terms.
   worker (whose shared ORT module the aborted run may have corrupted): the page
   discards the worker and retries on a **fresh** one pinned to the CPU (PR #124,
   `HARDWARE_TESTING.md` §8).
-- WebGPU is **on by default when the browser exposes an adapter** (no allowlist).
-  `navigator.gpu` existing + `requestAdapter()` returning an adapter is enough
-  to offer it. A GPU that fails to build/run the session falls back to WASM
-  automatically; a silently-wrong mask (observed on Adreno-6xx) is the reason
-  the fallback path exists, so verify results on a new device before trusting
-  the GPU path (`HARDWARE_TESTING.md` §3, `PHASE1_REPORT.md` §9).
+- WebGPU is **on by default on desktop when a modern hardware adapter passes
+  the gate**; it is always *offered* whenever an adapter exists. On a phone, an
+  adapter the classifier has no evidence for is not the default: the app logs
+  `unverified mobile GPU adapter; defaulting to CPU for reliability` and runs
+  WASM. The GPU stays selectable and `?provider=webgpu` still forces it. A GPU
+  that fails to build/run the session falls back to WASM automatically; a
+  silently-wrong mask (observed on Adreno-6xx) is the reason the fallback path
+  exists, so verify results on a new device before trusting the GPU path
+  (`HARDWARE_TESTING.md` §3, `PHASE1_REPORT.md` §9).
 - WebGPU runs are bounded by a watchdog: 180 s for the first run (it compiles
-  shaders) and 120 s afterwards. A run that never settles would otherwise leave
-  the UI with no output and no error. On timeout the run falls back to WASM.
-  WASM runs are deliberately unbounded — they are slow, not stalled.
+  shaders), then 120 s on desktop and **30 s on a phone** (≈4× the measured
+  6.5–7.3 s warm time). A run that never settles would otherwise leave the UI
+  with no output and no error. On timeout the run falls back to WASM. WASM runs
+  are deliberately unbounded — they are slow, not stalled.
 - The shipped model is float32 internally, so WebGPU no longer depends on the
   adapter's `shader-f16` feature (fp16 emulation was the cause of the Intel
   Gen-9 stalls). The log still reports `shader-f16=yes|no` for the chosen

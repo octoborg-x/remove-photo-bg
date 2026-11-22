@@ -12,7 +12,18 @@
 //   - known-bad or slow adapter       -> CPU (WASM)
 //   - adapter without shader-f16      -> CPU (WASM)  (model is fp16 internally)
 //   - too-small storage binding limit -> CPU (WASM)
+//   - unknown adapter on a phone      -> CPU (WASM)  (unverified mobile GPU)
 //   - otherwise (modern hardware GPU) -> GPU (WebGPU)
+//
+// The mobile rule is deliberately narrow: it only changes the *default* for an
+// adapter the classifier has no evidence about. A phone whose adapter is
+// explicitly confirmed good would still default to GPU, and every user can opt
+// into GPU from the UI or with `?provider=webgpu`. The evidence behind the rule
+// is the one measured phone in HARDWARE_TESTING.md §4 (Adreno-6xx): WebGPU was
+// no faster than WASM and mis-segmented the subject, so WASM is the safe mobile
+// default. No mobile adapter has been measured correct in this repo yet, so the
+// confirmed-good list is empty by design — add a hint only with a real-device
+// entry in HARDWARE_TESTING.md.
 //
 // A user (or a scripted `?provider=webgpu`) can still force GPU; the worker's
 // own WASM fallback stays the safety net when a session fails to build/run.
@@ -52,13 +63,43 @@ const SOFTWARE_ADAPTER_HINTS = ['llvmpipe', 'swiftshader', 'software', 'basic re
 const SLOW_ADAPTER_HINTS = ['adreno-6', 'adreno 6', 'intel gen-9', 'intel gen9', 'hd graphics 500', 'hd graphics 600'];
 
 /**
+ * Adapters with real-device evidence that WebGPU is correct AND faster here.
+ * Empty by design: the repo has no such mobile measurement yet (the only phone
+ * measured, Adreno-6xx, is in SLOW_ADAPTER_HINTS). Add an entry only alongside
+ * a HARDWARE_TESTING.md result.
+ */
+export const CONFIRMED_GOOD_ADAPTER_HINTS: readonly string[] = [];
+
+/** Whether `label` is on the confirmed-good list. Case-insensitive; the hint
+ *  list is injectable so the mechanism is unit-testable while the shipped list
+ *  stays evidence-only. */
+export function isConfirmedGoodAdapter(
+  label: string,
+  hints: readonly string[] = CONFIRMED_GOOD_ADAPTER_HINTS,
+): boolean {
+  const haystack = label.toLowerCase();
+  return hints.some((h) => h.length > 0 && haystack.includes(h.toLowerCase()));
+}
+
+export interface GpuClassifyOptions {
+  /** Coarse device class from the shared UA/UA-CH probe. */
+  deviceClass?: 'mobile' | 'desktop' | 'unknown';
+}
+
+/**
  * Classifies a WebGPU adapter as usable for this model.
  *
  * Returns `{ usable: true }` for modern hardware GPUs and `{ usable: false,
  * reason }` for software/known-slow adapters or one missing a required
  * capability, so the caller can explain the choice in the log.
+ *
+ * On a phone, an adapter with no allow-signal is also unusable *as the default*
+ * (see the file header). The caller keeps it selectable for a user opt-in.
  */
-export function classifyGpuAdapter(adapter: GpuAdapter | null): { usable: boolean; reason: string } {
+export function classifyGpuAdapter(
+  adapter: GpuAdapter | null,
+  options: GpuClassifyOptions = {},
+): { usable: boolean; reason: string } {
   if (!adapter) return { usable: false, reason: 'no adapter' };
   const info = adapter.info ?? {};
   const label = [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(' ') || 'unknown adapter';
@@ -78,6 +119,12 @@ export function classifyGpuAdapter(adapter: GpuAdapter | null): { usable: boolea
   if (typeof limit === 'number' && limit > 0 && limit < MIN_STORAGE_BUFFER_BINDING) {
     return { usable: false, reason: `${label} exposes only ${Math.round(limit / 1048576)} MB of storage buffers` };
   }
+  if (options.deviceClass === 'mobile' && !isConfirmedGoodAdapter(label)) {
+    return {
+      usable: false,
+      reason: `${label} is an unverified mobile GPU adapter; defaulting to CPU for reliability`,
+    };
+  }
   return { usable: true, reason: `GPU ready (${label})` };
 }
 
@@ -88,7 +135,7 @@ export function classifyGpuAdapter(adapter: GpuAdapter | null): { usable: boolea
  * `reason` is a short phrase for the log/log-line, e.g. "WebGPU unavailable in
  * this browser" or "GPU ready (…)".
  */
-export async function detectWebGpu(): Promise<WebGpuDetect> {
+export async function detectWebGpu(options: GpuClassifyOptions = {}): Promise<WebGpuDetect> {
   const nav = navigator as NavigatorWithGpu;
   if (typeof navigator === 'undefined' || !('gpu' in nav) || !nav.gpu?.requestAdapter) {
     return { available: false, adapterPresent: false, reason: 'WebGPU is not available in this browser' };
@@ -100,7 +147,7 @@ export async function detectWebGpu(): Promise<WebGpuDetect> {
     }
     const info = adapter.info ?? {};
     const label = [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(' ') || 'unknown adapter';
-    const verdict = classifyGpuAdapter(adapter);
+    const verdict = classifyGpuAdapter(adapter, options);
     if (!verdict.usable) {
       // An adapter exists but is not a good default (software/known-slow/missing
       // capability). The CPU stays the default, but the GPU remains selectable:

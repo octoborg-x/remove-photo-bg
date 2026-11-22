@@ -80,6 +80,10 @@ import {
   DEFAULT_UPLOAD_LIMITS,
 } from './features/background-removal/image-validation';
 import {
+  recommendSourceScale,
+  type SourceScaleDecision,
+} from './features/background-removal/adaptive-downscale';
+import {
   ensureAssetCache,
   cachedAssetCount,
   isUrlCached,
@@ -101,6 +105,7 @@ import {
   currentConnectionClass,
   connectionChangeAction,
   meteredSwitchNotice,
+  readDeviceMobile,
   type ConnectionClass,
 } from './features/background-removal/network-preflight';
 import {
@@ -874,6 +879,32 @@ const urlParams = new URLSearchParams(location.search);
 // with a saved pref.
 const forcedProvider = urlParams.get('provider');
 const forcedModel = urlParams.get('model');
+// ?maxSourceSide= caps the decoded source for scripted runs and A/B checks. It
+// is clamped by recommendSourceScale, so it can never exceed the upload cap.
+const forcedMaxSourceSide = (() => {
+  const raw = urlParams.get('maxSourceSide');
+  if (raw == null) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+})();
+
+function readDeviceMemoryGb(): number | null {
+  if (typeof navigator === 'undefined') return null;
+  const value = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** The one place the page decides how large a decoded source may be. */
+function sourceScaleDecision(width: number, height: number): SourceScaleDecision {
+  return recommendSourceScale({
+    width,
+    height,
+    deviceClass: readDeviceMobile() ? 'mobile' : 'desktop',
+    deviceMemoryGb: readDeviceMemoryGb(),
+    hardwareConcurrency: typeof navigator !== 'undefined' ? navigator.hardwareConcurrency ?? null : null,
+    maxSourceSide: forcedMaxSourceSide,
+  });
+}
 
 // Mask adjust prefs: read once, persisted on change. The URL params
 // ?maskThreshold= and ?maskFeather= override for automated/headless runs.
@@ -2068,26 +2099,51 @@ async function loadImageFromFile(file: File, addToLibrary = librarySavingEnabled
     error(e instanceof Error ? e.message : String(e), 'upload');
     return;
   }
-  const dimCheck = validateDimensions(img.naturalWidth, img.naturalHeight);
+  // Decide the largest source this device should hold, then draw ONCE at that
+  // size. The full-resolution pixels are never read into an ImageData buffer, so
+  // a 48 MP phone photo cannot exhaust the renderer's memory before inference.
+  const sourceScale = sourceScaleDecision(img.naturalWidth, img.naturalHeight);
+  if (sourceScale.downscaled) log(sourceScale.reason);
+  const dimCheck = validateDimensions(sourceScale.width, sourceScale.height);
   if (!dimCheck.ok) {
     URL.revokeObjectURL(url);
     error(dimCheck.reason, 'upload');
     return;
   }
   const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
+  canvas.width = sourceScale.width;
+  canvas.height = sourceScale.height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-  ctx.drawImage(img, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   currentImage = img;
+
+  // A reduced source is also the geometry the preview, tiled runs and the
+  // before/after slider must use. Re-encode the reduced canvas once and drop the
+  // full-resolution decode instead of keeping both.
+  let displayUrl = url;
+  let librarySource: Blob = file;
+  if (sourceScale.downscaled) {
+    const scaledBlob = await canvasToPngBlob(canvas);
+    if (scaledBlob) {
+      displayUrl = URL.createObjectURL(scaledBlob);
+      librarySource = scaledBlob;
+      URL.revokeObjectURL(url);
+      currentImage = await loadImageElement(displayUrl);
+    } else {
+      currentImage = await loadImageElement(canvas.toDataURL('image/png'));
+    }
+  }
+
   // Keep the URL alive while the preview is on screen; release the previous one.
   // A bulk batch protects the step photo's URL until it restores it afterwards.
   if (currentObjectUrl && currentObjectUrl !== protectedObjectUrl) {
     URL.revokeObjectURL(currentObjectUrl);
   }
-  currentObjectUrl = url;
-  showInputImage(img);
+  currentObjectUrl = displayUrl;
+  showInputImage(currentImage);
   // A new photo invalidates the previous job: bump the job id and cancel any
   // refinement still running for the old one, so its late result cannot paint
   // over this new job's preview.
@@ -2101,8 +2157,8 @@ async function loadImageFromFile(file: File, addToLibrary = librarySavingEnabled
   // addToLibrary=false so it is not duplicated). The library owns its own blob
   // URL — separate from the preview URL, which is revoked on the next load.
   if (addToLibrary) {
-    const libUrl = URL.createObjectURL(file);
-    libraryBlobs.set(session.nextId, file);
+    const libUrl = URL.createObjectURL(librarySource);
+    libraryBlobs.set(session.nextId, librarySource);
     applySession({
       type: 'add',
       name: currentImageName,
@@ -2858,6 +2914,9 @@ function loadSelectedModel(): void {
     outputIsProbability: selectedModel.outputIsProbability,
     forceProvider: force,
     modelId: selectedModel.id,
+    // Lets the worker use a shorter warm-run watchdog on a phone (see
+    // MOBILE_WEBGPU_TIMEOUT_MS in public/inference-worker.js).
+    mobile: readDeviceMobile(),
   });
 
   // The worker answers a set-model with a 'queued' progress message immediately,
@@ -3449,21 +3508,40 @@ async function addBulkFiles(files: File[]): Promise<void> {
       error('Failed to decode image', 'upload');
       continue;
     }
-    const dimCheck = validateDimensions(img.naturalWidth, img.naturalHeight);
+    const sourceScale = sourceScaleDecision(img.naturalWidth, img.naturalHeight);
+    if (sourceScale.downscaled) log(sourceScale.reason);
+    const dimCheck = validateDimensions(sourceScale.width, sourceScale.height);
     if (!dimCheck.ok) {
       URL.revokeObjectURL(url);
       error(dimCheck.reason, 'upload');
       continue;
     }
+    // The card thumbnail must not keep a full-resolution decode alive for every
+    // queued photo; a batch of five phone photos is the worst case for memory.
+    let displayUrl = url;
+    if (sourceScale.downscaled) {
+      const canvas = document.createElement('canvas');
+      canvas.width = sourceScale.width;
+      canvas.height = sourceScale.height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const scaledBlob = await canvasToPngBlob(canvas);
+      if (scaledBlob) {
+        displayUrl = URL.createObjectURL(scaledBlob);
+        URL.revokeObjectURL(url);
+      }
+    }
     const added = addBulkItem(bulkState, {
       name: file.name || `Photo ${bulkState.nextId}`,
-      width: img.naturalWidth,
-      height: img.naturalHeight,
-      originalUrl: url,
+      width: sourceScale.width,
+      height: sourceScale.height,
+      originalUrl: displayUrl,
     });
     bulkState = added.state;
     if (!added.item) {
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(displayUrl);
       break;
     }
     bulkBlobs.set(added.item.id, file);
@@ -4437,8 +4515,10 @@ window.addEventListener('scroll', updateHeaderCollapse, { passive: true });
 updateHeaderCollapse();
 
 async function boot(): Promise<void> {
-  // GPU gate first: it decides which provider is offered and the default.
-  gpuState = await detectWebGpu();
+  // GPU gate first: it decides which provider is offered and the default. The
+  // shared device probe lets an unverified mobile adapter stay off the default
+  // (it remains selectable; see provider-gate.ts).
+  gpuState = await detectWebGpu({ deviceClass: readDeviceMobile() ? 'mobile' : 'desktop' });
   log(gpuState.reason);
   // Probe whenever an adapter exists — even one the gate did not endorse — so the
   // GPU stays selectable in Advanced options (the user is warned, not blocked).

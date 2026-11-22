@@ -387,7 +387,14 @@ function adapterDetails() {
 // bounded tightly because a stall there means the device is gone.
 const FIRST_WEBGPU_TIMEOUT_MS = 180000;
 const WEBGPU_TIMEOUT_MS = 120000;
+// A warm run on the one measured phone took 6.5-7.3 s (HARDWARE_TESTING.md §4),
+// so 30 s is ~4x the worst measured warm time. A warm run that has not settled
+// by then is stalled, not slow; the old 120 s budget left a phone busy for two
+// minutes before the fallback could start. The FIRST run keeps the long budget
+// because it compiles shaders, which has no comparable measurement.
+const MOBILE_WEBGPU_TIMEOUT_MS = 30000;
 let webgpuRunCount = 0;
+let deviceIsMobile = false;
 
 function withTimeout(promise, ms, message) {
   let timer;
@@ -411,7 +418,8 @@ async function runInference(tensor) {
     // No watchdog for WASM: minutes-long CPU runs are expected, not stalls.
     let results;
     if (lastProvider === 'webgpu') {
-      const limit = webgpuRunCount === 0 ? FIRST_WEBGPU_TIMEOUT_MS : WEBGPU_TIMEOUT_MS;
+      const warmLimit = deviceIsMobile ? MOBILE_WEBGPU_TIMEOUT_MS : WEBGPU_TIMEOUT_MS;
+      const limit = webgpuRunCount === 0 ? FIRST_WEBGPU_TIMEOUT_MS : warmLimit;
       webgpuRunCount++;
       try {
         results = await withTimeout(
@@ -472,6 +480,7 @@ self.onmessage = async (e) => {
       webgpuSessionInitialized = false;
       sessionFallbackReason = null;
       if (msg.inputSize) MODEL_SIZE = msg.inputSize;
+      if (typeof msg.mobile === 'boolean') deviceIsMobile = msg.mobile;
       if (typeof msg.outputIsProbability === 'boolean') {
         outputIsProbability = msg.outputIsProbability;
       }

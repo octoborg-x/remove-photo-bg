@@ -44,9 +44,14 @@ type WorkerMessage = { kind: string; stage?: string };
 function makeWorker({
   hasGpu,
   fetchMock: injectedFetch,
+  runMock,
+  timerControl,
 }: {
   hasGpu: boolean;
   fetchMock?: (url: string, opts: { signal: AbortSignal }) => Promise<unknown>;
+  runMock?: () => Promise<unknown>;
+  /** When set, the worker's setTimeout is observable and can be fired at once. */
+  timerControl?: { instant: boolean; delays: number[] };
 }) {
   const posted: WorkerMessage[] = [];
   const fetchedUrls: string[] = [];
@@ -61,7 +66,7 @@ function makeWorker({
       create: async (_bytes: ArrayBuffer, opts: { executionProviders: string[] }) => {
         const ep = opts.executionProviders[0];
         sessionsCreated.push(ep);
-        return { run: async () => ({ output: {} }), release: async () => {} };
+        return { run: runMock ?? (async () => ({ output: {} })), release: async () => {} };
       },
     },
   };
@@ -93,6 +98,16 @@ function makeWorker({
     // Strip the runtime importScripts: `ort` is injected instead.
     WORKER_SRC.replace(/^\s*importScripts\([^)]*\);\s*$/m, ''),
   );
+  const setTimeoutMock = timerControl
+    ? (fn: () => void, ms: number) => {
+        timerControl.delays.push(ms);
+        if (timerControl.instant) {
+          fn();
+          return 0;
+        }
+        return setTimeout(fn, ms);
+      }
+    : setTimeout;
   load(
     selfMock,
     ort,
@@ -101,7 +116,7 @@ function makeWorker({
     performance,
     URL,
     AbortController,
-    setTimeout,
+    setTimeoutMock,
     clearTimeout,
   );
 
@@ -173,5 +188,70 @@ describe('inference worker — model byte reuse across provider switches', () =>
     await w.waitForLoad();
 
     expect(w.fetchedUrls).toEqual(['/models/a.onnx', '/models/b.onnx']);
+  });
+});
+
+describe('inference worker — mobile warm-run watchdog', () => {
+  async function runUntilTimeout({ mobile }: { mobile: boolean }) {
+    const timerControl = { instant: false, delays: [] as number[] };
+    let runs = 0;
+    const w = makeWorker({
+      hasGpu: true,
+      timerControl,
+      runMock: () => {
+        runs += 1;
+        // The first (cold) run resolves so the warm budget is the one under test;
+        // the second never settles, which is the stall the watchdog must catch.
+        return runs === 1
+          ? Promise.resolve({ output_image: { data: new Float32Array(512 * 512) } })
+          : new Promise(() => {});
+      },
+    });
+
+    w.send({
+      kind: 'set-model',
+      modelUrl: '/models/m.onnx',
+      inputSize: 512,
+      outputIsProbability: true,
+      modelId: 'm',
+      forceProvider: 'webgpu',
+      mobile,
+    });
+    await w.waitForLoad();
+
+    w.send({ kind: 'run', runId: 1, tensor: new Float32Array(1), width: 10, height: 10 });
+    await new Promise<void>((resolve) => {
+      const tick = setInterval(() => {
+        if (w.posted.some((m) => m.kind === 'result-ready')) {
+          clearInterval(tick);
+          resolve();
+        }
+      }, 5);
+    });
+
+    timerControl.instant = true;
+    w.send({ kind: 'run', runId: 2, tensor: new Float32Array(1), width: 10, height: 10 });
+    const restart = await new Promise<WorkerMessage & { reason?: string }>((resolve) => {
+      const tick = setInterval(() => {
+        const found = w.posted.find((m) => m.kind === 'provider-restart');
+        if (found) {
+          clearInterval(tick);
+          resolve(found as WorkerMessage & { reason?: string });
+        }
+      }, 5);
+    });
+    return { restart, delays: timerControl.delays };
+  }
+
+  it('uses a 30 s warm budget on a phone (4x the measured 6.5-7.3 s)', async () => {
+    const { restart, delays } = await runUntilTimeout({ mobile: true });
+    expect(delays).toContain(30000);
+    expect(restart.reason).toMatch(/did not finish in 30s/);
+  });
+
+  it('keeps the 120 s warm budget on desktop', async () => {
+    const { restart, delays } = await runUntilTimeout({ mobile: false });
+    expect(delays).toContain(120000);
+    expect(restart.reason).toMatch(/did not finish in 120s/);
   });
 });

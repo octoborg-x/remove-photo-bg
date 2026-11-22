@@ -72,6 +72,9 @@ function makePng(width, height, rgb) {
 function writeFixtures() {
   mkdirSync(FIXTURES, { recursive: true });
   writeFileSync(resolve(FIXTURES, 'input.png'), makePng(64, 48, [180, 90, 60]));
+  // A 15.4 MP "phone photo" whose long side (4800) exceeds the 4096 upload cap.
+  // Solid colour keeps the committed fixture tiny while the decode is realistic.
+  writeFileSync(resolve(FIXTURES, 'large-phone-photo.png'), makePng(4800, 3200, [180, 90, 60]));
   writeFileSync(resolve(FIXTURES, 'not-an-image.txt'), 'this is not an image\n');
   // A file the browser labels as PNG (by extension) but whose bytes are not a
   // decodable image — the decode path must reject it.
@@ -1894,6 +1897,65 @@ try {
         gating.backToStep.consoleDisabled === false &&
         gating.backToStep.sidebarDisabled === false,
       JSON.stringify(gating),
+    );
+    await page.close();
+  }
+
+  // ——— Scenario: emulated mobile viewport downsizes an oversized source ———
+  // This is an EMULATED viewport (mobile UA + deviceMemory=2 + touch viewport),
+  // not a real phone. It proves the page chooses a smaller source and exports at
+  // that size; it says nothing about a real Android/iOS GPU or memory budget.
+  {
+    const page = await browser.newPage();
+    await page.setUserAgent(
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+        'Chrome/157.0.0.0 Mobile Safari/537.36',
+    );
+    await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'userAgentData', {
+        configurable: true,
+        get: () => ({ mobile: true }),
+      });
+      Object.defineProperty(navigator, 'deviceMemory', {
+        configurable: true,
+        get: () => 2,
+      });
+    });
+    const mobileUrl = new URL(pageUrl.toString());
+    mobileUrl.searchParams.set('provider', 'wasm');
+    await page.goto(mobileUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+    await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
+    await chooseFile(page, resolve(FIXTURES, 'large-phone-photo.png'));
+    await page.waitForFunction(() => document.querySelector('#outputBox img') !== null, {
+      timeout: 600000,
+    });
+    const state = await page.evaluate(() => ({
+      // The preview <img> is display-sized, so the export is the only place
+      // that proves the result's real dimensions.
+      href: document.getElementById('downloadImage')?.getAttribute('href') ?? '',
+      log: document.getElementById('consoleOutput')?.textContent ?? '',
+      recoveryHidden: document.getElementById('recovery')?.hidden ?? true,
+      stage: document.getElementById('stage')?.textContent ?? '',
+    }));
+    // PNG IHDR: width at byte 16, height at byte 20 (after sig + length + type).
+    const png = Buffer.from(state.href.split(',')[1] ?? '', 'base64');
+    const exportWidth = png.length >= 24 ? png.readUInt32BE(16) : 0;
+    const exportHeight = png.length >= 24 ? png.readUInt32BE(20) : 0;
+    record(
+      'emulated mobile: a 4800×3200 source exports at 2048×1365',
+      exportWidth === 2048 && exportHeight === 1365,
+      `${exportWidth}x${exportHeight}`,
+    );
+    record(
+      'emulated mobile: the reduction is logged',
+      /Reduced from 4800×3200 to 2048×1365/.test(state.log),
+    );
+    record(
+      'emulated mobile: the oversized photo reaches a result without an OOM path',
+      state.recoveryHidden === true && !/bad_alloc|out of memory/i.test(state.stage),
+      state.stage.replace(/\s+/g, ' ').slice(0, 60),
     );
     await page.close();
   }

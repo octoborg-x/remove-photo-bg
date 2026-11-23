@@ -586,46 +586,64 @@ try {
       `${exportBarState.initial.expanded}/${exportBarState.initial.display} → ${exportBarState.collapsed.expanded}/${exportBarState.collapsed.display} → ${exportBarState.restored}`,
     );
 
-    // Background picker: one system colour input (a solid colour exports as JPG,
-    // no alpha to carry) repaints the compare view; the transparent toggle
-    // returns a real alpha PNG.
-    const bgState = await page.evaluate(() => {
-      const picker = document.getElementById('bgColorPicker');
-      picker.value = '#2563eb';
-      picker.dispatchEvent(new Event('input', { bubbles: true }));
+    // Background: one colour button opens the modern picker. A solid colour
+    // exports as JPG (no alpha to carry) and repaints the compare view; the
+    // picker's Transparent option returns a real alpha PNG.
+    const bgState = await page.evaluate(async () => {
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const button = document.getElementById('bgColorButton');
+      button.click();
+      const popover = document.getElementById('colorPickerPopover');
+      const opened = !popover.hidden && button.getAttribute('aria-expanded') === 'true';
+      const hex = popover.querySelector('[data-picker="hex"]');
+      hex.value = '2563eb';
+      hex.dispatchEvent(new Event('input', { bubbles: true }));
+      await nextFrame();
       const afterColor = {
         download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
-        pressed: document.getElementById('bgTransparentBtn')?.getAttribute('aria-pressed'),
         compareAfter: document.querySelector('#outputBox .resultCompare .compareAfter')?.getAttribute('src') ?? '',
+        swatch: getComputedStyle(document.getElementById('bgColorSwatch')).getPropertyValue('--swatch').trim(),
       };
-      document.getElementById('bgTransparentBtn').click();
+      popover.querySelector('[data-picker="transparent"]').click();
+      await nextFrame();
       const afterTransparent = {
         download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
         current: document.getElementById('bgCurrent')?.textContent ?? '',
+        pressed: popover.querySelector('[data-picker="transparent"]').getAttribute('aria-pressed'),
       };
-      return { afterColor, afterTransparent };
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return { opened, afterColor, afterTransparent, closed: popover.hidden };
     });
     record(
-      'picking a solid background exports JPG and repaints the compare view',
-      bgState.afterColor.download.endsWith('.jpg') &&
-        bgState.afterColor.pressed === 'false' &&
-        bgState.afterColor.compareAfter.startsWith('data:image/'),
-      bgState.afterColor.download,
+      'the colour button opens the picker and a solid background exports JPG',
+      bgState.opened &&
+        bgState.afterColor.download.endsWith('.jpg') &&
+        bgState.afterColor.compareAfter.startsWith('data:image/') &&
+        bgState.afterColor.swatch.includes('37, 99, 235'),
+      `${bgState.opened} ${bgState.afterColor.download} swatch=${bgState.afterColor.swatch}`,
     );
     record(
-      'transparent keeps a PNG export',
+      'the picker Transparent option keeps a PNG export',
       bgState.afterTransparent.download.endsWith('.png') &&
-        bgState.afterTransparent.current === 'transparent',
-      bgState.afterTransparent.current,
+        bgState.afterTransparent.current === 'transparent' &&
+        bgState.afterTransparent.pressed === 'true' &&
+        bgState.closed,
+      `${bgState.afterTransparent.current} pressed=${bgState.afterTransparent.pressed} closed=${bgState.closed}`,
     );
 
     // PNG/WebP are the alpha-capable formats, so choosing one after a solid
     // colour must hand back a transparent cut-out instead of an opaque file
     // (the "PNG and WebP don't take alpha" report).
     const alphaFormatState = await page.evaluate(async () => {
-      const picker = document.getElementById('bgColorPicker');
-      picker.value = '#ffffff';
-      picker.dispatchEvent(new Event('input', { bubbles: true }));
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const button = document.getElementById('bgColorButton');
+      button.click();
+      const popover = document.getElementById('colorPickerPopover');
+      const hex = popover.querySelector('[data-picker="hex"]');
+      hex.value = 'ffffff';
+      hex.dispatchEvent(new Event('input', { bubbles: true }));
+      await nextFrame();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       const solid = document.getElementById('downloadImage')?.getAttribute('download') ?? '';
       document.querySelector('#formatOptions input[value=png]').click();
       const dl = document.getElementById('downloadImage');
@@ -641,14 +659,11 @@ try {
       const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       let transparent = 0;
       for (let i = 3; i < data.length; i += 4 * 97) if (data[i] === 0) transparent += 1;
-      const alpha = document.getElementById('bgAlpha');
       return {
         solid,
         download: dl?.getAttribute('download') ?? '',
         current: document.getElementById('bgCurrent')?.textContent ?? '',
         transparent,
-        alphaDisabled: alpha.disabled,
-        alphaValue: document.getElementById('bgAlphaValue')?.textContent ?? '',
       };
     });
     record(
@@ -658,11 +673,6 @@ try {
         alphaFormatState.current === 'transparent' &&
         alphaFormatState.transparent > 0,
       `${alphaFormatState.solid} → ${alphaFormatState.download} (${alphaFormatState.current}, transparent samples=${alphaFormatState.transparent})`,
-    );
-    record(
-      'the alpha slider is inert on a transparent background',
-      alphaFormatState.alphaDisabled && alphaFormatState.alphaValue === '—',
-      `disabled=${alphaFormatState.alphaDisabled} value=${alphaFormatState.alphaValue}`,
     );
 
     // ——— Manual retouch: open → stroke → Save, then open → Cancel ———

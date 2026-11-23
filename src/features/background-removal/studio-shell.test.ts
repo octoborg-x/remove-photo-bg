@@ -194,11 +194,26 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/downloadImageBtn\.textContent = `Download \$\{info\.label\}`/);
   });
 
-  it('uses an icon-only transparent toggle and a multicolour solid-colour control', () => {
-    expect(HTML).toMatch(/id="bgTransparentBtn"[^>]*>\s*<span class="bgTransparentChip"/);
-    expect(HTML).not.toMatch(/id="bgTransparentBtn"[\s\S]{0,400}?Transparent\s*<\/button>/);
-    expect(CSS).toMatch(/\.bgColorSwatch\s*\{[^}]*conic-gradient/s);
-    expect(MAIN).toMatch(/bgColorSwatch\.style\.setProperty\('--picked', background\.hex\)/);
+  it('folds colour and alpha into one colour button that opens the modern picker', () => {
+    // One button whose swatch carries the current colour. The old colour input,
+    // hex field, spectrum map and transparent toggle are gone.
+    expect(HTML).toMatch(/id="bgColorButton"[\s\S]{0,300}?id="bgColorSwatch"/);
+    expect(HTML).not.toContain('id="bgColorPicker"');
+    expect(HTML).not.toContain('id="bgTransparentBtn"');
+    expect(HTML).not.toContain('id="bgHexAlphaInput"');
+    expect(HTML).not.toContain('id="bgSpectrumMap"');
+    // One shared popover with a saturation/value area, hue and alpha sliders, a
+    // hex field and a transparent option.
+    expect(HTML).toContain('id="colorPickerPopover"');
+    for (const part of ['area', 'hue', 'alpha', 'hex', 'transparent']) {
+      expect(HTML).toContain(`data-picker="${part}"`);
+    }
+    expect(CSS).toMatch(/\.colorPickerArea\s*\{/);
+    expect(CSS).toMatch(/\.colorPickerHue\s*\{/);
+    expect(CSS).toMatch(/\.colorButtonSwatch::after\s*\{[^}]*background:\s*var\(--swatch/s);
+    expect(MAIN).toMatch(/createColorPicker\(document\.getElementById\('colorPickerPopover'\)/);
+    expect(MAIN).toMatch(/colorPicker\.toggle\(bgColorButton, background/);
+    expect(MAIN).toMatch(/colorPicker\.toggle\(bulkBgButton, bulkBackground/);
   });
 
   it('adds the before/after slider to the Result editor', () => {
@@ -266,7 +281,7 @@ describe('studio UI refinements', () => {
     expect(exportStart).toBeLessThan(bodyEnd);
     expect(HTML).toMatch(/id="exportBar"[\s\S]*?id="bottomBarCollapse"/);
     const resultPanel = HTML.slice(HTML.indexOf('id="panelStep"'), HTML.indexOf('id="panelBulk"'));
-    expect(resultPanel).not.toContain('id="bgTransparentBtn"');
+    expect(resultPanel).not.toContain('id="bgColorButton"');
     // The Bulk tab and the step tab share the same section in that column.
     expect(HTML).toMatch(/id="panelBulk"[\s\S]*id="panelLibrary"[\s\S]*id="exportBar"/);
   });
@@ -334,10 +349,34 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/dropOpaqueBackgroundForAlpha\(exportFormat\)/);
   });
 
-  it('uses a color set picker with hex+alpha input and continuous spectrum map', () => {
-    expect(MAIN).toMatch(/bgHexAlphaInput/);
-    expect(MAIN).toMatch(/bgSpectrumMap/);
-    expect(MAIN).toMatch(/bgHexAlphaInput\.value/);
+  it('keeps the bulk background in one colour button instead of a picker row', () => {
+    expect(HTML).toContain('id="bulkBgButton"');
+    expect(HTML).toContain('id="bulkBgSwatch"');
+    expect(HTML).not.toContain('id="bulkBgColor"');
+    expect(HTML).not.toContain('id="bulkBgAlpha"');
+    expect(HTML).not.toContain('id="bulkBgTransparent"');
+    expect(MAIN).toMatch(/let bulkBackground: BackgroundChoice/);
+    expect(MAIN).toMatch(/bulkBgApplyBtn\?\.addEventListener\('click', \(\) => applyBulkBackground\(bulkBackgroundChoice\(\)\)\)/);
+  });
+
+  it('pins the library saving switch to the tab row as an icon-only toggle', () => {
+    const tabs = HTML.slice(HTML.indexOf('class="studioTabs"'), HTML.indexOf('id="studioWorkspace"'));
+    expect(tabs).toContain('id="librarySaveToggle"');
+    expect(tabs).toContain('role="switch"');
+    expect(tabs).toContain('class="saveSwitchTrack"');
+    // It is no longer one of the Library toolbar icon buttons.
+    expect(HTML).not.toMatch(/libraryToolbarRight[\s\S]{0,400}?id="librarySaveToggle"/);
+    expect(CSS).toMatch(/\.saveSwitch\s*\{[^}]*margin-left:\s*auto/s);
+    expect(MAIN).toMatch(/librarySaveToggleEl\.setAttribute\('aria-checked'/);
+    expect(MAIN).toMatch(/librarySaveToggleEl\.hidden = studioView\.tab !== 'library'/);
+  });
+
+  it('puts the bulk icon toolbar in the title slot and the copy in the empty state', () => {
+    const head = HTML.slice(HTML.indexOf('class="bulkHead"'), HTML.indexOf('id="bulkStatus"'));
+    expect(head).toContain('class="bulkToolbar"');
+    expect(head).not.toContain('bulkTitle');
+    expect(HTML).not.toContain('class="bulkTitle"');
+    expect(HTML).toMatch(/id="bulkEmpty"[^>]*>Pick up to five photos per batch/);
   });
 });
 

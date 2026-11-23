@@ -152,9 +152,9 @@ import {
   describeChoice,
   formatForChoice,
   toRgba,
-  TRANSPARENT,
   type BackgroundChoice,
 } from './features/background-removal/background-color';
+import { createColorPicker } from './features/background-removal/color-picker';
 import {
   initialStudioView,
   reduceStudio,
@@ -189,10 +189,6 @@ import {
   type BulkState,
 } from './features/background-removal/bulk-batch';
 import { classifyLogLine } from './features/background-removal/console-log';
-import {
-  pickColorFromScreen,
-  supportsScreenPicker,
-} from './features/background-removal/screen-picker';
 import { initAnalyticsUi, type AnalyticsUi } from './features/analytics/ui';
 import type { FailureReason } from './features/analytics/events';
 import type {
@@ -252,12 +248,8 @@ const stepResultEl = document.getElementById('stepResult')!;
 const newPhotoBtn = document.getElementById('newPhotoBtn') as HTMLButtonElement | null;
 const inputPreviewEl = document.getElementById('inputPreview')!;
 const inputPreviewImg = document.getElementById('inputPreviewImg')! as HTMLImageElement;
-const bgTransparentBtn = document.getElementById('bgTransparentBtn')! as HTMLButtonElement;
-const bgColorPicker = document.getElementById('bgColorPicker')! as HTMLInputElement;
+const bgColorButton = document.getElementById('bgColorButton')! as HTMLButtonElement;
 const bgColorSwatch = document.getElementById('bgColorSwatch')!;
-const bgEyeDropperBtn = document.getElementById('bgEyeDropper')! as HTMLButtonElement;
-const bgAlphaInput = document.getElementById('bgAlpha')! as HTMLInputElement;
-const bgAlphaValue = document.getElementById('bgAlphaValue')!;
 const bgCurrentEl = document.getElementById('bgCurrent')!;
 const privacyToggle = document.getElementById('privacyToggle')! as HTMLButtonElement;
 const privacyStatement = document.getElementById('privacyStatement')!;
@@ -306,17 +298,14 @@ const bulkDownloadAllBtn = document.getElementById('bulkDownloadAll') as HTMLBut
 const bulkSelectAllEl = document.getElementById('bulkSelectAll') as HTMLInputElement | null;
 const bulkDeleteSelectedBtn = document.getElementById('bulkDeleteSelected') as HTMLButtonElement | null;
 const bulkClearFinishedBtn = document.getElementById('bulkClearFinished') as HTMLButtonElement | null;
-const bulkBgColorInput = document.getElementById('bulkBgColor') as HTMLInputElement | null;
-const bulkBgAlphaInput = document.getElementById('bulkBgAlpha') as HTMLInputElement | null;
-const bulkBgAlphaValueEl = document.getElementById('bulkBgAlphaValue');
+const bulkBgButton = document.getElementById('bulkBgButton') as HTMLButtonElement | null;
+const bulkBgSwatch = document.getElementById('bulkBgSwatch');
 const bulkBgApplyBtn = document.getElementById('bulkBgApply') as HTMLButtonElement | null;
-const bulkBgTransparentBtn = document.getElementById('bulkBgTransparent') as HTMLButtonElement | null;
 // Session library controls.
 const libraryGridEl = document.getElementById('libraryGrid');
 const libraryEmptyEl = document.getElementById('libraryEmpty');
 const libraryClearBtn = document.getElementById('libraryClear') as HTMLButtonElement | null;
 const librarySaveToggleEl = document.getElementById('librarySaveToggle') as HTMLButtonElement | null;
-const librarySaveHintEl = document.getElementById('librarySaveHint');
 const libraryStatsEl = document.getElementById('libraryStats');
 const libraryFilterInput = document.getElementById('libraryFilter') as HTMLInputElement | null;
 const librarySelectAllEl = document.getElementById('librarySelectAll') as HTMLInputElement | null;
@@ -411,6 +400,9 @@ function renderStudioView(): void {
   }
   const phase = stepPhase(studioView);
   tabButtons.step.textContent = stepTitle(studioView);
+  // Library saving is a Library-tab control, so its switch shares the tab row
+  // only while that tab is open.
+  if (librarySaveToggleEl) librarySaveToggleEl.hidden = studioView.tab !== 'library';
   stepInputEl.hidden = phase !== 'input';
   stepProcessingEl.hidden = phase !== 'processing';
   stepResultEl.hidden = phase !== 'result';
@@ -1305,30 +1297,22 @@ function renderResultPreview(): void {
   if (before) before.src = currentObjectUrl ?? '';
 }
 
-const bgHexAlphaInput = document.getElementById('bgHexAlphaInput') as HTMLInputElement | null;
-const bgAlphaPctLabel = document.getElementById('bgAlphaPctLabel');
-const bgSpectrumMap = document.getElementById('bgSpectrumMap');
-const bgSpectrumHandle = document.getElementById('bgSpectrumHandle');
+// One colour button per place that picks a colour. The button's swatch shows the
+// current choice (a checkerboard when transparent); the shared popover edits it.
+const colorPicker = createColorPicker(document.getElementById('colorPickerPopover')!);
+
+function paintColorSwatch(swatch: HTMLElement | null, choice: BackgroundChoice): void {
+  if (!swatch) return;
+  swatch.style.setProperty('--swatch', isTransparent(choice) ? 'transparent' : toRgba(choice));
+}
 
 function updateBackgroundUi(): void {
-  const color = background.kind === 'color';
-  bgTransparentBtn.setAttribute('aria-pressed', String(isTransparent(background)));
   bgCurrentEl.textContent = describeChoice(background);
-  if (color) {
-    bgColorPicker.value = background.hex;
-    bgColorSwatch.style.setProperty('--picked', background.hex);
-    const alphaHex = Math.round((background.alpha / 100) * 255).toString(16).padStart(2, '0');
-    if (bgHexAlphaInput) bgHexAlphaInput.value = `${background.hex}${alphaHex}`;
-    if (bgAlphaPctLabel) bgAlphaPctLabel.textContent = `${background.alpha}%`;
-    if (bgSpectrumHandle) {
-      // Map hex or hue approx to spectrum position 0-100%
-      bgSpectrumHandle.style.left = `${background.alpha}%`;
-    }
-  } else {
-    if (bgHexAlphaInput) bgHexAlphaInput.value = '#ffffffff';
-    if (bgAlphaPctLabel) bgAlphaPctLabel.textContent = '100%';
-    if (bgSpectrumHandle) bgSpectrumHandle.style.left = '100%';
-  }
+  paintColorSwatch(bgColorSwatch, background);
+  const label = `Background colour: ${describeChoice(background)}`;
+  bgColorButton.setAttribute('aria-label', label);
+  bgColorButton.title = label;
+  colorPicker.syncFor(bgColorButton, background);
 }
 
 // Apply a background choice: repaint the preview + compare, re-encode the export,
@@ -1347,49 +1331,8 @@ function setBackground(choice: BackgroundChoice): void {
   log(`Background: ${describeChoice(background)}`);
 }
 
-bgTransparentBtn.addEventListener('click', () =>
-  setBackground({ kind: 'transparent', hex: background.hex, alpha: 100 }),
-);
-
-bgColorPicker.addEventListener('input', () => {
-  const alpha = background.kind === 'color' ? background.alpha : 100;
-  setBackground({ kind: 'color', hex: bgColorPicker.value, alpha });
-});
-
-bgHexAlphaInput?.addEventListener('input', () => {
-  const val = bgHexAlphaInput.value.trim();
-  const hexMatch = val.match(/^#([0-9a-f]{6})([0-9a-f]{2})?$/i);
-  if (hexMatch) {
-    const hex = `#${hexMatch[1].toLowerCase()}`;
-    const alpha = hexMatch[2] ? Math.round((parseInt(hexMatch[2], 16) / 255) * 100) : 100;
-    setBackground({ kind: 'color', hex, alpha: Math.max(0, Math.min(100, alpha)) });
-  }
-});
-
-bgSpectrumMap?.addEventListener('click', (e) => {
-  const rect = bgSpectrumMap.getBoundingClientRect();
-  const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-  const ratio = x / rect.width;
-  // Map ratio 0..1 to a hue in HSL or approximate red->violet spectrum
-  const hue = Math.round(ratio * 300); // 0 red to 300 violet
-  // Convert HSL to Hex
-  const h = hue / 360;
-  const i = Math.floor(h * 6);
-  const f = h * 6 - i;
-  const q = 1 - f;
-  let r = 1, g = 0, b = 0;
-  switch (i % 6) {
-    case 0: r = 1; g = f; b = 0; break;
-    case 1: r = q; g = 1; b = 0; break;
-    case 2: r = 0; g = 1; b = f; break;
-    case 3: r = 0; g = q; b = 1; break;
-    case 4: r = f; g = 0; b = 1; break;
-    case 5: r = 1; g = 0; b = q; break;
-  }
-  const toHex = (n: number) => Math.round(n * 255).toString(16).padStart(2, '0');
-  const hex = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-  const alpha = background.kind === 'color' ? background.alpha : 100;
-  setBackground({ kind: 'color', hex, alpha });
+bgColorButton.addEventListener('click', () => {
+  colorPicker.toggle(bgColorButton, background, (choice) => setBackground(choice));
 });
 
 // Restore consistency after a reload: an alpha-capable persisted format means
@@ -2545,18 +2488,13 @@ async function storeLibraryResultNow(canvas: HTMLCanvasElement, token: number): 
 
 function applyLibrarySaveUi(): void {
   if (librarySaveToggleEl) {
-    librarySaveToggleEl.setAttribute('aria-pressed', String(librarySavingEnabled));
+    librarySaveToggleEl.setAttribute('aria-checked', String(librarySavingEnabled));
     librarySaveToggleEl.dataset.off = String(!librarySavingEnabled);
     const label = librarySavingEnabled
-      ? 'Saving on — stop saving new cut-outs to the Library'
-      : 'Saving off — start saving new cut-outs to the Library';
+      ? 'Library saving on — turn off to stop saving new cut-outs'
+      : 'Library saving off — turn on to save new cut-outs';
     librarySaveToggleEl.setAttribute('aria-label', label);
     librarySaveToggleEl.title = label;
-  }
-  if (librarySaveHintEl) {
-    librarySaveHintEl.textContent = librarySavingEnabled
-      ? 'Photos you process stay on this device, in this tab only. They are gone when you close or reload the page.'
-      : 'Saving is off — new cut-outs are not added to this history. Turn saving on to keep them again.';
   }
 }
 
@@ -3824,12 +3762,19 @@ function bulkStatusLabel(item: BulkItem): string {
   }
 }
 
+let bulkBackground: BackgroundChoice = { kind: 'color', hex: '#ffffff', alpha: 100 };
+
+function updateBulkBackgroundUi(): void {
+  paintColorSwatch(bulkBgSwatch, bulkBackground);
+  if (!bulkBgButton) return;
+  const label = `Bulk background: ${describeChoice(bulkBackground)}`;
+  bulkBgButton.setAttribute('aria-label', label);
+  bulkBgButton.title = label;
+  colorPicker.syncFor(bulkBgButton, bulkBackground);
+}
+
 function bulkBackgroundChoice(): BackgroundChoice {
-  return {
-    kind: 'color',
-    hex: bulkBgColorInput?.value ?? '#ffffff',
-    alpha: Number(bulkBgAlphaInput?.value ?? 100),
-  };
+  return bulkBackground;
 }
 
 function updateBulkToolbar(): void {
@@ -3854,7 +3799,6 @@ function updateBulkToolbar(): void {
     bulkClearFinishedBtn.title = label;
   }
   if (bulkBgApplyBtn) bulkBgApplyBtn.disabled = bulkBatchRunning || total === 0;
-  if (bulkBgTransparentBtn) bulkBgTransparentBtn.disabled = bulkBatchRunning || total === 0;
 }
 
 function renderBulk(): void {
@@ -4106,11 +4050,14 @@ bulkSelectAllEl?.addEventListener('change', () => {
 });
 bulkDeleteSelectedBtn?.addEventListener('click', removeSelectedBulkFiles);
 bulkClearFinishedBtn?.addEventListener('click', clearFinishedBulk);
-bulkBgAlphaInput?.addEventListener('input', () => {
-  if (bulkBgAlphaValueEl) bulkBgAlphaValueEl.textContent = `${bulkBgAlphaInput.value}%`;
+bulkBgButton?.addEventListener('click', () => {
+  colorPicker.toggle(bulkBgButton, bulkBackground, (choice) => {
+    bulkBackground = choice;
+    updateBulkBackgroundUi();
+  });
 });
 bulkBgApplyBtn?.addEventListener('click', () => applyBulkBackground(bulkBackgroundChoice()));
-bulkBgTransparentBtn?.addEventListener('click', () => applyBulkBackground(TRANSPARENT));
+updateBulkBackgroundUi();
 renderBulk();
 
 // A bulk batch drives the same single-image pipeline, so it temporarily takes

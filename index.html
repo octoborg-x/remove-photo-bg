@@ -1247,10 +1247,24 @@
         <div class="studioGrid" data-console="hidden">
           <div class="studioEditorCol">
             <div class="studioCard">
-              <div class="studioTabs" role="tablist" aria-label="Studio editor">
-                <button id="tabStep" class="editorTab" role="tab" data-tab="step" aria-selected="true" aria-controls="panelStep">Photo</button>
-                <button id="tabBulk" class="editorTab" role="tab" data-tab="bulk" aria-selected="false" aria-controls="panelBulk">Bulk</button>
-                <button id="tabLibrary" class="editorTab" role="tab" data-tab="library" aria-selected="false" aria-controls="panelLibrary">Library</button>
+              <div class="studioTabs">
+                <div class="studioTablist" role="tablist" aria-label="Studio editor">
+                  <button id="tabStep" class="editorTab" role="tab" data-tab="step" aria-selected="true" aria-controls="panelStep">Photo</button>
+                  <button id="tabBulk" class="editorTab" role="tab" data-tab="bulk" aria-selected="false" aria-controls="panelBulk">Bulk</button>
+                  <button id="tabLibrary" class="editorTab" role="tab" data-tab="library" aria-selected="false" aria-controls="panelLibrary">Library</button>
+                </div>
+                <button
+                  id="librarySaveToggle"
+                  type="button"
+                  class="saveSwitch"
+                  role="switch"
+                  aria-checked="true"
+                  aria-label="Save new cut-outs to the Library"
+                  title="Library saving on"
+                  hidden
+                >
+                  <span class="saveSwitchTrack" aria-hidden="true"><span class="saveSwitchKnob"></span></span>
+                </button>
               </div>
 
               <div id="studioWorkspace" class="studioWorkspace">
@@ -1622,41 +1636,25 @@
                   <div id="panelBulk" class="editorPanel" role="tabpanel" aria-labelledby="tabBulk" hidden>
                     <div class="bulkPanel">
                       <div class="bulkHead">
-                        <div class="bulkHeadText">
-                          <h3 class="bulkTitle">Bulk <span id="bulkCount" class="bulkCount">0 / 5</span></h3>
-                          <p class="bulkHint">Pick up to five photos per batch. Once a batch finishes, choose the next five without clearing the results.</p>
-                        </div>
-                        <div class="bulkActions">
-                          <button id="bulkPick" type="button" class="bulkPick">Choose images</button>
-                          <button id="bulkProcess" type="button" class="bulkProcess" disabled>Process all</button>
-                        </div>
-                      </div>
-                      <p class="bulkHint bulkDefaultsHint">Bulk always runs with the default engine settings (single pass, standard refinement, no threshold or feather). The experimental engine controls apply to the Photo/Result tab only.</p>
-                      <p id="bulkStatus" class="bulkStatus" role="status" hidden></p>
-                      <div class="bulkToolbar" role="group" aria-label="Bulk operations">
-                        <label class="bulkSelectAll" title="Select all">
-                          <input id="bulkSelectAll" type="checkbox" aria-label="Select all" />
-                        </label>
-                        <button id="bulkDeleteSelected" type="button" class="bulkToolBtn" aria-label="Delete selected" title="Delete selected" disabled>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                          </svg>
-                        </button>
-                        <button id="bulkClearFinished" type="button" class="bulkToolBtn" aria-label="Clear finished" title="Clear finished">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                            <polyline points="22 4 12 14.01 9 11.01" />
-                          </svg>
-                        </button>
-                        <span class="bulkBgEdit">
-                          <label class="bulkBgField" title="Background colour for the selected images">
-                            <input id="bulkBgColor" type="color" value="#ffffff" aria-label="Bulk background colour" />
+                        <div class="bulkToolbar" role="group" aria-label="Bulk operations">
+                          <label class="bulkSelectAll" title="Select all">
+                            <input id="bulkSelectAll" type="checkbox" aria-label="Select all" />
                           </label>
-                          <label class="bulkBgAlpha" title="Background opacity for the selected images">
-                            <input id="bulkBgAlpha" type="range" min="0" max="100" step="1" value="100" aria-label="Bulk background opacity" />
-                            <span id="bulkBgAlphaValue" class="bulkBgAlphaValue">100%</span>
-                          </label>
+                          <button id="bulkDeleteSelected" type="button" class="bulkToolBtn" aria-label="Delete selected" title="Delete selected" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            </svg>
+                          </button>
+                          <button id="bulkClearFinished" type="button" class="bulkToolBtn" aria-label="Clear finished" title="Clear finished">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                              <polyline points="22 4 12 14.01 9 11.01" />
+                            </svg>
+                          </button>
+                          <button id="bulkBgButton" type="button" class="bulkToolBtn bulkColorBtn" aria-haspopup="dialog" aria-expanded="false" aria-label="Bulk background colour" title="Bulk background colour">
+                            <span id="bulkBgSwatch" class="colorButtonSwatch" aria-hidden="true"></span>
+                          </button>
                           <button id="bulkBgApply" type="button" class="bulkToolBtn" aria-label="Apply background to selected" title="Apply background to selected">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                               <path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z" />
@@ -1665,18 +1663,17 @@
                               <path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z" />
                             </svg>
                           </button>
-                          <button id="bulkBgTransparent" type="button" class="bulkToolBtn" aria-label="Transparent background" title="Transparent background">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                              <rect x="3" y="3" width="7" height="7" rx="1" />
-                              <rect x="14" y="14" width="7" height="7" rx="1" />
-                              <rect x="14" y="3" width="7" height="7" rx="1" opacity="0.45" />
-                              <rect x="3" y="14" width="7" height="7" rx="1" opacity="0.45" />
-                            </svg>
-                          </button>
-                        </span>
+                        </div>
+                        <div class="bulkActions">
+                          <span id="bulkCount" class="bulkCount">0 / 5</span>
+                          <button id="bulkPick" type="button" class="bulkPick">Choose images</button>
+                          <button id="bulkProcess" type="button" class="bulkProcess" disabled>Process all</button>
+                        </div>
                       </div>
+                      <p class="bulkHint bulkDefaultsHint">Bulk always runs with the default engine settings (single pass, standard refinement, no threshold or feather). The experimental engine controls apply to the Photo/Result tab only.</p>
+                      <p id="bulkStatus" class="bulkStatus" role="status" hidden></p>
                       <div id="bulkGrid" class="bulkGrid"></div>
-                      <p id="bulkEmpty" class="bulkEmpty">No images selected yet — choose up to five photos to process them together.</p>
+                      <p id="bulkEmpty" class="bulkEmpty">Pick up to five photos per batch. Once a batch finishes, choose the next five without clearing the results.</p>
                     </div>
                   </div>
 
@@ -1696,12 +1693,6 @@
                           </div>
                         </div>
                         <div class="libraryToolbarRight">
-                          <button id="librarySaveToggle" type="button" class="libraryIconBtn" aria-pressed="true" aria-label="Saving on" title="Saving on">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                              <polyline points="9 12 11 14 15 10" />
-                            </svg>
-                          </button>
                           <button id="libraryExportSelected" type="button" class="libraryIconBtn" aria-label="Export selected as ZIP" disabled title="Export selected as ZIP">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -1769,23 +1760,9 @@
                           <span id="bgCurrent" class="text-[11px] font-mono text-slate-500">transparent</span>
                         </div>
                         <div class="bgPicker">
-                          <button id="bgTransparentBtn" type="button" class="bgTransparentBtn" aria-pressed="true" aria-label="Transparent background" title="Transparent">
-                            <span class="bgTransparentChip" aria-hidden="true"></span>
+                          <button id="bgColorButton" type="button" class="bgColorButton" aria-haspopup="dialog" aria-expanded="false" aria-label="Background colour" title="Background colour">
+                            <span id="bgColorSwatch" class="colorButtonSwatch" aria-hidden="true"></span>
                           </button>
-                          <div class="colorSetPickerBlock">
-                            <div class="colorSetInputRow">
-                              <label class="bgColorField" title="Pick background color">
-                                <input id="bgColorPicker" type="color" value="#ffffff" aria-label="Background colour" />
-                                <span id="bgColorSwatch" class="bgColorSwatch" aria-hidden="true"></span>
-                              </label>
-                              <input id="bgHexAlphaInput" type="text" class="bgHexAlphaInput" value="#ffffffff" placeholder="#rrggbbff" maxlength="9" title="Hex color with alpha (8 digits)" aria-label="Hex color with alpha" />
-                              <span id="bgAlphaPctLabel" class="bgAlphaPctLabel font-mono text-[11px] text-slate-600">100%</span>
-                            </div>
-                            <div class="bgSpectrumMap" id="bgSpectrumMap" title="Continuous color map (red to violet)">
-                              <div class="bgSpectrumBar"></div>
-                              <div id="bgSpectrumHandle" class="bgSpectrumHandle" style="left: 0%;"></div>
-                            </div>
-                          </div>
                         </div>
                       </div>
 
@@ -1916,6 +1893,30 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Shared modern colour picker, opened by the Background and Bulk colour buttons. -->
+      <div id="colorPickerPopover" class="colorPickerPopover" role="dialog" aria-label="Choose a background colour" hidden>
+        <div class="colorPickerArea" data-picker="area">
+          <span class="colorPickerKnob" data-picker="knob" aria-hidden="true"></span>
+        </div>
+        <div class="colorPickerSliders">
+          <input class="colorPickerRange colorPickerHue" data-picker="hue" type="range" min="0" max="360" step="1" value="0" aria-label="Hue" />
+          <input class="colorPickerRange colorPickerAlpha" data-picker="alpha" type="range" min="0" max="100" step="1" value="100" aria-label="Opacity" />
+        </div>
+        <div class="colorPickerMeta">
+          <span class="colorPickerPreview" data-picker="preview" aria-hidden="true"></span>
+          <label class="colorPickerHexWrap" title="Hex colour">
+            <span aria-hidden="true">#</span>
+            <input class="colorPickerHex" data-picker="hex" type="text" value="ffffff" maxlength="6" spellcheck="false" autocomplete="off" aria-label="Hex colour" />
+          </label>
+          <span class="colorPickerAlphaValue" data-picker="alphaValue">100%</span>
+        </div>
+        <div class="colorPickerSwatches" data-picker="swatches" role="group" aria-label="Preset colours"></div>
+        <button type="button" class="colorPickerTransparent" data-picker="transparent" aria-pressed="false">
+          <span class="colorPickerChecker" aria-hidden="true"></span>
+          <span>Transparent</span>
+        </button>
       </div>
     </section>
 

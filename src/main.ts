@@ -174,8 +174,6 @@ import {
   bulkCapacity,
   bulkCheckedCount,
   bulkDoneCount,
-  bulkPendingCount,
-  clearFinishedBulkItems,
   initialBulkState,
   removeBulkItem,
   removeBulkItems,
@@ -289,7 +287,7 @@ const retouchSaveBtn = document.getElementById('retouchSave') as HTMLButtonEleme
 const retouchCancelBtn = document.getElementById('retouchCancel') as HTMLButtonElement | null;
 // Bulk queue: up to five photos processed one after another.
 const bulkPickBtn = document.getElementById('bulkPick') as HTMLButtonElement | null;
-const bulkProcessBtn = document.getElementById('bulkProcess') as HTMLButtonElement | null;
+const bulkEmptyPickBtn = document.getElementById('bulkEmptyPick') as HTMLButtonElement | null;
 const bulkGridEl = document.getElementById('bulkGrid');
 const bulkEmptyEl = document.getElementById('bulkEmpty');
 const bulkCountEl = document.getElementById('bulkCount');
@@ -297,16 +295,17 @@ const bulkStatusEl = document.getElementById('bulkStatus');
 const bulkDownloadAllBtn = document.getElementById('bulkDownloadAll') as HTMLButtonElement | null;
 const bulkSelectAllEl = document.getElementById('bulkSelectAll') as HTMLInputElement | null;
 const bulkDeleteSelectedBtn = document.getElementById('bulkDeleteSelected') as HTMLButtonElement | null;
-const bulkClearFinishedBtn = document.getElementById('bulkClearFinished') as HTMLButtonElement | null;
 const bulkBgButton = document.getElementById('bulkBgButton') as HTMLButtonElement | null;
 const bulkBgSwatch = document.getElementById('bulkBgSwatch');
-const bulkBgApplyBtn = document.getElementById('bulkBgApply') as HTMLButtonElement | null;
 // Session library controls.
 const libraryGridEl = document.getElementById('libraryGrid');
 const libraryEmptyEl = document.getElementById('libraryEmpty');
+const libraryEmptyTextEl = document.getElementById('libraryEmptyText');
 const libraryClearBtn = document.getElementById('libraryClear') as HTMLButtonElement | null;
 const librarySaveToggleEl = document.getElementById('librarySaveToggle') as HTMLButtonElement | null;
-const libraryStatsEl = document.getElementById('libraryStats');
+const libraryStatUsedEl = document.getElementById('libraryStatUsed');
+const libraryStatLeftEl = document.getElementById('libraryStatLeft');
+const libraryStatTotalEl = document.getElementById('libraryStatTotal');
 const libraryFilterInput = document.getElementById('libraryFilter') as HTMLInputElement | null;
 const librarySelectAllEl = document.getElementById('librarySelectAll') as HTMLInputElement | null;
 const libraryExportSelectedBtn = document.getElementById('libraryExportSelected') as HTMLButtonElement | null;
@@ -2147,13 +2146,9 @@ function libraryUsageItems(): { bytes: number; type: string }[] {
 
 function updateLibraryStats(): void {
   const usage = summarizeLibrary(libraryUsageItems());
-  const images = usage.count === 1 ? '1 image' : `${usage.count} images`;
-  if (libraryStatsEl) {
-    libraryStatsEl.textContent =
-      `${images} · Total ${formatBytes(usage.budgetBytes)} · Used ${formatBytes(usage.usedBytes)} · ` +
-      `Left ${formatBytes(usage.leftBytes)} · Types PNG ${usage.types.PNG} / JPG ${usage.types.JPG} / ` +
-      `WebP ${usage.types.WebP}`;
-  }
+  if (libraryStatUsedEl) libraryStatUsedEl.textContent = formatBytes(usage.usedBytes);
+  if (libraryStatLeftEl) libraryStatLeftEl.textContent = formatBytes(usage.leftBytes);
+  if (libraryStatTotalEl) libraryStatTotalEl.textContent = formatBytes(usage.budgetBytes);
   // SVG circular chart update (total, used, available)
   const totalCircle = document.getElementById('usageTotalCircle') as HTMLElement | null;
   const usedCircle = document.getElementById('usageUsedCircle') as HTMLElement | null;
@@ -2203,10 +2198,11 @@ function renderLibrary(): void {
   libraryGridEl.innerHTML = '';
   if (libraryEmptyEl) {
     libraryEmptyEl.hidden = visible.length > 0;
-    libraryEmptyEl.textContent =
-      session.entries.length === 0
-        ? 'Nothing here yet — process a photo to keep its cut-out in this session.'
-        : 'No images match that name.';
+    if (libraryEmptyTextEl) {
+      const noMatches = session.entries.length > 0 && visible.length === 0;
+      libraryEmptyTextEl.hidden = !noMatches;
+      libraryEmptyTextEl.textContent = noMatches ? 'No images match that name.' : '';
+    }
   }
   for (const entry of visible) {
     const checked = libraryChecked.has(entry.id);
@@ -2689,6 +2685,11 @@ function settleModel(error: string | null): void {
   } else {
     modelReady = true;
     window.smokeModelReady = true;
+    // Photos added while the model was failing are still queued; the retry that
+    // just succeeded is their trigger to run.
+    if (studioView.tab === 'bulk' && bulkState.items.some((item) => item.status === 'queued')) {
+      void processBulkBatch();
+    }
   }
   for (const w of modelWaiters.splice(0)) {
     if (error) w.reject(new Error(error));
@@ -3766,21 +3767,12 @@ let bulkBackground: BackgroundChoice = { kind: 'color', hex: '#ffffff', alpha: 1
 
 function updateBulkBackgroundUi(): void {
   paintColorSwatch(bulkBgSwatch, bulkBackground);
-  if (!bulkBgButton) return;
-  const label = `Bulk background: ${describeChoice(bulkBackground)}`;
-  bulkBgButton.setAttribute('aria-label', label);
-  bulkBgButton.title = label;
-  colorPicker.syncFor(bulkBgButton, bulkBackground);
-}
-
-function bulkBackgroundChoice(): BackgroundChoice {
-  return bulkBackground;
+  if (bulkBgButton) colorPicker.syncFor(bulkBgButton, bulkBackground);
 }
 
 function updateBulkToolbar(): void {
   const total = bulkState.items.length;
   const checked = bulkCheckedCount(bulkState);
-  const done = bulkDoneCount(bulkState);
   if (bulkSelectAllEl) {
     bulkSelectAllEl.disabled = total === 0;
     bulkSelectAllEl.checked = total > 0 && checked === total;
@@ -3792,13 +3784,15 @@ function updateBulkToolbar(): void {
     bulkDeleteSelectedBtn.setAttribute('aria-label', label);
     bulkDeleteSelectedBtn.title = label;
   }
-  if (bulkClearFinishedBtn) {
-    bulkClearFinishedBtn.disabled = bulkBatchRunning || done === 0;
-    const label = done > 0 ? `Clear ${done} finished` : 'Clear finished';
-    bulkClearFinishedBtn.setAttribute('aria-label', label);
-    bulkClearFinishedBtn.title = label;
+  if (bulkBgButton) {
+    bulkBgButton.disabled = checked === 0;
+    const label =
+      checked > 0
+        ? `Apply background to ${checked} selected`
+        : 'Select an image to apply a background';
+    bulkBgButton.setAttribute('aria-label', label);
+    bulkBgButton.title = label;
   }
-  if (bulkBgApplyBtn) bulkBgApplyBtn.disabled = bulkBatchRunning || total === 0;
 }
 
 function renderBulk(): void {
@@ -3813,16 +3807,10 @@ function renderBulk(): void {
   const capacity = bulkCapacity(bulkState);
   if (bulkPickBtn) {
     bulkPickBtn.disabled = bulkBatchRunning || capacity === 0;
-    bulkPickBtn.textContent = capacity === 0 ? `Maximum ${BULK_LIMIT} active` : 'Choose images';
-  }
-  if (bulkProcessBtn) {
-    const pending = bulkPendingCount(bulkState);
-    bulkProcessBtn.disabled = bulkBatchRunning || pending === 0;
-    bulkProcessBtn.textContent = bulkBatchRunning
-      ? 'Processing…'
-      : pending > 0
-        ? `Process ${pending}`
-        : 'Process all';
+    const label =
+      capacity === 0 ? `Maximum ${BULK_LIMIT} active images` : 'Add images';
+    bulkPickBtn.setAttribute('aria-label', label);
+    bulkPickBtn.title = label;
   }
 
   for (const item of bulkState.items) {
@@ -3927,25 +3915,9 @@ function removeSelectedBulkFiles(): void {
   log(`Bulk: removed ${ids.length} image(s).`);
 }
 
-function clearFinishedBulk(): void {
-  const { state, revoked } = clearFinishedBulkItems(bulkState);
-  const dropped = new Set(bulkState.items.filter((item) => item.status === 'done').map((item) => item.id));
-  bulkState = state;
-  for (const url of revoked) URL.revokeObjectURL(url);
-  for (const id of dropped) {
-    bulkBlobs.delete(id);
-    bulkResults.delete(id);
-  }
-  renderBulk();
-  if (dropped.size) log(`Bulk: cleared ${dropped.size} finished image(s).`);
-}
-
 function applyBulkBackground(choice: BackgroundChoice | null): void {
-  const targets = bulkCheckedCount(bulkState) ? bulkState.checkedIds : bulkState.items.map((item) => item.id);
-  if (!targets.length) {
-    showToast('Add or select an image first.', { kind: 'warn' });
-    return;
-  }
+  const targets = [...bulkState.checkedIds];
+  if (!targets.length) return;
   bulkState = setBulkBackground(bulkState, targets, choice);
   renderBulk();
   log(
@@ -4040,23 +4012,24 @@ async function addBulkFiles(files: File[]): Promise<void> {
   }
   renderBulk();
   log(`Bulk: ${bulkState.items.length} image(s) in the queue.`);
+  // Adding photos is the trigger: the batch starts on its own.
+  if (bulkState.items.some((item) => item.status === 'queued')) void processBulkBatch();
 }
 
 bulkPickBtn?.addEventListener('click', pickBulkFiles);
-bulkProcessBtn?.addEventListener('click', () => void processBulkBatch());
+bulkEmptyPickBtn?.addEventListener('click', pickBulkFiles);
 bulkSelectAllEl?.addEventListener('change', () => {
   bulkState = setBulkCheckedAll(bulkState, bulkSelectAllEl.checked);
   renderBulk();
 });
 bulkDeleteSelectedBtn?.addEventListener('click', removeSelectedBulkFiles);
-bulkClearFinishedBtn?.addEventListener('click', clearFinishedBulk);
 bulkBgButton?.addEventListener('click', () => {
   colorPicker.toggle(bulkBgButton, bulkBackground, (choice) => {
     bulkBackground = choice;
     updateBulkBackgroundUi();
+    applyBulkBackground(choice);
   });
 });
-bulkBgApplyBtn?.addEventListener('click', () => applyBulkBackground(bulkBackgroundChoice()));
 updateBulkBackgroundUi();
 renderBulk();
 
@@ -4170,30 +4143,36 @@ function restoreEngine(snapshot: EngineSnapshot): void {
 
 async function processBulkBatch(): Promise<void> {
   if (bulkBatchRunning) return;
-  if (studioView.running) {
-    showToast('Wait for the current photo to finish before starting a bulk run.', { kind: 'warn' });
-    return;
-  }
   if (modelError) {
     showToast(modelError, { kind: 'error' });
     return;
   }
-  const pending = bulkState.items.filter((item) => item.status !== 'done');
+  let pending = bulkState.items.filter((item) => item.status !== 'done');
   if (!pending.length) return;
 
-  const snapshot = snapshotStep();
-  const engine = snapshotEngine();
-  protectedObjectUrl = currentObjectUrl;
   bulkBatchRunning = true;
-  bulkTabPinned = true;
-  downloadConsentDeclined = false;
-  setStudioTab('bulk', true);
-  applyDefaultEngine();
-  log('Bulk: using the default engine settings.');
-  renderBulk();
-  const total = pending.length;
-  let index = 0;
+  let snapshot: StepSnapshot | null = null;
+  let engine: EngineSnapshot | null = null;
   try {
+    // Adding photos starts the batch even while a single photo is still running;
+    // wait for that run instead of dropping the request.
+    if (studioView.running && activeRunPromise) {
+      log('Bulk: waiting for the current photo to finish first.');
+      await activeRunPromise;
+      pending = bulkState.items.filter((item) => item.status !== 'done');
+      if (!pending.length) return;
+    }
+    snapshot = snapshotStep();
+    engine = snapshotEngine();
+    protectedObjectUrl = currentObjectUrl;
+    bulkTabPinned = true;
+    downloadConsentDeclined = false;
+    setStudioTab('bulk', true);
+    applyDefaultEngine();
+    log('Bulk: using the default engine settings.');
+    renderBulk();
+    const total = pending.length;
+    let index = 0;
     for (const item of pending) {
       index += 1;
       bulkState = updateBulkItem(bulkState, item.id, { status: 'processing', error: null });
@@ -4243,8 +4222,8 @@ async function processBulkBatch(): Promise<void> {
   } finally {
     bulkBatchRunning = false;
     bulkTabPinned = false;
-    restoreStep(snapshot);
-    restoreEngine(engine);
+    if (snapshot) restoreStep(snapshot);
+    if (engine) restoreEngine(engine);
     protectedObjectUrl = null;
     renderBulk();
     log(`Bulk finished: ${bulkDoneCount(bulkState)} of ${bulkState.items.length} cut-out(s).`);

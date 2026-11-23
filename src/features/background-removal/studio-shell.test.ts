@@ -297,11 +297,15 @@ describe('studio UI refinements', () => {
   it('offers a Bulk tab for up to five photos', () => {
     expect(HTML).toContain('id="panelBulk"');
     expect(HTML).toContain('id="bulkPick"');
-    expect(HTML).toContain('id="bulkProcess"');
     expect(HTML).toContain('id="bulkGrid"');
     expect(MAIN).toMatch(/BULK_LIMIT/);
     expect(MAIN).toMatch(/function addBulkFiles\(/);
     expect(MAIN).toMatch(/function processBulkBatch\(/);
+    // Adding photos starts the batch; there is no separate "process all" step.
+    expect(HTML).not.toContain('id="bulkProcess"');
+    expect(MAIN).toMatch(
+      /if \(bulkState\.items\.some\(\(item\) => item\.status === 'queued'\)\) void processBulkBatch\(\)/,
+    );
     // Batch output is downloadable in the chosen format on the chosen background,
     // bundled into one ZIP archive.
     expect(HTML).toContain('id="bulkDownloadAll"');
@@ -356,7 +360,13 @@ describe('studio UI refinements', () => {
     expect(HTML).not.toContain('id="bulkBgAlpha"');
     expect(HTML).not.toContain('id="bulkBgTransparent"');
     expect(MAIN).toMatch(/let bulkBackground: BackgroundChoice/);
-    expect(MAIN).toMatch(/bulkBgApplyBtn\?\.addEventListener\('click', \(\) => applyBulkBackground\(bulkBackgroundChoice\(\)\)\)/);
+    // Choosing a colour paints the checked images straight away; the button is
+    // disabled until at least one image is selected, so no apply step is needed.
+    expect(HTML).not.toContain('id="bulkBgApply"');
+    expect(MAIN).toMatch(
+      /bulkBgButton\?\.addEventListener\('click', \(\) => \{\s*colorPicker\.toggle\(bulkBgButton, bulkBackground, \(choice\) => \{[\s\S]*?applyBulkBackground\(choice\)/,
+    );
+    expect(MAIN).toMatch(/bulkBgButton\.disabled = checked === 0/);
   });
 
   it('pins the library saving switch to the tab row as an icon-only toggle', () => {
@@ -371,12 +381,38 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/librarySaveToggleEl\.hidden = studioView\.tab !== 'library'/);
   });
 
-  it('puts the bulk icon toolbar in the title slot and the copy in the empty state', () => {
+  it('puts the bulk icon toolbar in the title slot and a figure in the empty state', () => {
     const head = HTML.slice(HTML.indexOf('class="bulkHead"'), HTML.indexOf('id="bulkStatus"'));
     expect(head).toContain('class="bulkToolbar"');
     expect(head).not.toContain('bulkTitle');
     expect(HTML).not.toContain('class="bulkTitle"');
-    expect(HTML).toMatch(/id="bulkEmpty"[^>]*>Pick up to five photos per batch/);
+    // Select-all sits alone on the left; add, colour and delete group on the right.
+    expect(head).toMatch(
+      /class="bulkToolbar"[\s\S]*id="bulkSelectAll"[\s\S]*<\/div>[\s\S]*class="bulkActions"[\s\S]*id="bulkPick"[\s\S]*id="bulkBgButton"[\s\S]*id="bulkDeleteSelected"/,
+    );
+    // The old paragraph placeholder is replaced by the photo-tab figure, with a
+    // multi-photo icon, that also opens the picker.
+    const empty = HTML.slice(HTML.indexOf('id="bulkEmpty"'), HTML.indexOf('id="panelLibrary"'));
+    expect(empty).toContain('class="emptyState"');
+    expect(empty).toContain('id="bulkEmptyPick"');
+    expect(empty).toContain('class="emptyStateFigure"');
+    expect(empty).not.toMatch(/Pick up to five photos/);
+    expect(MAIN).toMatch(/bulkEmptyPickBtn\?\.addEventListener\('click', pickBulkFiles\)/);
+  });
+
+  it('uses a history figure for the library placeholder and three storage rows', () => {
+    const empty = HTML.slice(HTML.indexOf('id="libraryEmpty"'), HTML.indexOf('id="exportBar"'));
+    expect(empty).toContain('class="emptyStateFigure"');
+    expect(empty).not.toMatch(/Photos you process stay on this device/);
+    expect(MAIN).toMatch(/libraryEmptyTextEl\.hidden = !noMatches/);
+    const stats = HTML.slice(HTML.indexOf('id="libraryStats"'), HTML.indexOf('id="libraryClear"'));
+    expect(stats).toMatch(/>Used<[\s\S]*id="libraryStatUsed"/);
+    expect(stats).toMatch(/>Left<[\s\S]*id="libraryStatLeft"/);
+    expect(stats).toMatch(/>Total<[\s\S]*id="libraryStatTotal"/);
+    expect(stats).not.toMatch(/Types PNG/);
+    expect(MAIN).toMatch(/libraryStatUsedEl\.textContent = formatBytes\(usage\.usedBytes\)/);
+    expect(MAIN).toMatch(/libraryStatLeftEl\.textContent = formatBytes\(usage\.leftBytes\)/);
+    expect(MAIN).toMatch(/libraryStatTotalEl\.textContent = formatBytes\(usage\.budgetBytes\)/);
   });
 });
 

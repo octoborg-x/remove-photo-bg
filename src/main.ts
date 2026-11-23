@@ -304,7 +304,6 @@ const bulkCountEl = document.getElementById('bulkCount');
 const bulkStatusEl = document.getElementById('bulkStatus');
 const bulkDownloadAllBtn = document.getElementById('bulkDownloadAll') as HTMLButtonElement | null;
 const bulkSelectAllEl = document.getElementById('bulkSelectAll') as HTMLInputElement | null;
-const bulkSelectionCountEl = document.getElementById('bulkSelectionCount');
 const bulkDeleteSelectedBtn = document.getElementById('bulkDeleteSelected') as HTMLButtonElement | null;
 const bulkClearFinishedBtn = document.getElementById('bulkClearFinished') as HTMLButtonElement | null;
 const bulkBgColorInput = document.getElementById('bulkBgColor') as HTMLInputElement | null;
@@ -321,7 +320,6 @@ const librarySaveHintEl = document.getElementById('librarySaveHint');
 const libraryStatsEl = document.getElementById('libraryStats');
 const libraryFilterInput = document.getElementById('libraryFilter') as HTMLInputElement | null;
 const librarySelectAllEl = document.getElementById('librarySelectAll') as HTMLInputElement | null;
-const librarySelectionCountEl = document.getElementById('librarySelectionCount');
 const libraryExportSelectedBtn = document.getElementById('libraryExportSelected') as HTMLButtonElement | null;
 // The workspace whose width bounds the sidebar drag (it is shared by all tabs).
 const resultWorkspaceEl = document.getElementById('studioWorkspace');
@@ -2245,14 +2243,14 @@ function updateLibrarySelectionUi(visible: SessionEntry[]): void {
     librarySelectAllEl.checked = visible.length > 0 && checkedVisible === visible.length;
     librarySelectAllEl.indeterminate = checkedVisible > 0 && checkedVisible < visible.length;
   }
-  if (librarySelectionCountEl) librarySelectionCountEl.textContent = `${libraryChecked.size} selected`;
   const exportable = session.entries.filter(
     (entry) => libraryChecked.has(entry.id) && entry.resultUrl && libraryResultBlobs.has(entry.id),
   ).length;
   if (libraryExportSelectedBtn) {
     libraryExportSelectedBtn.disabled = exportable === 0;
-    libraryExportSelectedBtn.textContent =
-      exportable > 0 ? `Export selected (${exportable})` : 'Export selected';
+    const label = exportable > 0 ? `Export ${exportable} selected as ZIP` : 'Export selected as ZIP';
+    libraryExportSelectedBtn.setAttribute('aria-label', label);
+    libraryExportSelectedBtn.title = label;
   }
 }
 
@@ -2548,11 +2546,12 @@ async function storeLibraryResultNow(canvas: HTMLCanvasElement, token: number): 
 function applyLibrarySaveUi(): void {
   if (librarySaveToggleEl) {
     librarySaveToggleEl.setAttribute('aria-pressed', String(librarySavingEnabled));
-    librarySaveToggleEl.textContent = librarySavingEnabled ? 'Saving on' : 'Saving off';
     librarySaveToggleEl.dataset.off = String(!librarySavingEnabled);
-    librarySaveToggleEl.title = librarySavingEnabled
-      ? 'Stop saving new cut-outs to the Library'
-      : 'Start saving new cut-outs to the Library';
+    const label = librarySavingEnabled
+      ? 'Saving on — stop saving new cut-outs to the Library'
+      : 'Saving off — start saving new cut-outs to the Library';
+    librarySaveToggleEl.setAttribute('aria-label', label);
+    librarySaveToggleEl.title = label;
   }
   if (librarySaveHintEl) {
     librarySaveHintEl.textContent = librarySavingEnabled
@@ -3842,9 +3841,18 @@ function updateBulkToolbar(): void {
     bulkSelectAllEl.checked = total > 0 && checked === total;
     bulkSelectAllEl.indeterminate = checked > 0 && checked < total;
   }
-  if (bulkSelectionCountEl) bulkSelectionCountEl.textContent = `${checked} selected`;
-  if (bulkDeleteSelectedBtn) bulkDeleteSelectedBtn.disabled = bulkBatchRunning || checked === 0;
-  if (bulkClearFinishedBtn) bulkClearFinishedBtn.disabled = bulkBatchRunning || done === 0;
+  if (bulkDeleteSelectedBtn) {
+    bulkDeleteSelectedBtn.disabled = bulkBatchRunning || checked === 0;
+    const label = checked > 0 ? `Delete ${checked} selected` : 'Delete selected';
+    bulkDeleteSelectedBtn.setAttribute('aria-label', label);
+    bulkDeleteSelectedBtn.title = label;
+  }
+  if (bulkClearFinishedBtn) {
+    bulkClearFinishedBtn.disabled = bulkBatchRunning || done === 0;
+    const label = done > 0 ? `Clear ${done} finished` : 'Clear finished';
+    bulkClearFinishedBtn.setAttribute('aria-label', label);
+    bulkClearFinishedBtn.title = label;
+  }
   if (bulkBgApplyBtn) bulkBgApplyBtn.disabled = bulkBatchRunning || total === 0;
   if (bulkBgTransparentBtn) bulkBgTransparentBtn.disabled = bulkBatchRunning || total === 0;
 }

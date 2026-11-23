@@ -2626,6 +2626,11 @@
     opacity: 0.45;
     cursor: not-allowed;
   }
+  .libraryIconBtn[data-off='true'] {
+    color: var(--color-slate-400);
+    background: var(--color-slate-100);
+    border-color: var(--color-slate-200);
+  }
   .libraryIconBtn svg {
     width: 1.05rem;
     height: 1.05rem;
@@ -2955,6 +2960,43 @@
     border: 1px solid var(--color-slate-200);
     border-radius: 0.65rem;
     background: var(--color-slate-50);
+  }
+  .bulkSelectAll {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+  .bulkSelectAll input[type='checkbox'] {
+    width: 1.05rem;
+    height: 1.05rem;
+    accent-color: var(--color-blue-600);
+    cursor: pointer;
+  }
+  .bulkToolBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-white);
+    color: var(--color-slate-700);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .bulkToolBtn:hover {
+    background: var(--color-slate-100);
+    color: var(--color-slate-900);
+    border-color: var(--color-slate-300);
+  }
+  .bulkToolBtn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .bulkToolBtn svg {
+    width: 1rem;
+    height: 1rem;
   }
   .bulkBgEdit {
     display: flex;

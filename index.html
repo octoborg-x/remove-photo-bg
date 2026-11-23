@@ -1640,40 +1640,38 @@
                           <label class="bulkSelectAll" title="Select all">
                             <input id="bulkSelectAll" type="checkbox" aria-label="Select all" />
                           </label>
+                        </div>
+                        <div class="bulkActions">
+                          <span id="bulkCount" class="bulkCount">0 / 5</span>
+                          <button id="bulkPick" type="button" class="bulkToolBtn" aria-label="Add images" title="Add images">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M12 5v14M5 12h14" />
+                            </svg>
+                          </button>
+                          <button id="bulkBgButton" type="button" class="bulkToolBtn bulkColorBtn" aria-haspopup="dialog" aria-expanded="false" aria-label="Bulk background colour" title="Bulk background colour" disabled>
+                            <span id="bulkBgSwatch" class="colorButtonSwatch" aria-hidden="true"></span>
+                          </button>
                           <button id="bulkDeleteSelected" type="button" class="bulkToolBtn" aria-label="Delete selected" title="Delete selected" disabled>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                               <polyline points="3 6 5 6 21 6" />
                               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                             </svg>
                           </button>
-                          <button id="bulkClearFinished" type="button" class="bulkToolBtn" aria-label="Clear finished" title="Clear finished">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                              <polyline points="22 4 12 14.01 9 11.01" />
-                            </svg>
-                          </button>
-                          <button id="bulkBgButton" type="button" class="bulkToolBtn bulkColorBtn" aria-haspopup="dialog" aria-expanded="false" aria-label="Bulk background colour" title="Bulk background colour">
-                            <span id="bulkBgSwatch" class="colorButtonSwatch" aria-hidden="true"></span>
-                          </button>
-                          <button id="bulkBgApply" type="button" class="bulkToolBtn" aria-label="Apply background to selected" title="Apply background to selected">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                              <path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z" />
-                              <path d="m5 2 5 5" />
-                              <path d="M2 13h15" />
-                              <path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z" />
-                            </svg>
-                          </button>
-                        </div>
-                        <div class="bulkActions">
-                          <span id="bulkCount" class="bulkCount">0 / 5</span>
-                          <button id="bulkPick" type="button" class="bulkPick">Choose images</button>
-                          <button id="bulkProcess" type="button" class="bulkProcess" disabled>Process all</button>
                         </div>
                       </div>
                       <p class="bulkHint bulkDefaultsHint">Bulk always runs with the default engine settings (single pass, standard refinement, no threshold or feather). The experimental engine controls apply to the Photo/Result tab only.</p>
                       <p id="bulkStatus" class="bulkStatus" role="status" hidden></p>
                       <div id="bulkGrid" class="bulkGrid"></div>
-                      <p id="bulkEmpty" class="bulkEmpty">Pick up to five photos per batch. Once a batch finishes, choose the next five without clearing the results.</p>
+                      <div id="bulkEmpty" class="emptyState">
+                        <button id="bulkEmptyPick" type="button" class="emptyStateFigure" aria-label="Add photos" title="Add photos">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M18 22H4a2 2 0 0 1-2-2V6" />
+                            <path d="m22 13-1.296-1.296a2.41 2.41 0 0 0-3.408 0L11 18" />
+                            <circle cx="12" cy="8" r="2" />
+                            <rect width="16" height="16" x="6" y="2" rx="2" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -1711,7 +1709,11 @@
                             </button>
                             <div id="libraryUsagePopup" class="libraryUsagePopup" role="region" aria-label="Storage details" hidden>
                               <div class="libraryUsagePopupHead"><strong>Storage Usage</strong></div>
-                              <div id="libraryStats" class="libraryStats" role="status" aria-live="polite">No images yet · Total 256.0 MB · Used 0 B · Left 256.0 MB</div>
+                              <div id="libraryStats" class="libraryStats" role="status" aria-live="polite">
+                                <div class="libraryStatRow"><span class="libraryStatLabel">Used</span><strong id="libraryStatUsed" class="libraryStatValue">0 B</strong></div>
+                                <div class="libraryStatRow"><span class="libraryStatLabel">Left</span><strong id="libraryStatLeft" class="libraryStatValue">256.0 MB</strong></div>
+                                <div class="libraryStatRow"><span class="libraryStatLabel">Total</span><strong id="libraryStatTotal" class="libraryStatValue">256.0 MB</strong></div>
+                              </div>
                             </div>
                           </div>
                           <button id="libraryClear" type="button" class="libraryIconBtn" aria-label="Clear history" title="Clear history">
@@ -1723,7 +1725,16 @@
                         </div>
                       </div>
                       <div id="libraryGrid" class="libraryGrid"></div>
-                      <p id="libraryEmpty" class="libraryEmpty">Photos you process stay on this device, in this tab only. They are gone when you close or reload the page.</p>
+                      <div id="libraryEmpty" class="emptyState">
+                        <span class="emptyStateFigure" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                            <path d="M3 3v5h5" />
+                            <path d="M12 7v5l4 2" />
+                          </svg>
+                        </span>
+                        <p id="libraryEmptyText" class="emptyStateText" hidden></p>
+                      </div>
                     </div>
                   </div>
 

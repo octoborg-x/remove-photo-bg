@@ -2695,14 +2695,68 @@
   .libraryRemove:hover {
     background: rgb(15 23 42 / 0.85);
   }
-  .libraryEmpty {
+  /* ——— Empty-state figure (shared by the Bulk and Library tabs) ——— */
+  .emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 1.5rem 0;
+  }
+  .emptyState[hidden] {
+    display: none;
+  }
+  .emptyStateFigure {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-white);
+    color: var(--color-slate-700);
+    padding: 0;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .emptyStateFigure:hover {
+    border-color: var(--color-slate-300);
+    background: var(--color-slate-50);
+  }
+  .emptyStateFigure:focus-visible {
+    outline: 2px solid var(--color-blue-600);
+    outline-offset: 2px;
+  }
+  .emptyStateFigure svg {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  span.emptyStateFigure {
+    cursor: default;
+  }
+  span.emptyStateFigure:hover {
+    border-color: var(--color-slate-200);
+    background: var(--color-white);
+  }
+  .emptyStateText {
     font-size: 0.75rem;
     color: var(--color-slate-400);
     text-align: center;
-    padding: 1.5rem 0;
   }
-  .libraryEmpty[hidden] {
+  .emptyStateText[hidden] {
     display: none;
+  }
+  /* With nothing to show, the grid gives its space to the placeholder so the
+     figure sits in the middle of the panel instead of under the fold. */
+  .bulkPanel:has(> #bulkEmpty:not([hidden])) > .bulkGrid,
+  .libraryPanel:has(> #libraryEmpty:not([hidden])) > .libraryGrid {
+    display: none;
+  }
+  .bulkPanel > .emptyState,
+  .libraryPanel > .emptyState {
+    flex: 1;
   }
   /* ——— Library tab icon toolbar & storage chart ——— */
   .libraryToolbar {
@@ -2850,9 +2904,26 @@
     margin-bottom: 0.4rem;
   }
   .libraryStats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
     font-size: 0.7rem;
     line-height: 1.4;
     color: var(--color-slate-600);
+  }
+  .libraryStatRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .libraryStatLabel {
+    color: var(--color-slate-500);
+  }
+  .libraryStatValue {
+    color: var(--color-slate-900);
+    font-weight: 700;
   }
 
   .libraryCheck,
@@ -2899,8 +2970,6 @@
     gap: 0.5rem;
     flex-wrap: wrap;
   }
-  .bulkPick,
-  .bulkProcess,
   .bulkDownloadAll {
     padding: 0.4rem 0.8rem;
     border-radius: 0.6rem;
@@ -2911,21 +2980,9 @@
     font-weight: 600;
     cursor: pointer;
   }
-  .bulkPick:hover,
   .bulkDownloadAll:hover {
     background: var(--color-slate-100);
   }
-  .bulkProcess {
-    border-color: var(--obsidian-bg);
-    background: var(--obsidian-bg);
-    color: var(--obsidian-fg);
-  }
-  .bulkProcess:hover {
-    background: var(--obsidian-bg-hover);
-    border-color: var(--obsidian-bg-hover);
-  }
-  .bulkPick:disabled,
-  .bulkProcess:disabled,
   .bulkDownloadAll:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -3041,15 +3098,6 @@
   .bulkRemove:disabled {
     opacity: 0.4;
     cursor: default;
-  }
-  .bulkEmpty {
-    font-size: 0.75rem;
-    color: var(--color-slate-400);
-    text-align: center;
-    padding: 1.5rem 0;
-  }
-  .bulkEmpty[hidden] {
-    display: none;
   }
   .bulkDefaultsHint {
     margin-top: -0.15rem;

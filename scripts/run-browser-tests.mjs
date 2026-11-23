@@ -196,41 +196,71 @@ const browser = await puppeteer.launch({
 try {
   if (!providedUrl) await waitForServer(pageUrl.toString());
 
-  // ——— Scenario 0: the hero tagline stays on one unbroken, animating line ———
+  // ——— Scenario 0: the hero preview switches samples in place ———
   {
     const page = await browser.newPage();
     await page.setViewport({ width: 360, height: 800 });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
-    const shape = await page.evaluate(() => {
-      const el = document.querySelector('.heroTaglineText');
-      const wrap = el.closest('.heroTagline');
-      const track = el.closest('.heroTaglineTrack');
-      const cs = getComputedStyle(el);
-      const wcs = getComputedStyle(wrap);
-      const tcs = getComputedStyle(track);
+    const hero = await page.evaluate(() => {
+      const tabs = Array.from(document.querySelectorAll('[data-hero-sample]'));
+      const stage = document.getElementById('heroCompareStage');
+      const before = document.getElementById('heroCompareBefore');
+      const after = document.getElementById('heroCompareAfter');
+      const active = tabs.filter((tab) => tab.getAttribute('aria-selected') === 'true');
       return {
-        nowrap: cs.whiteSpace === 'nowrap',
-        padding: parseFloat(wcs.paddingLeft) > 0,
-        clipped: wcs.overflow === 'hidden' || wcs.overflowX === 'hidden',
-        lines: Math.round(el.offsetHeight / parseFloat(cs.lineHeight)),
-        copies: track.querySelectorAll('.heroTaglineText').length,
-        animation: tcs.animationName,
+        tabCount: tabs.length,
+        active: active.map((tab) => tab.dataset.heroSample),
+        activeClass: active[0]?.classList.contains('is-active') ?? false,
+        before: before?.getAttribute('src') ?? '',
+        after: after?.getAttribute('src') ?? '',
+        filename: document.getElementById('heroShellFilename')?.textContent ?? '',
+        meta: document.getElementById('heroShellMeta')?.textContent ?? '',
+        hasSlider: !!stage?.querySelector('.compareRange'),
+        hasDivider: !!stage?.querySelector('.compareDivider'),
       };
     });
-    record('hero tagline is one unbroken line', shape.nowrap && shape.lines === 1);
-    record('hero tagline keeps its padding and clips overflow', shape.padding && shape.clipped);
-    record('hero tagline loops with a seamless second copy', shape.copies === 2);
-    // A linear marquee moves continuously, so sampling a couple of frames is
-    // enough to see the track's transform change.
-    let moved = false;
-    let prev = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineTrack')).transform);
-    for (let attempt = 0; attempt < 24 && !moved; attempt += 1) {
-      await sleep(200);
-      const now = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineTrack')).transform);
-      moved = now !== prev;
-      prev = now;
-    }
-    record('hero tagline scrolls horizontally (marquee animation)', shape.animation === 'taglineMarquee' && moved);
+    record(
+      'hero preview offers three sample tabs with Product active',
+      hero.tabCount === 3 && hero.active.length === 1 && hero.active[0] === 'product' && hero.activeClass,
+      `${hero.tabCount} tabs, active=${hero.active}`,
+    );
+    record(
+      'hero preview starts on the product before/after pair',
+      hero.before.includes('product-scent-bottle-before') &&
+        hero.after.includes('product-scent-bottle-after') &&
+        hero.filename === 'product-scent-bottle.jpg',
+      `${hero.filename} · ${hero.meta}`,
+    );
+    record('hero compare stage keeps its slider and divider', hero.hasSlider && hero.hasDivider);
+
+    await page.evaluate(() => document.querySelector('[data-hero-sample="glass"]').click());
+    const switched = await page.evaluate(() => {
+      const tab = document.querySelector('[data-hero-sample="glass"]');
+      return {
+        selected: tab.getAttribute('aria-selected'),
+        activeClass: tab.classList.contains('is-active'),
+        otherSelected: Array.from(document.querySelectorAll('[data-hero-sample]')).filter(
+          (other) => other !== tab && other.getAttribute('aria-selected') === 'true',
+        ).length,
+        before: document.getElementById('heroCompareBefore').getAttribute('src'),
+        after: document.getElementById('heroCompareAfter').getAttribute('src'),
+        filename: document.getElementById('heroShellFilename').textContent,
+        meta: document.getElementById('heroShellMeta').textContent,
+        alt: document.getElementById('heroCompareAfter').alt,
+      };
+    });
+    record(
+      'choosing a sample tab swaps the preview and its telemetry',
+      switched.selected === 'true' &&
+        switched.activeClass &&
+        switched.otherSelected === 0 &&
+        switched.before.includes('glass-wine-before') &&
+        switched.after.includes('glass-wine-after') &&
+        switched.filename === 'glass-wine.jpg' &&
+        switched.meta.includes('Translucent Glass') &&
+        switched.alt.includes('Wine glass'),
+      `${switched.filename} · ${switched.meta}`,
+    );
     await page.close();
   }
 
@@ -1000,6 +1030,13 @@ try {
       () => document.querySelector('.studioGrid')?.dataset.console === 'hidden',
     );
     record('the console is hidden by default', consoleStartsHidden === true, String(consoleStartsHidden));
+    // Escape closes the colour picker AND the studio, so the picker checks above
+    // may have left the workspace closed. Reopen it before measuring the console,
+    // otherwise every visibility read below sees a hidden layer.
+    const studioStillOpen = await page.evaluate(
+      () => document.getElementById('studio')?.classList.contains('is-open') === true,
+    );
+    if (!studioStillOpen) await openStudio(page);
     await page.evaluate(() => document.getElementById('consoleToggle').click());
 
     const panelState = await page.evaluate(() => {
@@ -1144,6 +1181,9 @@ try {
         insideClosedDetails,
         visible,
         btnLabel,
+        studioOpen: document.getElementById('studio')?.classList.contains('is-open') ?? false,
+        consoleShown: document.querySelector('.studioGrid')?.dataset.console ?? '',
+        cardWidth: Math.round(document.querySelector('.consoleCard')?.getBoundingClientRect().width ?? 0),
         hasReport: !!report,
         schema: report?.schemaVersion ?? null,
         hasRawMaskBlock: /RAW MASK STATISTICS/.test(text),
@@ -1159,7 +1199,7 @@ try {
         reportState.insideClosedDetails === false &&
         reportState.visible === true &&
         reportState.btnLabel === 'Copy report',
-      `btn ${reportState.hasBtn} inConsoleHead ${reportState.inConsoleHead} insideClosedDetails ${reportState.insideClosedDetails} visible ${reportState.visible} label "${reportState.btnLabel}"`,
+      `btn ${reportState.hasBtn} inConsoleHead ${reportState.inConsoleHead} insideClosedDetails ${reportState.insideClosedDetails} visible ${reportState.visible} label "${reportState.btnLabel}" studio ${reportState.studioOpen} console ${reportState.consoleShown} card ${reportState.cardWidth}px`,
     );
     record(
       'the Copy report button copies a report with real GPU + raw-mask facts',
@@ -1895,19 +1935,34 @@ try {
   }
 
   // ——— Scenario: home page section order ———
-  // The Before & After showcase sits after the "What SmartCutAI Supports"
-  // reference section (a plain DOM-order check; no studio needed).
+  // The landing sections keep a fixed reading order: how it works, benchmarks,
+  // the Before & After showcase, then the "What SmartCutAI Supports" reference
+  // and the FAQ. A plain DOM-order check; no studio needed.
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     const order = await page.evaluate(() => {
       const ids = [...document.querySelectorAll('section[id]')].map((s) => s.id);
-      return { support: ids.indexOf('support'), showcase: ids.indexOf('showcase'), how: ids.indexOf('how') };
+      return {
+        how: ids.indexOf('how'),
+        benchmarks: ids.indexOf('benchmarks'),
+        showcase: ids.indexOf('showcase'),
+        support: ids.indexOf('support'),
+        faq: ids.indexOf('faq'),
+      };
     });
     record(
-      'the Before & After showcase follows the What-Supported section',
-      order.support !== -1 && order.showcase !== -1 && order.showcase > order.support && order.how < order.support,
-      `how ${order.how} support ${order.support} showcase ${order.showcase}`,
+      'the home sections keep their order (how → benchmarks → showcase → support → FAQ)',
+      order.how !== -1 &&
+        order.benchmarks !== -1 &&
+        order.showcase !== -1 &&
+        order.support !== -1 &&
+        order.faq !== -1 &&
+        order.how < order.benchmarks &&
+        order.benchmarks < order.showcase &&
+        order.showcase < order.support &&
+        order.support < order.faq,
+      `how ${order.how} benchmarks ${order.benchmarks} showcase ${order.showcase} support ${order.support} faq ${order.faq}`,
     );
     await page.close();
   }

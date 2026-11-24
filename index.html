@@ -1526,12 +1526,48 @@
 
                     <div id="stepResult" class="stepView" hidden>
                       <div class="stepResultHead">
-                        <button id="newPhotoBtn" type="button" class="newPhotoBtn">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M12 5v14M5 12h14" />
-                          </svg>
-                          Choose another photo
-                        </button>
+                        <div class="resultActions" role="group" aria-label="Photo actions">
+                          <button
+                            id="newPhotoBtn"
+                            type="button"
+                            class="newPhotoBtn resultIconBtn"
+                            aria-label="Choose another photo"
+                            title="Choose another photo"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <rect x="3" y="3" width="18" height="18" rx="3" />
+                              <circle cx="8.5" cy="8.5" r="1.5" />
+                              <path d="m21 15-5-5L5 21" />
+                            </svg>
+                          </button>
+                          <button
+                            id="bgColorButton"
+                            type="button"
+                            class="bgColorButton resultIconBtn"
+                            aria-haspopup="dialog"
+                            aria-expanded="false"
+                            aria-label="Background colour"
+                            title="Background colour"
+                          >
+                            <span id="bgColorSwatch" class="colorButtonSwatch" aria-hidden="true"></span>
+                          </button>
+                          <button
+                            id="downloadMenuBtn"
+                            type="button"
+                            class="resultIconBtn"
+                            aria-haspopup="menu"
+                            aria-expanded="false"
+                            aria-controls="downloadMenu"
+                            aria-label="Download options"
+                            title="Download"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1" />
+                              <path d="m8 11 4 4 4-4" />
+                              <path d="M12 4v11" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                       <section id="outputSection" class="relative rounded-2xl bg-white border border-slate-200/85 p-4 sm:p-6 transition-all" hidden aria-label="Background-removed output">
                         <div class="resultMain">
@@ -1651,6 +1687,23 @@
                           <button id="bulkBgButton" type="button" class="bulkToolBtn bulkColorBtn" aria-haspopup="dialog" aria-expanded="false" aria-label="Bulk background colour" title="Bulk background colour" disabled>
                             <span id="bulkBgSwatch" class="colorButtonSwatch" aria-hidden="true"></span>
                           </button>
+                          <button
+                            id="bulkDownloadBtn"
+                            type="button"
+                            class="bulkToolBtn"
+                            aria-haspopup="menu"
+                            aria-expanded="false"
+                            aria-controls="downloadMenu"
+                            aria-label="Download options"
+                            title="Download"
+                            hidden
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1" />
+                              <path d="m8 11 4 4 4-4" />
+                              <path d="M12 4v11" />
+                            </svg>
+                          </button>
                           <button id="bulkDeleteSelected" type="button" class="bulkToolBtn" aria-label="Delete selected" title="Delete selected" disabled>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                               <polyline points="3 6 5 6 21 6" />
@@ -1734,71 +1787,6 @@
                           </svg>
                         </span>
                         <p id="libraryEmptyText" class="emptyStateText" hidden></p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Background & Export Bar -->
-                  <div id="exportBar" class="exportBar bottomBar" hidden role="region" aria-label="Background and export">
-                    <div class="bottomBarHead">
-                      <div class="bottomBarHeadTitle">
-                        <svg class="w-3.5 h-3.5 text-slate-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="7 10 12 15 17 10" />
-                          <line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                        <h4 class="bottomBarTitle">Background &amp; Export</h4>
-                      </div>
-                      <button
-                        id="bottomBarCollapse"
-                        type="button"
-                        class="sidebarToggle"
-                        aria-label="Hide background and export"
-                        aria-pressed="true"
-                        aria-expanded="true"
-                        aria-controls="bottomBarBody"
-                        title="Hide background and export"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <polyline points="6 9 12 15 18 9" />
-                        </svg>
-                      </button>
-                    </div>
-                    <div id="bottomBarBody" class="bottomBarBody">
-                      <div class="bottomBarSection bottomBarBackground">
-                        <div class="bottomBarSectionHead">
-                          <span class="bottomBarLabel">Background</span>
-                          <span id="bgCurrent" class="text-[11px] font-mono text-slate-500">transparent</span>
-                        </div>
-                        <div class="bgPicker">
-                          <button id="bgColorButton" type="button" class="bgColorButton" aria-haspopup="dialog" aria-expanded="false" aria-label="Background colour" title="Background colour">
-                            <span id="bgColorSwatch" class="colorButtonSwatch" aria-hidden="true"></span>
-                          </button>
-                        </div>
-                      </div>
-
-                      <div class="bottomBarSection bottomBarExport">
-                        <fieldset class="formatPicker">
-                          <legend class="sr-only">Output Format</legend>
-                          <div id="formatOptions" class="formatOptions"></div>
-                        </fieldset>
-
-                        <div class="exportActions">
-                          <a
-                            id="downloadImage"
-                            class="btn btn-obsidian w-full sm:w-auto px-5 py-2.5 rounded-lg font-medium text-xs sm:text-sm flex items-center justify-center gap-2 text-center"
-                            download
-                            hidden
-                          >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                            </svg>
-                            <span>Download Image</span>
-                          </a>
-                          <button id="bulkDownloadAll" type="button" class="bulkDownloadAll" title="Download every cut-out as one ZIP archive" hidden>
-                            Download all
-                          </button>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -1904,6 +1892,25 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Shared download menu, opened by the Photo and Bulk download buttons. -->
+      <div id="downloadMenu" class="downloadMenu" role="menu" aria-label="Download options" hidden>
+        <label class="downloadMenuField" for="exportFormatSelect">
+          <span class="downloadMenuFieldLabel">Image type</span>
+          <select id="exportFormatSelect" class="downloadMenuSelect" aria-label="Image type"></select>
+        </label>
+        <a id="downloadImage" class="downloadMenuAction" download hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1" />
+            <path d="m8 11 4 4 4-4" />
+            <path d="M12 4v11" />
+          </svg>
+          <span id="downloadImageLabel">Download</span>
+        </a>
+        <button id="bulkDownloadAll" type="button" class="downloadMenuAction downloadMenuZip" title="Download every cut-out as one ZIP archive" hidden>
+          Download all
+        </button>
       </div>
 
       <!-- Shared modern colour picker, opened by the Background and Bulk colour buttons. -->

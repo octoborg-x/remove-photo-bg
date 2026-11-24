@@ -745,12 +745,6 @@
   }
 
   /* ——— Background colour button + modern picker ——— */
-  .bgPicker {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.6rem;
-  }
   .bgColorButton {
     display: inline-flex;
     align-items: center;
@@ -1016,42 +1010,6 @@
       linear-gradient(-45deg, transparent 75%, var(--checker-a) 75%);
     background-size: 6px 6px;
     background-position: 0 0, 0 3px, 3px -3px, -3px 0;
-  }
-
-  /* ——— Format options ——— */
-  .formatOptions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem;
-  }
-  .formatOptions label {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.5rem 0.85rem;
-    border-radius: 10px;
-    background: var(--color-slate-50);
-    border: 1px solid var(--color-slate-200);
-    font-size: 0.82rem;
-    font-weight: 500;
-    color: var(--color-slate-700);
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-  .formatOptions label:has(input:checked) {
-    background: var(--color-blue-50);
-    border-color: var(--color-blue-500);
-    color: var(--color-blue-700);
-    box-shadow: 0 1px 3px rgb(37 99 235 / 0.1);
-  }
-  .formatOptions .formatHint {
-    color: var(--color-slate-500);
-    font-size: 0.75rem;
-    margin-left: 0.2rem;
-  }
-  .formatOptions label:has(input:disabled) {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   /* ——— Toasts ——— */
@@ -1774,27 +1732,114 @@
     justify-content: flex-end;
     margin-bottom: 0.6rem;
   }
-  .newPhotoBtn {
+  .resultActions {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.35rem 0.7rem;
+    gap: 0.5rem;
+  }
+  .resultIconBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    padding: 0;
     border-radius: 0.6rem;
     border: 1px solid var(--color-slate-200);
     background: var(--color-white);
     color: var(--color-slate-600);
-    font-size: 0.7rem;
-    font-weight: 600;
     cursor: pointer;
+    transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
   }
-  .newPhotoBtn:hover {
+  .resultIconBtn:hover {
     border-color: var(--color-blue-500);
     color: var(--color-blue-700);
     background: var(--color-blue-50);
   }
-  .newPhotoBtn svg {
-    width: 0.85rem;
-    height: 0.85rem;
+  .resultIconBtn svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  .resultIconBtn[hidden] {
+    display: none;
+  }
+
+  /* Download dropdown: an icon button opens this fixed menu with the image
+     type select and the download action. */
+  .downloadMenu {
+    position: fixed;
+    z-index: 121;
+    min-width: 13rem;
+    padding: 0.6rem;
+    border-radius: 0.9rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-white);
+    box-shadow: 0 24px 50px -12px rgb(15 23 42 / 0.28);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .downloadMenu[hidden] {
+    display: none;
+  }
+  .downloadMenuField {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .downloadMenuFieldLabel {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-slate-500);
+  }
+  .downloadMenuSelect {
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0.55rem;
+    border: 1px solid var(--color-slate-300);
+    background: var(--color-white);
+    color: var(--color-slate-700);
+    font-size: 0.82rem;
+    font-weight: 500;
+  }
+  .downloadMenuSelect:focus-visible {
+    outline: 2px solid var(--color-blue-600);
+    outline-offset: 1px;
+  }
+  .downloadMenuAction {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.55rem;
+    border: 1px solid transparent;
+    background: var(--color-blue-600);
+    color: var(--color-white);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .downloadMenuAction:hover {
+    background: var(--color-blue-700);
+  }
+  .downloadMenuAction svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+  .downloadMenuAction[hidden] {
+    display: none;
+  }
+  .downloadMenuZip {
+    background: var(--color-white);
+    color: var(--color-slate-700);
+    border-color: var(--color-slate-300);
+  }
+  .downloadMenuZip:hover {
+    background: var(--color-slate-50);
   }
 
   /* Selected-photo preview on the input tab. */
@@ -2298,10 +2343,9 @@
     pointer-events: none;
   }
 
-  /* ——— Bottom sidebar: background + output format + download ———
-     Mirrors the left settings sidebar: a header with a collapse chevron and a
-     body that scrolls inside a bounded height, so it can never push the editor
-     past the studio shell. Toggled from the top bar and collapsed in place. */
+  /* ——— Shared bottom panel shell (used by the retouch panel) ———
+     Mirrors the left settings sidebar: a header and a body that scrolls inside a
+     bounded height, so it can never push the editor past the studio shell. */
   .bottomBar {
     flex: none;
     margin-top: 0;
@@ -2380,18 +2424,6 @@
     font-weight: 600;
     color: var(--color-slate-700);
   }
-  .bottomBarExport {
-    border-top: 1px solid var(--color-slate-200);
-    padding-top: 0.7rem;
-  }
-  .bottomBarExport .formatPicker {
-    margin: 0;
-  }
-  .bottomBarExport .exportActions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
   @media (min-width: 640px) {
     .bottomBarBody {
       flex-direction: row;
@@ -2401,20 +2433,11 @@
     .bottomBarSection {
       flex: 1 1 14rem;
     }
-    .bottomBarExport {
-      border-top: 0;
-      border-left: 1px solid var(--color-slate-200);
-      padding-top: 0;
-      padding-left: 0.8rem;
-    }
-    .bottomBarExport .exportActions .btn {
-      width: 100%;
-    }
   }
 
   /* ——— Manual retouch panel (Result tab only) ———
-     Shares the background & export block's slot and visual language: the same
-     header, sections, and field sizing, with a brush-specific layout. */
+     Shares the bottom panel's visual language: the same header, sections, and
+     field sizing, with a brush-specific layout. */
   .retouchHint {
     font-size: 0.66rem;
     font-weight: 500;
@@ -2970,23 +2993,6 @@
     gap: 0.5rem;
     flex-wrap: wrap;
   }
-  .bulkDownloadAll {
-    padding: 0.4rem 0.8rem;
-    border-radius: 0.6rem;
-    border: 1px solid var(--color-slate-200);
-    background: var(--color-white);
-    color: var(--color-slate-700);
-    font-size: 0.72rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  .bulkDownloadAll:hover {
-    background: var(--color-slate-100);
-  }
-  .bulkDownloadAll:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
   .bulkStatus {
     font-size: 0.72rem;
     font-weight: 600;
@@ -3204,6 +3210,11 @@
   .editorTab[aria-selected='true'] {
     color: var(--color-blue-700);
     background: var(--color-blue-50);
+  }
+  /* Library saving off greys the Library title, mirroring a disabled tab. */
+  .editorTab[data-saving='off'],
+  .editorTab[data-saving='off'][aria-selected='true'] {
+    color: var(--color-slate-400);
   }
   .editorTab:disabled {
     opacity: 0.4;
@@ -3977,16 +3988,6 @@
     }
     .bottomBarBody {
       flex-direction: column;
-    }
-    .bottomBarExport {
-      border-top: 1px solid var(--color-slate-200);
-      border-left: 0;
-      padding-top: 0.7rem;
-      padding-left: 0;
-    }
-    /* Keep the background controls on one row so the bar stays short. */
-    .bgPicker {
-      gap: 0.45rem;
     }
     #outputFrame {
       flex: 1;

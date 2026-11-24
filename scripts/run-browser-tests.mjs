@@ -485,14 +485,23 @@ try {
 
     const exportState = await page.evaluate(() => {
       const dl = document.getElementById('downloadImage');
-      const radios = Array.from(document.querySelectorAll('#formatOptions input[type=radio]'));
+      const trigger = document.getElementById('downloadMenuBtn');
+      const menu = document.getElementById('downloadMenu');
+      const select = document.getElementById('exportFormatSelect');
       const img = document.querySelector('#outputBox img');
+      trigger?.click();
       return {
         dlHref: dl?.getAttribute('href') ?? '',
         dlDownload: dl?.getAttribute('download') ?? '',
         dlHidden: dl ? dl.hidden : true,
-        dlText: dl?.textContent ?? '',
-        radios: radios.map((r) => ({ value: r.value, checked: r.checked, disabled: r.disabled })),
+        dlLabel: document.getElementById('downloadImageLabel')?.textContent ?? '',
+        menuOpen: menu ? !menu.hidden : false,
+        expanded: trigger?.getAttribute('aria-expanded'),
+        options: Array.from(select?.options ?? []).map((o) => ({
+          value: o.value,
+          selected: o.selected,
+          disabled: o.disabled,
+        })),
         imgSrc: img?.getAttribute('src') ?? '',
         outputSectionHidden: document.getElementById('outputSection')?.hidden ?? true,
         log: document.getElementById('consoleOutput')?.textContent ?? '',
@@ -508,21 +517,25 @@ try {
     const colourType = Buffer.from(pngB64, 'base64')[25];
     record('PNG export has an alpha channel (colour type 6)', colourType === 6, `colourType=${colourType}`);
     record(
-      'download section offers PNG (default) + JPG + WebP radios and one download link',
+      'the download button opens a menu with PNG (default), JPG and WebP plus one download action',
       exportState.outputSectionHidden === false &&
+        exportState.menuOpen &&
+        exportState.expanded === 'true' &&
         exportState.dlHidden === false &&
         exportState.dlDownload.endsWith('.png') &&
-        exportState.radios.length === 3 &&
-        exportState.radios.some((r) => r.value === 'png' && r.checked) &&
-        exportState.radios.some((r) => r.value === 'jpeg') &&
-        exportState.radios.some((r) => r.value === 'webp'),
-      `${exportState.dlDownload} / [${exportState.radios.map((r) => r.value).join(',')}]`,
+        exportState.dlLabel === 'Download PNG' &&
+        exportState.options.length === 3 &&
+        exportState.options.some((o) => o.value === 'png' && o.selected) &&
+        exportState.options.some((o) => o.value === 'jpeg') &&
+        exportState.options.some((o) => o.value === 'webp'),
+      `${exportState.dlDownload} / [${exportState.options.map((o) => o.value).join(',')}]`,
     );
 
     // Switching the format re-encodes the same result into the chosen format.
     const jpegState = await page.evaluate(() => {
-      const jpeg = document.querySelector('#formatOptions input[value=jpeg]');
-      jpeg.click();
+      const select = document.getElementById('exportFormatSelect');
+      select.value = 'jpeg';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
       const dl = document.getElementById('downloadImage');
       return { href: dl?.getAttribute('href') ?? '', download: dl?.getAttribute('download') ?? '' };
     });
@@ -584,36 +597,41 @@ try {
       compareGone: !document.getElementById('tabCompare') && !document.getElementById('panelCompare'),
       bulkEnabled: !document.getElementById('tabBulk')?.disabled,
       libraryEnabled: !document.getElementById('tabLibrary')?.disabled,
-      exportParent: document.getElementById('exportBar')?.parentElement?.className ?? '',
+      exportGone: !document.getElementById('exportBar'),
+      actionsInResult: !!document
+        .getElementById('stepResult')
+        ?.querySelector('.resultActions #downloadMenuBtn'),
     }));
     record(
-      'Bulk and Library tabs replace Compare, with background & export to the right of the sidebar',
+      'Bulk and Library tabs replace Compare, with export controls folded into the result actions',
       tabsState.compareGone &&
         tabsState.bulkEnabled &&
         tabsState.libraryEnabled &&
-        tabsState.exportParent.includes('studioTabBody'),
-      `compareGone ${tabsState.compareGone} bulk ${tabsState.bulkEnabled} library ${tabsState.libraryEnabled} exportIn ${tabsState.exportParent}`,
+        tabsState.exportGone &&
+        tabsState.actionsInResult,
+      `compareGone ${tabsState.compareGone} bulk ${tabsState.bulkEnabled} library ${tabsState.libraryEnabled} exportGone ${tabsState.exportGone}`,
     );
 
-    // The Background & Export header collapses and restores its own body.
-    const exportBarState = await page.evaluate(() => {
-      const toggle = document.getElementById('bottomBarCollapse');
-      const body = document.getElementById('bottomBarBody');
-      const display = () => (body ? getComputedStyle(body).display : '');
-      const initial = { expanded: toggle?.getAttribute('aria-expanded'), display: display() };
-      toggle?.click();
-      const collapsed = { expanded: toggle?.getAttribute('aria-expanded'), display: display() };
-      toggle?.click();
-      return { initial, collapsed, restored: display() };
+    // The download button opens a positioned menu, and Escape closes it.
+    const menuState = await page.evaluate(() => {
+      const trigger = document.getElementById('downloadMenuBtn');
+      const menu = document.getElementById('downloadMenu');
+      if (!menu.hidden) trigger.click();
+      trigger.click();
+      const rect = menu.getBoundingClientRect();
+      const opened = !menu.hidden && trigger.getAttribute('aria-expanded') === 'true';
+      const positioned = rect.width > 0 && rect.height > 0;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return {
+        opened,
+        positioned,
+        closed: menu.hidden && trigger.getAttribute('aria-expanded') === 'false',
+      };
     });
     record(
-      'the Background & Export header shows and hides its body',
-      exportBarState.initial.expanded === 'true' &&
-        exportBarState.initial.display !== 'none' &&
-        exportBarState.collapsed.expanded === 'false' &&
-        exportBarState.collapsed.display === 'none' &&
-        exportBarState.restored !== 'none',
-      `${exportBarState.initial.expanded}/${exportBarState.initial.display} → ${exportBarState.collapsed.expanded}/${exportBarState.collapsed.display} → ${exportBarState.restored}`,
+      'the download menu opens under its button and Escape closes it',
+      menuState.opened && menuState.positioned && menuState.closed,
+      `opened ${menuState.opened} positioned ${menuState.positioned} closed ${menuState.closed}`,
     );
 
     // Background: one colour button opens the modern picker. A solid colour
@@ -638,7 +656,7 @@ try {
       await nextFrame();
       const afterTransparent = {
         download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
-        current: document.getElementById('bgCurrent')?.textContent ?? '',
+        label: document.getElementById('bgColorButton')?.getAttribute('aria-label') ?? '',
         pressed: popover.querySelector('[data-picker="transparent"]').getAttribute('aria-pressed'),
       };
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -655,10 +673,10 @@ try {
     record(
       'the picker Transparent option keeps a PNG export',
       bgState.afterTransparent.download.endsWith('.png') &&
-        bgState.afterTransparent.current === 'transparent' &&
+        bgState.afterTransparent.label.includes('transparent') &&
         bgState.afterTransparent.pressed === 'true' &&
         bgState.closed,
-      `${bgState.afterTransparent.current} pressed=${bgState.afterTransparent.pressed} closed=${bgState.closed}`,
+      `${bgState.afterTransparent.label} pressed=${bgState.afterTransparent.pressed} closed=${bgState.closed}`,
     );
 
     // PNG/WebP are the alpha-capable formats, so choosing one after a solid
@@ -675,7 +693,9 @@ try {
       await nextFrame();
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       const solid = document.getElementById('downloadImage')?.getAttribute('download') ?? '';
-      document.querySelector('#formatOptions input[value=png]').click();
+      const select = document.getElementById('exportFormatSelect');
+      select.value = 'png';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
       const dl = document.getElementById('downloadImage');
       const href = dl?.getAttribute('href') ?? '';
       const img = new Image();
@@ -692,7 +712,7 @@ try {
       return {
         solid,
         download: dl?.getAttribute('download') ?? '',
-        current: document.getElementById('bgCurrent')?.textContent ?? '',
+        label: document.getElementById('bgColorButton')?.getAttribute('aria-label') ?? '',
         transparent,
       };
     });
@@ -700,9 +720,9 @@ try {
       'selecting PNG after a solid colour restores a transparent cut-out',
       alphaFormatState.solid.endsWith('.jpg') &&
         alphaFormatState.download.endsWith('.png') &&
-        alphaFormatState.current === 'transparent' &&
+        alphaFormatState.label.includes('transparent') &&
         alphaFormatState.transparent > 0,
-      `${alphaFormatState.solid} → ${alphaFormatState.download} (${alphaFormatState.current}, transparent samples=${alphaFormatState.transparent})`,
+      `${alphaFormatState.solid} → ${alphaFormatState.download} (${alphaFormatState.label}, transparent samples=${alphaFormatState.transparent})`,
     );
 
     // ——— Manual retouch: open → stroke → Save, then open → Cancel ———
@@ -713,20 +733,17 @@ try {
     const retouchEntry = await page.evaluate(() => {
       const btn = document.getElementById('resultEditToggle');
       const panel = document.getElementById('retouchPanel');
-      const exportBar = document.getElementById('exportBar');
       const rect = btn?.getBoundingClientRect();
       return {
         hasBtn: !!btn,
         hidden: btn ? btn.hidden : true,
         visible: !!rect && rect.width > 0 && rect.height > 0,
         panelHidden: panel ? panel.hidden : true,
-        sameSlot:
-          panel?.parentElement === exportBar?.parentElement &&
-          panel?.parentElement?.classList.contains('studioTabBody') === true,
+        sameSlot: panel?.parentElement?.classList.contains('studioTabBody') === true,
       };
     });
     record(
-      'the retouch edit icon appears on the Result tab in the export slot',
+      'the retouch edit icon appears on the Result tab above the shared panel slot',
       retouchEntry.hasBtn &&
         retouchEntry.hidden === false &&
         retouchEntry.visible &&
@@ -774,11 +791,11 @@ try {
       document.getElementById('resultEditToggle').click();
       await sleep(40);
       const panel = document.getElementById('retouchPanel');
-      const exportBar = document.getElementById('exportBar');
       const canvas = document.getElementById('retouchCanvas');
       const openState = {
         panelHidden: panel?.hidden,
-        exportHidden: exportBar?.hidden,
+        downloadHidden: document.getElementById('downloadMenuBtn')?.hidden,
+        colorHidden: document.getElementById('bgColorButton')?.hidden,
         canvas: !!canvas,
       };
 
@@ -821,17 +838,18 @@ try {
         redoEnabled,
         openState,
         panelHiddenAfter: panel.hidden,
-        exportHiddenAfter: exportBar.hidden,
+        downloadHiddenAfter: document.getElementById('downloadMenuBtn')?.hidden,
         download: dl.getAttribute('download'),
         log: document.getElementById('consoleOutput')?.textContent ?? '',
       };
     });
     record(
-      'opening retouch hides the background & export block and shows the brush canvas',
+      'opening retouch hides the download and colour controls and shows the brush canvas',
       retouchSave.openState.panelHidden === false &&
-        retouchSave.openState.exportHidden === true &&
+        retouchSave.openState.downloadHidden === true &&
+        retouchSave.openState.colorHidden === true &&
         retouchSave.openState.canvas === true,
-      `panel ${retouchSave.openState.panelHidden} export ${retouchSave.openState.exportHidden} canvas ${retouchSave.openState.canvas}`,
+      `panel ${retouchSave.openState.panelHidden} download ${retouchSave.openState.downloadHidden} colour ${retouchSave.openState.colorHidden} canvas ${retouchSave.openState.canvas}`,
     );
     record(
       'undo/redo toggles per stroke while retouching',
@@ -839,14 +857,14 @@ try {
       `undo ${retouchSave.undoEnabled} redo ${retouchSave.redoEnabled}`,
     );
     record(
-      'a retouch stroke + Save changes the exported alpha and restores the export block',
+      'a retouch stroke + Save changes the exported alpha and restores the download control',
       retouchSave.beforeAlpha > 200 &&
         retouchSave.afterAlpha < 50 &&
         retouchSave.panelHiddenAfter === true &&
-        retouchSave.exportHiddenAfter === false &&
+        retouchSave.downloadHiddenAfter === false &&
         retouchSave.download.endsWith('.png') &&
         /Manual retouch saved: 1 stroke/.test(retouchSave.log),
-      `alpha ${retouchSave.beforeAlpha} → ${retouchSave.afterAlpha}, panel ${retouchSave.panelHiddenAfter}, export ${retouchSave.exportHiddenAfter}`,
+      `alpha ${retouchSave.beforeAlpha} → ${retouchSave.afterAlpha}, panel ${retouchSave.panelHiddenAfter}, download ${retouchSave.downloadHiddenAfter}`,
     );
 
     const retouchCancel = await page.evaluate(async () => {
@@ -878,7 +896,7 @@ try {
       return {
         unchanged: dl.getAttribute('href') === beforeHref,
         panelHidden: document.getElementById('retouchPanel').hidden,
-        exportHidden: document.getElementById('exportBar').hidden,
+        downloadHidden: document.getElementById('downloadMenuBtn').hidden,
         overlayGone: !document.getElementById('retouchCanvas'),
         editVisible: document.getElementById('resultEditToggle').hidden === false,
       };
@@ -887,10 +905,10 @@ try {
       'Cancel restores the pre-edit export pixel-for-pixel',
       retouchCancel.unchanged &&
         retouchCancel.panelHidden === true &&
-        retouchCancel.exportHidden === false &&
+        retouchCancel.downloadHidden === false &&
         retouchCancel.overlayGone === true &&
         retouchCancel.editVisible === true,
-      `unchanged ${retouchCancel.unchanged} panel ${retouchCancel.panelHidden} export ${retouchCancel.exportHidden} overlayGone ${retouchCancel.overlayGone}`,
+      `unchanged ${retouchCancel.unchanged} panel ${retouchCancel.panelHidden} download ${retouchCancel.downloadHidden} overlayGone ${retouchCancel.overlayGone}`,
     );
 
     const retouchTabs = await page.evaluate(() => {
@@ -2326,6 +2344,7 @@ try {
     );
 
     // 5. Trigger a download: exactly one download_initiated.
+    await page.click('#downloadMenuBtn');
     await page.click('#downloadImage');
     await sleep(400);
     record(

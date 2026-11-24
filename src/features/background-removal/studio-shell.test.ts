@@ -63,15 +63,16 @@ describe('studio shell wiring (main.ts + index.html)', () => {
     expect(MAIN).toMatch(/if \(visible && !tabHasEngineControls\(studioView\.tab\)\) return/);
   });
 
-  it('drives the background & export section from the step result or a bulk batch', () => {
-    expect(MAIN).toMatch(/function updateExportBarVisibility\(/);
+  it('drives the download menu from the step result or a bulk batch', () => {
+    expect(MAIN).toMatch(/function updateDownloadUi\(/);
     expect(MAIN).toMatch(/studioView\.tab === 'step'[\s\S]{0,120}studioView\.hasResult/);
     expect(MAIN).toMatch(/studioView\.tab === 'bulk'[\s\S]{0,120}bulkDoneCount\(bulkState\) > 0/);
-    // The old top-bar toggle is gone; the bar collapses from its own header.
-    expect(HTML).not.toContain('id="exportToggle"');
-    expect(MAIN).not.toMatch(/function setExportBarOpen\(/);
-    expect(HTML).toContain('id="exportBar"');
-    expect(HTML).toContain('id="bottomBarCollapse"');
+    // The old background & export block and its collapse control are gone.
+    expect(HTML).not.toContain('id="exportBar"');
+    expect(HTML).not.toContain('id="bottomBarCollapse"');
+    expect(HTML).toContain('id="downloadMenuBtn"');
+    expect(HTML).toContain('id="downloadMenu"');
+    expect(MAIN).toMatch(/function toggleDownloadMenu\(/);
   });
 
   it('exposes tiling + edge-refinement controls in the shared sidebar', () => {
@@ -191,13 +192,13 @@ describe('studio UI refinements', () => {
     // No description is rendered next to the format name.
     expect(MAIN).not.toMatch(/— \$\{available \? format\.description/);
     expect(MAIN).not.toMatch(/Download \$\{info\.label\} \(\$\{info\.description\}\)/);
-    expect(MAIN).toMatch(/downloadImageBtn\.textContent = `Download \$\{info\.label\}`/);
+    expect(MAIN).toMatch(/downloadImageLabelEl\.textContent = `Download \$\{info\.label\}`/);
   });
 
   it('folds colour and alpha into one colour button that opens the modern picker', () => {
     // One button whose swatch carries the current colour. The old colour input,
     // hex field, spectrum map and transparent toggle are gone.
-    expect(HTML).toMatch(/id="bgColorButton"[\s\S]{0,300}?id="bgColorSwatch"/);
+    expect(HTML).toMatch(/id="bgColorButton"[\s\S]{0,500}?id="bgColorSwatch"/);
     expect(HTML).not.toContain('id="bgColorPicker"');
     expect(HTML).not.toContain('id="bgTransparentBtn"');
     expect(HTML).not.toContain('id="bgHexAlphaInput"');
@@ -270,28 +271,32 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/Object\.assign\(refineConfig, resolveRefinementConfig\(\)\)/);
   });
 
-  it('places background & export to the right of the settings sidebar, inside the tab body', () => {
-    // The section lives in the tab body (the column to the right of the shared
-    // settings sidebar), not in the result panel or the old bottom bar.
-    const bodyStart = HTML.indexOf('id="studioWorkspace"');
-    const exportStart = HTML.indexOf('id="exportBar"');
-    const bodyEnd = HTML.indexOf('id="studioConsoleCol"');
-    expect(bodyStart).toBeGreaterThan(-1);
-    expect(exportStart).toBeGreaterThan(bodyStart);
-    expect(exportStart).toBeLessThan(bodyEnd);
-    expect(HTML).toMatch(/id="exportBar"[\s\S]*?id="bottomBarCollapse"/);
-    const resultPanel = HTML.slice(HTML.indexOf('id="panelStep"'), HTML.indexOf('id="panelBulk"'));
-    expect(resultPanel).not.toContain('id="bgColorButton"');
-    // The Bulk tab and the step tab share the same section in that column.
-    expect(HTML).toMatch(/id="panelBulk"[\s\S]*id="panelLibrary"[\s\S]*id="exportBar"/);
+  it('puts choose-image, colour and download in the result action row', () => {
+    const resultPanel = HTML.slice(HTML.indexOf('id="stepResult"'), HTML.indexOf('id="panelBulk"'));
+    expect(resultPanel).toMatch(
+      /class="resultActions"[\s\S]*id="newPhotoBtn"[\s\S]*id="bgColorButton"[\s\S]*id="downloadMenuBtn"/,
+    );
+    // The choose-image control is icon-only, with no visible label.
+    expect(resultPanel).not.toContain('Choose another photo</button>');
+    expect(resultPanel).not.toContain('id="exportBar"');
+    // The Bulk tab keeps its own trigger for the same shared download menu.
+    expect(HTML).toMatch(/id="panelBulk"[\s\S]*id="bulkDownloadBtn"/);
+    expect(HTML).toMatch(/id="downloadMenu"[\s\S]*id="exportFormatSelect"[\s\S]*id="downloadImage"/);
+    expect(HTML).not.toContain('id="formatOptions"');
   });
 
-  it('lets the Background & Export header show and hide its body', () => {
-    expect(HTML).toMatch(/id="bottomBarCollapse"[\s\S]*?aria-controls="bottomBarBody"/);
-    expect(MAIN).toMatch(/function setExportBarCollapsed\(/);
-    expect(MAIN).toMatch(/exportBarEl\.dataset\.collapsed = collapsed \? 'true' : 'false'/);
-    expect(MAIN).toMatch(/bottomBarCollapseBtn\?\.addEventListener\('click'/);
-    expect(CSS).toMatch(/\.bottomBar\[data-collapsed='true'\] \.bottomBarBody\s*\{[^}]*display:\s*none/s);
+  it('opens the download menu with an image type select and a download action', () => {
+    expect(HTML).toMatch(/id="downloadMenuBtn"[\s\S]*?aria-controls="downloadMenu"/);
+    expect(MAIN).toMatch(/function openDownloadMenu\(/);
+    expect(MAIN).toMatch(/function closeDownloadMenu\(/);
+    expect(MAIN).toMatch(/downloadMenuBtn\?\.addEventListener\('click'/);
+    expect(MAIN).toMatch(/formatSelectEl\.addEventListener\('change'/);
+    expect(CSS).toMatch(/\.downloadMenu\s*\{[^}]*position:\s*fixed/s);
+  });
+
+  it('greys the Library tab title while library saving is off', () => {
+    expect(MAIN).toMatch(/tabButtons\.library\.dataset\.saving = librarySavingEnabled \? 'on' : 'off'/);
+    expect(CSS).toMatch(/\.editorTab\[data-saving='off'\]/);
   });
 
   it('offers a Bulk tab for up to five photos', () => {
@@ -346,8 +351,8 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/function dropOpaqueBackgroundForAlpha\(/);
     expect(MAIN).toMatch(/exportFormatInfo\(format\)\.supportsAlpha/);
     expect(MAIN).toMatch(/background\.kind !== 'color' \|\| background\.alpha < 100/);
-    // The radio is the explicit choice, so it applies the rule.
-    expect(MAIN).toMatch(/chooseExportFormat\(format\.id\)/);
+    // The format select is the explicit choice, so it applies the rule.
+    expect(MAIN).toMatch(/chooseExportFormat\(formatSelectEl\.value\)/);
     // A reload restores the same rule: a persisted PNG/WebP format must not sit
     // on a persisted opaque colour and silently export an opaque file.
     expect(MAIN).toMatch(/dropOpaqueBackgroundForAlpha\(exportFormat\)/);
@@ -401,7 +406,7 @@ describe('studio UI refinements', () => {
   });
 
   it('uses a history figure for the library placeholder and three storage rows', () => {
-    const empty = HTML.slice(HTML.indexOf('id="libraryEmpty"'), HTML.indexOf('id="exportBar"'));
+    const empty = HTML.slice(HTML.indexOf('id="libraryEmpty"'), HTML.indexOf('id="retouchPanel"'));
     expect(empty).toContain('class="emptyStateFigure"');
     expect(empty).not.toMatch(/Photos you process stay on this device/);
     expect(MAIN).toMatch(/libraryEmptyTextEl\.hidden = !noMatches/);

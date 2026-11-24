@@ -1665,7 +1665,6 @@
     gap: 0.25rem;
     padding: 0.5rem 0.6rem;
     border-bottom: 1px solid var(--color-slate-100);
-    overflow-x: auto;
     flex: none;
   }
   .studioTablist {
@@ -1673,6 +1672,10 @@
     align-items: center;
     gap: 0.25rem;
     min-width: 0;
+    flex: 1;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-300) transparent;
   }
   .studioTabBody {
     flex: 1;
@@ -2724,44 +2727,66 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.55rem;
-    padding: 1.5rem 0;
+    gap: 0.75rem;
+    padding: 1.75rem 0;
   }
   .emptyState[hidden] {
     display: none;
   }
   .emptyStateFigure {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 3.5rem;
-    height: 3.5rem;
-    border-radius: 0.75rem;
+    width: 6.5rem;
+    height: 6.5rem;
+    border-radius: 1.15rem;
     border: 1px solid var(--color-slate-200);
-    background: var(--color-white);
-    color: var(--color-slate-700);
+    background: var(--color-slate-100);
+    color: var(--color-slate-400);
     padding: 0;
     cursor: pointer;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
   }
   .emptyStateFigure:hover {
     border-color: var(--color-slate-300);
-    background: var(--color-slate-50);
+    background: var(--color-slate-200);
+    color: var(--color-slate-500);
   }
   .emptyStateFigure:focus-visible {
     outline: 2px solid var(--color-blue-600);
     outline-offset: 2px;
   }
-  .emptyStateFigure svg {
-    width: 1.5rem;
-    height: 1.5rem;
-  }
+  /* The Library figure is informational only: that tab has no add-image flow. */
   span.emptyStateFigure {
     cursor: default;
   }
   span.emptyStateFigure:hover {
     border-color: var(--color-slate-200);
-    background: var(--color-white);
+    background: var(--color-slate-100);
+    color: var(--color-slate-400);
+  }
+  .emptyStateGlyph {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+  .emptyStatePlus {
+    position: absolute;
+    right: -0.35rem;
+    bottom: -0.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 9999px;
+    border: 2px solid var(--color-white);
+    background: var(--color-slate-500);
+    color: var(--color-white);
+  }
+  .emptyStatePlus svg {
+    width: 1rem;
+    height: 1rem;
   }
   .emptyStateText {
     font-size: 0.75rem;
@@ -2878,53 +2903,84 @@
     width: 1.05rem;
     height: 1.05rem;
   }
-  .libraryUsageWrap {
+  .libraryMenuWrap {
     position: relative;
+    display: inline-flex;
+    margin-left: auto;
   }
-  .libraryUsageChartBtn {
+  .libraryMenuWrap[hidden] {
+    display: none;
+  }
+  .libraryMenuBtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2.2rem;
-    height: 2.2rem;
-    border-radius: 0.65rem;
-    border: 1px solid var(--color-slate-200);
-    background: var(--color-white);
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.6rem;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-slate-500);
     cursor: pointer;
-    padding: 0.3rem;
+    transition: background 0.15s ease, color 0.15s ease;
   }
-  .libraryUsageChartBtn:hover {
-    border-color: var(--color-slate-300);
+  .libraryMenuBtn:hover {
     background: var(--color-slate-100);
+    color: var(--color-slate-900);
   }
-  .libraryUsageSvg {
-    width: 100%;
-    height: 100%;
-    transform: rotate(-90deg);
+  .libraryMenuBtn:focus-visible {
+    outline: 2px solid var(--color-blue-600);
+    outline-offset: 2px;
   }
-  .usageSeg {
-    transition: stroke-dasharray 0.3s ease;
+  .libraryMenuBtn svg {
+    width: 1.1rem;
+    height: 1.1rem;
   }
-  .libraryUsagePopup {
+  .libraryMenu {
     position: absolute;
     top: calc(100% + 0.4rem);
     right: 0;
     z-index: 30;
     width: 15rem;
-    padding: 0.75rem;
+    padding: 0.35rem;
     border-radius: 0.75rem;
     background: var(--color-white);
     border: 1px solid var(--color-slate-200);
-    box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.12);
+    box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.15);
   }
-  .libraryUsagePopup[hidden] {
+  .libraryMenu[hidden] {
     display: none;
   }
-  .libraryUsagePopupHead {
+  .libraryMenuItem {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.55rem;
+    border: 0;
+    border-radius: 0.55rem;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+  .libraryMenuItem:hover {
+    background: var(--color-slate-50);
+  }
+  .libraryMenuItem:focus-visible {
+    outline: 2px solid var(--color-blue-600);
+    outline-offset: -2px;
+  }
+  .libraryMenuLabel {
+    flex: 1;
+    min-width: 0;
     font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-slate-800);
+  }
+  .libraryMenuState {
+    font-size: 0.65rem;
     font-weight: 700;
-    color: var(--color-slate-900);
-    margin-bottom: 0.4rem;
+    color: var(--color-slate-500);
   }
   .libraryStats {
     display: flex;
@@ -2933,6 +2989,9 @@
     font-size: 0.7rem;
     line-height: 1.4;
     color: var(--color-slate-600);
+    margin-top: 0.25rem;
+    padding: 0.5rem 0.55rem 0.35rem;
+    border-top: 1px solid var(--color-slate-100);
   }
   .libraryStatRow {
     display: flex;
@@ -3000,10 +3059,6 @@
   }
   .bulkStatus[hidden] {
     display: none;
-  }
-  .bulkHint {
-    font-size: 0.7rem;
-    color: var(--color-slate-400);
   }
   .bulkGrid {
     flex: 1;
@@ -3104,9 +3159,6 @@
   .bulkRemove:disabled {
     opacity: 0.4;
     cursor: default;
-  }
-  .bulkDefaultsHint {
-    margin-top: -0.15rem;
   }
   .bulkToolbar {
     display: flex;
@@ -3220,23 +3272,11 @@
     opacity: 0.4;
     cursor: not-allowed;
   }
-  /* Library saving switch, pinned to the right of the tab row. The track and knob
-     are the only icon: the switch carries no text label. */
-  .saveSwitch {
-    display: inline-flex;
-    align-items: center;
-    margin-left: auto;
-    padding: 0.15rem;
-    border: 0;
-    border-radius: 9999px;
-    background: transparent;
-    cursor: pointer;
-  }
-  .saveSwitch[hidden] {
-    display: none;
-  }
+  /* Library saving switch inside the Library kebab menu. The track and knob are
+     the icon; the menu row carries the text label. */
   .saveSwitchTrack {
     position: relative;
+    flex: none;
     width: 2.15rem;
     height: 1.2rem;
     border-radius: 9999px;
@@ -3254,15 +3294,11 @@
     box-shadow: 0 1px 2px rgb(15 23 42 / 0.35);
     transition: left 0.18s ease;
   }
-  .saveSwitch[data-off='true'] .saveSwitchTrack {
+  .libraryMenuItem[data-off='true'] .saveSwitchTrack {
     background: var(--color-slate-300);
   }
-  .saveSwitch[data-off='true'] .saveSwitchKnob {
+  .libraryMenuItem[data-off='true'] .saveSwitchKnob {
     left: 0.15rem;
-  }
-  .saveSwitch:focus-visible {
-    outline: 2px solid var(--color-blue-600);
-    outline-offset: 2px;
   }
   .editorPanel[hidden] {
     display: none;

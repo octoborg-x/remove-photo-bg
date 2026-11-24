@@ -321,7 +321,7 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/link\.download = `background-removed-\$\{entries\.length\}-photos\.zip`/);
   });
 
-  it('saves bulk cut-outs to the library and can stop saving or clear history', () => {
+  it('saves bulk cut-outs to the library and can stop saving or delete selected', () => {
     // A bulk run goes through the same loader, so its result fills a library
     // entry exactly like a single run.
     expect(MAIN).toMatch(/await loadImageFromFile\(file, librarySavingEnabled\)/);
@@ -329,8 +329,8 @@ describe('studio UI refinements', () => {
     expect(HTML).toContain('id="librarySaveToggle"');
     expect(HTML).toContain('id="libraryClear"');
     expect(MAIN).toMatch(/function applyLibrarySaveUi\(/);
-    expect(MAIN).toMatch(/function clearLibrary\(/);
-    expect(MAIN).toMatch(/reduceSession\(session, \{ type: 'clear' \}\)/);
+    expect(MAIN).toMatch(/function deleteSelectedLibrary\(/);
+    expect(MAIN).toMatch(/libraryClearBtn\.disabled = checkedCount === 0/);
     expect(MAIN).toMatch(/LS_LIBRARY_SAVE/);
   });
 
@@ -374,16 +374,23 @@ describe('studio UI refinements', () => {
     expect(MAIN).toMatch(/bulkBgButton\.disabled = checked === 0/);
   });
 
-  it('pins the library saving switch to the tab row as an icon-only toggle', () => {
+  it('replaces the tab-row switch with a kebab menu holding the toggle and storage rows', () => {
     const tabs = HTML.slice(HTML.indexOf('class="studioTabs"'), HTML.indexOf('id="studioWorkspace"'));
+    expect(tabs).toContain('id="libraryMenuBtn"');
     expect(tabs).toContain('id="librarySaveToggle"');
-    expect(tabs).toContain('role="switch"');
+    expect(tabs).toContain('role="menuitemcheckbox"');
     expect(tabs).toContain('class="saveSwitchTrack"');
-    // It is no longer one of the Library toolbar icon buttons.
+    // Storage rows sit flat inside the menu, under the saving toggle.
+    expect(tabs).toMatch(/id="librarySaveToggle"[\s\S]*id="libraryStats"[\s\S]*id="libraryStatUsed"/);
+    // The standalone donut icon and its popup are gone.
+    expect(HTML).not.toContain('id="libraryUsageChartBtn"');
+    expect(HTML).not.toContain('id="libraryUsagePopup"');
+    // It is not one of the Library toolbar icon buttons.
     expect(HTML).not.toMatch(/libraryToolbarRight[\s\S]{0,400}?id="librarySaveToggle"/);
-    expect(CSS).toMatch(/\.saveSwitch\s*\{[^}]*margin-left:\s*auto/s);
+    expect(CSS).toMatch(/\.libraryMenuWrap\s*\{[^}]*margin-left:\s*auto/s);
     expect(MAIN).toMatch(/librarySaveToggleEl\.setAttribute\('aria-checked'/);
-    expect(MAIN).toMatch(/librarySaveToggleEl\.hidden = studioView\.tab !== 'library'/);
+    expect(MAIN).toMatch(/libraryMenuWrapEl\.hidden = studioView\.tab !== 'library'/);
+    expect(MAIN).toMatch(/function closeLibraryMenu\(/);
   });
 
   it('puts the bulk icon toolbar in the title slot and a figure in the empty state', () => {
@@ -401,15 +408,26 @@ describe('studio UI refinements', () => {
     expect(empty).toContain('class="emptyState"');
     expect(empty).toContain('id="bulkEmptyPick"');
     expect(empty).toContain('class="emptyStateFigure"');
+    // A photo glyph plus a plus badge marks the placeholder as an add-images input.
+    expect(empty).toContain('class="emptyStateGlyph"');
+    expect(empty).toContain('class="emptyStatePlus"');
     expect(empty).not.toMatch(/Pick up to five photos/);
+    // The explanatory paragraph placeholder is gone; only the image placeholder remains.
+    expect(HTML).not.toContain('bulkDefaultsHint');
+    expect(HTML).not.toMatch(/Bulk always runs with the default engine settings/);
     expect(MAIN).toMatch(/bulkEmptyPickBtn\?\.addEventListener\('click', pickBulkFiles\)/);
   });
 
-  it('uses a history figure for the library placeholder and three storage rows', () => {
+  it('uses a larger grey figure for the library placeholder and three storage rows', () => {
     const empty = HTML.slice(HTML.indexOf('id="libraryEmpty"'), HTML.indexOf('id="retouchPanel"'));
     expect(empty).toContain('class="emptyStateFigure"');
+    expect(empty).toContain('class="emptyStateGlyph"');
+    // The Library cannot add images, so its figure stays non-interactive with no plus badge.
+    expect(empty).not.toContain('id="libraryEmptyPick"');
+    expect(empty).not.toContain('class="emptyStatePlus"');
     expect(empty).not.toMatch(/Photos you process stay on this device/);
     expect(MAIN).toMatch(/libraryEmptyTextEl\.hidden = !noMatches/);
+    expect(MAIN).not.toMatch(/libraryEmptyPickBtn/);
     const stats = HTML.slice(HTML.indexOf('id="libraryStats"'), HTML.indexOf('id="libraryClear"'));
     expect(stats).toMatch(/>Used<[\s\S]*id="libraryStatUsed"/);
     expect(stats).toMatch(/>Left<[\s\S]*id="libraryStatLeft"/);

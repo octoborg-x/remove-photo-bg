@@ -1241,18 +1241,42 @@
                   <button id="tabBulk" class="editorTab" role="tab" data-tab="bulk" aria-selected="false" aria-controls="panelBulk">Bulk</button>
                   <button id="tabLibrary" class="editorTab" role="tab" data-tab="library" aria-selected="false" aria-controls="panelLibrary">Library</button>
                 </div>
-                <button
-                  id="librarySaveToggle"
-                  type="button"
-                  class="saveSwitch"
-                  role="switch"
-                  aria-checked="true"
-                  aria-label="Save new cut-outs to the Library"
-                  title="Library saving on"
-                  hidden
-                >
-                  <span class="saveSwitchTrack" aria-hidden="true"><span class="saveSwitchKnob"></span></span>
-                </button>
+                <div id="libraryMenuWrap" class="libraryMenuWrap" hidden>
+                  <button
+                    id="libraryMenuBtn"
+                    type="button"
+                    class="libraryMenuBtn"
+                    aria-haspopup="menu"
+                    aria-expanded="false"
+                    aria-controls="libraryMenu"
+                    aria-label="Library options"
+                    title="Library options"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+                      <circle cx="12" cy="5" r="1" />
+                      <circle cx="12" cy="12" r="1" />
+                      <circle cx="12" cy="19" r="1" />
+                    </svg>
+                  </button>
+                  <div id="libraryMenu" class="libraryMenu" role="menu" aria-label="Library options" hidden>
+                    <button
+                      id="librarySaveToggle"
+                      type="button"
+                      class="libraryMenuItem"
+                      role="menuitemcheckbox"
+                      aria-checked="true"
+                    >
+                      <span class="libraryMenuLabel">Save new cut-outs</span>
+                      <span id="librarySaveState" class="libraryMenuState">On</span>
+                      <span class="saveSwitchTrack" aria-hidden="true"><span class="saveSwitchKnob"></span></span>
+                    </button>
+                    <div id="libraryStats" class="libraryStats" role="status" aria-live="polite">
+                      <div class="libraryStatRow"><span class="libraryStatLabel">Used</span><strong id="libraryStatUsed" class="libraryStatValue">0 B</strong></div>
+                      <div class="libraryStatRow"><span class="libraryStatLabel">Left</span><strong id="libraryStatLeft" class="libraryStatValue">256.0 MB</strong></div>
+                      <div class="libraryStatRow"><span class="libraryStatLabel">Total</span><strong id="libraryStatTotal" class="libraryStatValue">256.0 MB</strong></div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div id="studioWorkspace" class="studioWorkspace">
@@ -1700,17 +1724,21 @@
                           </button>
                         </div>
                       </div>
-                      <p class="bulkHint bulkDefaultsHint">Bulk always runs with the default engine settings (single pass, standard refinement, no threshold or feather). The experimental engine controls apply to the Photo/Result tab only.</p>
                       <p id="bulkStatus" class="bulkStatus" role="status" hidden></p>
                       <div id="bulkGrid" class="bulkGrid"></div>
                       <div id="bulkEmpty" class="emptyState">
                         <button id="bulkEmptyPick" type="button" class="emptyStateFigure" aria-label="Add photos" title="Add photos">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <svg class="emptyStateGlyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M18 22H4a2 2 0 0 1-2-2V6" />
                             <path d="m22 13-1.296-1.296a2.41 2.41 0 0 0-3.408 0L11 18" />
                             <circle cx="12" cy="8" r="2" />
                             <rect width="16" height="16" x="6" y="2" rx="2" />
                           </svg>
+                          <span class="emptyStatePlus" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                              <path d="M12 5v14M5 12h14" />
+                            </svg>
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -1739,25 +1767,7 @@
                               <line x1="12" y1="15" x2="12" y2="3" />
                             </svg>
                           </button>
-                          <div class="libraryUsageWrap">
-                            <button id="libraryUsageChartBtn" type="button" class="libraryUsageChartBtn" aria-label="Storage usage summary" aria-expanded="false" aria-controls="libraryUsagePopup" title="Storage usage summary">
-                              <svg class="libraryUsageSvg" viewBox="0 0 36 36" aria-hidden="true">
-                                <circle class="usageBg" cx="18" cy="18" r="15.9155" fill="none" stroke="var(--color-slate-200)" stroke-width="3.5"></circle>
-                                <circle id="usageTotalCircle" class="usageSeg usageSegTotal" cx="18" cy="18" r="15.9155" fill="none" stroke="var(--color-blue-600)" stroke-width="3.5" stroke-dasharray="100 100" stroke-dashoffset="0"></circle>
-                                <circle id="usageUsedCircle" class="usageSeg usageSegUsed" cx="18" cy="18" r="15.9155" fill="none" stroke="var(--color-red-500)" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="0"></circle>
-                                <circle id="usageAvailCircle" class="usageSeg usageSegAvail" cx="18" cy="18" r="15.9155" fill="none" stroke="var(--color-emerald-500)" stroke-width="3.5" stroke-dasharray="100 100" stroke-dashoffset="0"></circle>
-                              </svg>
-                            </button>
-                            <div id="libraryUsagePopup" class="libraryUsagePopup" role="region" aria-label="Storage details" hidden>
-                              <div class="libraryUsagePopupHead"><strong>Storage Usage</strong></div>
-                              <div id="libraryStats" class="libraryStats" role="status" aria-live="polite">
-                                <div class="libraryStatRow"><span class="libraryStatLabel">Used</span><strong id="libraryStatUsed" class="libraryStatValue">0 B</strong></div>
-                                <div class="libraryStatRow"><span class="libraryStatLabel">Left</span><strong id="libraryStatLeft" class="libraryStatValue">256.0 MB</strong></div>
-                                <div class="libraryStatRow"><span class="libraryStatLabel">Total</span><strong id="libraryStatTotal" class="libraryStatValue">256.0 MB</strong></div>
-                              </div>
-                            </div>
-                          </div>
-                          <button id="libraryClear" type="button" class="libraryIconBtn" aria-label="Clear history" title="Clear history">
+                          <button id="libraryClear" type="button" class="libraryIconBtn" aria-label="Delete selected" title="Delete selected" disabled>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                               <polyline points="3 6 5 6 21 6" />
                               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -1768,7 +1778,7 @@
                       <div id="libraryGrid" class="libraryGrid"></div>
                       <div id="libraryEmpty" class="emptyState">
                         <span class="emptyStateFigure" aria-hidden="true">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <svg class="emptyStateGlyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                             <path d="M3 3v5h5" />
                             <path d="M12 7v5l4 2" />

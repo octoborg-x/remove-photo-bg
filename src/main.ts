@@ -301,7 +301,11 @@ const libraryGridEl = document.getElementById('libraryGrid');
 const libraryEmptyEl = document.getElementById('libraryEmpty');
 const libraryEmptyTextEl = document.getElementById('libraryEmptyText');
 const libraryClearBtn = document.getElementById('libraryClear') as HTMLButtonElement | null;
+const libraryMenuWrapEl = document.getElementById('libraryMenuWrap');
+const libraryMenuBtn = document.getElementById('libraryMenuBtn') as HTMLButtonElement | null;
+const libraryMenuEl = document.getElementById('libraryMenu');
 const librarySaveToggleEl = document.getElementById('librarySaveToggle') as HTMLButtonElement | null;
+const librarySaveStateEl = document.getElementById('librarySaveState');
 const libraryStatUsedEl = document.getElementById('libraryStatUsed');
 const libraryStatLeftEl = document.getElementById('libraryStatLeft');
 const libraryStatTotalEl = document.getElementById('libraryStatTotal');
@@ -400,9 +404,10 @@ function renderStudioView(): void {
   }
   const phase = stepPhase(studioView);
   tabButtons.step.textContent = stepTitle(studioView);
-  // Library saving is a Library-tab control, so its switch shares the tab row
-  // only while that tab is open.
-  if (librarySaveToggleEl) librarySaveToggleEl.hidden = studioView.tab !== 'library';
+  // Library saving and storage details live in the Library tab's kebab menu,
+  // which shares the tab row and only shows while that tab is open.
+  if (libraryMenuWrapEl) libraryMenuWrapEl.hidden = studioView.tab !== 'library';
+  if (studioView.tab !== 'library') closeLibraryMenu();
   stepInputEl.hidden = phase !== 'input';
   stepProcessingEl.hidden = phase !== 'processing';
   stepResultEl.hidden = phase !== 'result';
@@ -2171,22 +2176,6 @@ function updateLibraryStats(): void {
   if (libraryStatUsedEl) libraryStatUsedEl.textContent = formatBytes(usage.usedBytes);
   if (libraryStatLeftEl) libraryStatLeftEl.textContent = formatBytes(usage.leftBytes);
   if (libraryStatTotalEl) libraryStatTotalEl.textContent = formatBytes(usage.budgetBytes);
-  // SVG circular chart update (total, used, available)
-  const totalCircle = document.getElementById('usageTotalCircle') as HTMLElement | null;
-  const usedCircle = document.getElementById('usageUsedCircle') as HTMLElement | null;
-  const availCircle = document.getElementById('usageAvailCircle') as HTMLElement | null;
-  if (totalCircle && usedCircle && availCircle) {
-    const budget = usage.budgetBytes || 1;
-    const usedFrac = Math.min(1, Math.max(0, usage.usedBytes / budget));
-    const availFrac = Math.max(0, 1 - usedFrac);
-    const circ = 100;
-    const usedLen = usedFrac * circ;
-    const availLen = availFrac * circ;
-    usedCircle.style.strokeDasharray = `${usedLen} ${circ}`;
-    usedCircle.style.strokeDashoffset = '0';
-    availCircle.style.strokeDasharray = `${availLen} ${circ}`;
-    availCircle.style.strokeDashoffset = `${-usedLen}`;
-  }
 }
 
 function visibleLibraryEntries(): SessionEntry[] {
@@ -2211,6 +2200,13 @@ function updateLibrarySelectionUi(visible: SessionEntry[]): void {
     const label = exportable > 0 ? `Export ${exportable} selected as ZIP` : 'Export selected as ZIP';
     libraryExportSelectedBtn.setAttribute('aria-label', label);
     libraryExportSelectedBtn.title = label;
+  }
+  const checkedCount = session.entries.filter((entry) => libraryChecked.has(entry.id)).length;
+  if (libraryClearBtn) {
+    libraryClearBtn.disabled = checkedCount === 0;
+    const label = checkedCount > 0 ? `Delete ${checkedCount} selected` : 'Delete selected';
+    libraryClearBtn.setAttribute('aria-label', label);
+    libraryClearBtn.title = label;
   }
 }
 
@@ -2506,49 +2502,54 @@ async function storeLibraryResultNow(canvas: HTMLCanvasElement, token: number): 
 
 function applyLibrarySaveUi(): void {
   tabButtons.library.dataset.saving = librarySavingEnabled ? 'on' : 'off';
+  if (librarySaveStateEl) librarySaveStateEl.textContent = librarySavingEnabled ? 'On' : 'Off';
   if (librarySaveToggleEl) {
     librarySaveToggleEl.setAttribute('aria-checked', String(librarySavingEnabled));
     librarySaveToggleEl.dataset.off = String(!librarySavingEnabled);
-    const label = librarySavingEnabled
-      ? 'Library saving on — turn off to stop saving new cut-outs'
-      : 'Library saving off — turn on to save new cut-outs';
-    librarySaveToggleEl.setAttribute('aria-label', label);
-    librarySaveToggleEl.title = label;
+    librarySaveToggleEl.setAttribute(
+      'aria-label',
+      `Save new cut-outs to the Library — ${librarySavingEnabled ? 'on' : 'off'}`,
+    );
   }
 }
 
-function clearLibrary(): void {
-  // Cancel any queued write for the run in flight before dropping its entry.
-  libraryRunToken += 1;
-  currentRunStoredEntryId = null;
-  const { state, revoked } = reduceSession(session, { type: 'clear' });
-  session = state;
-  for (const url of revoked) URL.revokeObjectURL(url);
-  libraryBlobs.clear();
-  libraryResultBlobs.clear();
+function closeLibraryMenu(): void {
+  if (!libraryMenuEl || !libraryMenuBtn) return;
+  libraryMenuEl.hidden = true;
+  libraryMenuBtn.setAttribute('aria-expanded', 'false');
+}
+
+function deleteSelectedLibrary(): void {
+  const ids = [...libraryChecked];
+  if (!ids.length) return;
+  if (currentRunStoredEntryId !== null && ids.includes(currentRunStoredEntryId)) {
+    // The run in flight must not write back into an entry the user just deleted.
+    libraryRunToken += 1;
+    currentRunStoredEntryId = null;
+  }
+  for (const id of ids) applySession({ type: 'remove', id });
   libraryChecked.clear();
   renderLibrary();
-  log('Library history cleared.');
+  log(`Deleted ${ids.length} library image(s).`);
 }
 
-const libraryUsageChartBtn = document.getElementById('libraryUsageChartBtn');
-const libraryUsagePopup = document.getElementById('libraryUsagePopup');
-libraryUsageChartBtn?.addEventListener('click', (e) => {
+libraryClearBtn?.addEventListener('click', deleteSelectedLibrary);
+libraryMenuBtn?.addEventListener('click', (e) => {
   e.stopPropagation();
-  if (libraryUsagePopup) {
-    const hidden = libraryUsagePopup.hidden;
-    libraryUsagePopup.hidden = !hidden;
-    libraryUsageChartBtn.setAttribute('aria-expanded', String(hidden));
-  }
+  if (!libraryMenuEl || !libraryMenuBtn) return;
+  const open = libraryMenuEl.hidden;
+  libraryMenuEl.hidden = !open;
+  libraryMenuBtn.setAttribute('aria-expanded', String(open));
 });
-document.addEventListener('click', (e) => {
-  if (libraryUsagePopup && !libraryUsagePopup.hidden && !libraryUsagePopup.contains(e.target as Node) && e.target !== libraryUsageChartBtn) {
-    libraryUsagePopup.hidden = true;
-    libraryUsageChartBtn?.setAttribute('aria-expanded', 'false');
+libraryMenuEl?.addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => closeLibraryMenu());
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && libraryMenuEl && !libraryMenuEl.hidden) {
+    closeLibraryMenu();
+    libraryMenuBtn?.focus();
   }
 });
 
-libraryClearBtn?.addEventListener('click', clearLibrary);
 librarySaveToggleEl?.addEventListener('click', () => {
   librarySavingEnabled = !librarySavingEnabled;
   savePref(LS_LIBRARY_SAVE, librarySavingEnabled);

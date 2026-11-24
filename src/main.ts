@@ -205,7 +205,11 @@ const outputSection = document.getElementById('outputSection')!;
 const refineNoticeEl = document.getElementById('refineNotice')!;
 const providerToggle = document.getElementById('providerToggle')! as HTMLSelectElement;
 const downloadImageBtn = document.getElementById('downloadImage')! as HTMLAnchorElement;
-const formatOptionsEl = document.getElementById('formatOptions')!;
+const downloadImageLabelEl = document.getElementById('downloadImageLabel')!;
+const formatSelectEl = document.getElementById('exportFormatSelect')! as HTMLSelectElement;
+const downloadMenuEl = document.getElementById('downloadMenu')! as HTMLElement;
+const downloadMenuBtn = document.getElementById('downloadMenuBtn') as HTMLButtonElement | null;
+const bulkDownloadBtn = document.getElementById('bulkDownloadBtn') as HTMLButtonElement | null;
 const providerHint = document.getElementById('providerHint')!;
 const maskThresholdInput = document.getElementById('maskThreshold')! as HTMLInputElement;
 const maskThresholdValue = document.getElementById('maskThresholdValue')!;
@@ -248,7 +252,6 @@ const inputPreviewEl = document.getElementById('inputPreview')!;
 const inputPreviewImg = document.getElementById('inputPreviewImg')! as HTMLImageElement;
 const bgColorButton = document.getElementById('bgColorButton')! as HTMLButtonElement;
 const bgColorSwatch = document.getElementById('bgColorSwatch')!;
-const bgCurrentEl = document.getElementById('bgCurrent')!;
 const privacyToggle = document.getElementById('privacyToggle')! as HTMLButtonElement;
 const privacyStatement = document.getElementById('privacyStatement')!;
 const siteHeaderEl = document.getElementById('siteHeader')!;
@@ -264,12 +267,8 @@ const settingsSidebarEl = document.getElementById('settingsSidebar') as HTMLElem
 const sidebarToggleBtn = document.getElementById('sidebarToggle') as HTMLButtonElement | null;
 const sidebarCollapseBtn = document.getElementById('sidebarCollapse') as HTMLButtonElement | null;
 const sidebarResizeEl = document.getElementById('sidebarResize');
-// The export (background + format + download) section, placed to the right of
-// the settings sidebar inside the active tab body.
-const exportBarEl = document.getElementById('exportBar') as HTMLElement | null;
-const bottomBarCollapseBtn = document.getElementById('bottomBarCollapse') as HTMLButtonElement | null;
 // Manual retouch layer (Result tab only): an overlay edit button on the image
-// and a compact panel that swaps in for the background/export block.
+// and a compact panel below the result.
 const resultEditToggleBtn = document.getElementById('resultEditToggle') as HTMLButtonElement | null;
 const retouchPanelEl = document.getElementById('retouchPanel') as HTMLElement | null;
 const retouchToolButtons: Record<BrushTool, HTMLButtonElement | null> = {
@@ -342,6 +341,8 @@ const RETOUCH_DEFAULT_FEATHER = 40; // percent
 // Read by updateRetouchUi() during the first render, so declared here too.
 let resultCompareFigure: HTMLElement | null = null;
 let resultCompareOn = false;
+// The button whose download menu is open (declared before the first render).
+let downloadMenuTrigger: HTMLButtonElement | null = null;
 
 // ——— Bulk queue ———
 // The source blobs and full-resolution cut-outs are kept here, keyed by the ids
@@ -426,13 +427,14 @@ function renderStudioView(): void {
   }
   consoleToggleBtn.disabled = !engineTab;
   if (sidebarToggleBtn) sidebarToggleBtn.disabled = !engineTab;
-  updateExportBarVisibility();
+  updateDownloadUi();
   updateRetouchUi();
   updateBulkStatus();
 }
 
 function setStudioTab(tab: StudioTab, force = false): void {
   if (!force && !tabEnabled(studioView, tab)) return;
+  closeDownloadMenu();
   // Retouch belongs to the step result; leaving the step tab discards an open
   // session exactly like Cancel.
   if (retouchModeOpen && tab !== 'step') cancelRetouchMode(true);
@@ -691,6 +693,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   const cmdDialog = document.getElementById('cmdPalette');
   if (cmdDialog && !cmdDialog.hidden) return;
+  // The download menu owns Escape while it is open; its handler closes only the
+  // menu, not the whole studio.
+  if (!downloadMenuEl.hidden) return;
   if (menuPanelEl.classList.contains('is-open')) closeMenu();
   else if (studioEl.classList.contains('is-open')) closeStudio();
 });
@@ -995,7 +1000,7 @@ function clearOutput(): void {
   setResultCompare(false);
   if (resultCompareToggleBtn) resultCompareToggleBtn.hidden = true;
   outputSection.hidden = true;
-  updateExportBarVisibility();
+  updateDownloadUi();
 }
 
 // ——— Export format ———
@@ -1066,31 +1071,22 @@ function isFormatAvailable(format: ExportFormat): boolean {
 }
 
 function renderFormatOptions(): void {
-  formatOptionsEl.innerHTML = '';
+  formatSelectEl.innerHTML = '';
   for (const format of EXPORT_FORMATS) {
     const available = isFormatAvailable(format.id);
-    const label = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 'exportFormat';
-    input.value = format.id;
-    input.checked = format.id === exportFormat;
-    input.disabled = !available;
-    input.addEventListener('change', () => {
-      if (!input.checked) return;
-      chooseExportFormat(format.id);
-    });
-    label.appendChild(input);
-    label.appendChild(document.createTextNode(format.label));
-    if (!available) {
-      const hint = document.createElement('span');
-      hint.className = 'formatHint';
-      hint.textContent = 'not supported';
-      label.appendChild(hint);
-    }
-    formatOptionsEl.appendChild(label);
+    const option = document.createElement('option');
+    option.value = format.id;
+    option.textContent = available ? format.label : `${format.label} (not supported)`;
+    option.disabled = !available;
+    option.selected = format.id === exportFormat;
+    formatSelectEl.appendChild(option);
   }
+  formatSelectEl.value = exportFormat;
 }
+
+formatSelectEl.addEventListener('change', () => {
+  if (isExportFormat(formatSelectEl.value)) chooseExportFormat(formatSelectEl.value);
+});
 
 function setExportFormat(format: ExportFormat): void {
   if (format === exportFormat || !isFormatAvailable(format)) return;
@@ -1160,7 +1156,7 @@ function refreshExportActions(): void {
         : null;
     const href = cached ?? canvasToDataUrl(canvas, exportFormat, bg);
     exportCache = { canvas, revision: resultRevision, format: exportFormat, bg: bgKey, href };
-    downloadImageBtn.textContent = `Download ${info.label}`;
+    downloadImageLabelEl.textContent = `Download ${info.label}`;
     downloadImageBtn.href = href;
     downloadImageBtn.download = bulkItem
       ? bulkDownloadName(bulkItem, info.extension)
@@ -1180,38 +1176,64 @@ function refreshExportActions(): void {
   }
 }
 
-// The background & export section is meaningful only where there is something
-// to export: the step result, or a Bulk batch with at least one cut-out.
-function updateExportBarVisibility(): void {
-  if (!exportBarEl) return;
-  const visible =
-    studioView.tab === 'step'
-      ? studioView.hasResult
-      : studioView.tab === 'bulk'
-        ? bulkDoneCount(bulkState) > 0
-        : false;
-  // The retouch panel takes this slot while editing; the background & export
-  // block returns untouched when the session closes.
-  exportBarEl.hidden = !visible || retouchModeOpen;
-  if (visible && !retouchModeOpen) refreshExportActions();
+// The download menu is meaningful only where there is something to export: the
+// step result, or a Bulk batch with at least one cut-out.
+function updateDownloadUi(): void {
+  const hasPhoto = studioView.tab === 'step' && studioView.hasResult && !retouchModeOpen;
+  const hasBulk = studioView.tab === 'bulk' && bulkDoneCount(bulkState) > 0;
+  if (downloadMenuBtn) downloadMenuBtn.hidden = !hasPhoto;
+  if (bgColorButton) bgColorButton.hidden = !hasPhoto;
+  if (bulkDownloadBtn) bulkDownloadBtn.hidden = !hasBulk;
+  if (!hasPhoto && !hasBulk) closeDownloadMenu();
+  if (hasPhoto || hasBulk) refreshExportActions();
 }
 
-// The Background & Export header can collapse its own body, mirroring the
-// settings sidebar. The collapsed state stays put across tab switches.
-function setExportBarCollapsed(collapsed: boolean): void {
-  if (!exportBarEl) return;
-  exportBarEl.dataset.collapsed = collapsed ? 'true' : 'false';
-  if (!bottomBarCollapseBtn) return;
-  bottomBarCollapseBtn.setAttribute('aria-pressed', String(!collapsed));
-  bottomBarCollapseBtn.setAttribute('aria-expanded', String(!collapsed));
-  const label = collapsed ? 'Show background and export' : 'Hide background and export';
-  bottomBarCollapseBtn.setAttribute('aria-label', label);
-  bottomBarCollapseBtn.setAttribute('title', label);
+function positionDownloadMenu(trigger: HTMLButtonElement): void {
+  const rect = trigger.getBoundingClientRect();
+  downloadMenuEl.hidden = false;
+  const menuRect = downloadMenuEl.getBoundingClientRect();
+  const top = Math.max(8, Math.min(window.innerHeight - menuRect.height - 8, rect.bottom + 6));
+  const left = Math.max(8, Math.min(window.innerWidth - menuRect.width - 8, rect.right - menuRect.width));
+  downloadMenuEl.style.top = `${top}px`;
+  downloadMenuEl.style.left = `${left}px`;
 }
-bottomBarCollapseBtn?.addEventListener('click', () => {
-  setExportBarCollapsed(exportBarEl?.dataset.collapsed !== 'true');
+
+function openDownloadMenu(trigger: HTMLButtonElement): void {
+  downloadMenuTrigger = trigger;
+  refreshExportActions();
+  positionDownloadMenu(trigger);
+  trigger.setAttribute('aria-expanded', 'true');
+}
+
+function closeDownloadMenu(): void {
+  downloadMenuEl.hidden = true;
+  downloadMenuTrigger?.setAttribute('aria-expanded', 'false');
+  downloadMenuTrigger = null;
+}
+
+function toggleDownloadMenu(trigger: HTMLButtonElement): void {
+  if (downloadMenuTrigger === trigger && !downloadMenuEl.hidden) closeDownloadMenu();
+  else openDownloadMenu(trigger);
+}
+
+downloadMenuBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (downloadMenuBtn) toggleDownloadMenu(downloadMenuBtn);
 });
-setExportBarCollapsed(false);
+bulkDownloadBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (bulkDownloadBtn) toggleDownloadMenu(bulkDownloadBtn);
+});
+document.addEventListener('pointerdown', (e) => {
+  if (downloadMenuEl.hidden) return;
+  if (downloadMenuEl.contains(e.target as Node)) return;
+  if (downloadMenuTrigger?.contains(e.target as Node)) return;
+  closeDownloadMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !downloadMenuEl.hidden) closeDownloadMenu();
+});
+window.addEventListener('resize', closeDownloadMenu);
 
 renderFormatOptions();
 
@@ -1221,6 +1243,7 @@ renderFormatOptions();
 downloadImageBtn.addEventListener('click', () => {
   if (downloadImageBtn.hidden || !downloadImageBtn.getAttribute('href')) return;
   trackDownloadInitiated();
+  closeDownloadMenu();
 });
 
 // ——— Background colour ———
@@ -1306,7 +1329,6 @@ function paintColorSwatch(swatch: HTMLElement | null, choice: BackgroundChoice):
 }
 
 function updateBackgroundUi(): void {
-  bgCurrentEl.textContent = describeChoice(background);
   paintColorSwatch(bgColorSwatch, background);
   const label = `Background colour: ${describeChoice(background)}`;
   bgColorButton.setAttribute('aria-label', label);
@@ -1417,7 +1439,7 @@ function setRetouchMode(open: boolean): void {
     retouchOverlay = null;
     resultCompareFigure?.classList.remove('retouchOn');
   }
-  updateExportBarVisibility();
+  updateDownloadUi();
   updateRetouchUi();
 }
 
@@ -1679,7 +1701,7 @@ async function saveRetouch(): Promise<void> {
     outputSection.hidden = false;
     renderResultPreview();
     applyFormatUi();
-    updateExportBarVisibility();
+    updateDownloadUi();
     updateReprocessButton();
     storeLibraryResult(canvas);
     log(
@@ -2483,6 +2505,7 @@ async function storeLibraryResultNow(canvas: HTMLCanvasElement, token: number): 
 }
 
 function applyLibrarySaveUi(): void {
+  tabButtons.library.dataset.saving = librarySavingEnabled ? 'on' : 'off';
   if (librarySaveToggleEl) {
     librarySaveToggleEl.setAttribute('aria-checked', String(librarySavingEnabled));
     librarySaveToggleEl.dataset.off = String(!librarySavingEnabled);
@@ -3262,7 +3285,7 @@ function finishResult(
   applyFormatUi();
 
   outputSection.hidden = false;
-  updateExportBarVisibility();
+  updateDownloadUi();
   // The export dimensions are the original dimensions; refinement never
   // downscales the export.
   if (phase === 'final') {
@@ -3733,7 +3756,10 @@ function downloadAllBulk(): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
   trackDownloadInitiated();
 }
-bulkDownloadAllBtn?.addEventListener('click', downloadAllBulk);
+bulkDownloadAllBtn?.addEventListener('click', () => {
+  downloadAllBulk();
+  closeDownloadMenu();
+});
 
 // ——— Bulk queue ———
 function updateBulkStatus(): void {
@@ -3889,7 +3915,7 @@ function renderBulk(): void {
   }
   updateBulkToolbar();
   updateBulkStatus();
-  updateExportBarVisibility();
+  updateDownloadUi();
 }
 
 function removeBulkFile(id: number): void {

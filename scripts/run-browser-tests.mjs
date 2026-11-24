@@ -226,9 +226,9 @@ try {
     );
     record(
       'hero preview starts on the product before/after pair',
-      hero.before.includes('product-scent-bottle-before') &&
-        hero.after.includes('product-scent-bottle-after') &&
-        hero.filename === 'product-scent-bottle.jpg',
+      hero.before.includes('perfume-bottle-before') &&
+        hero.after.includes('perfume-bottle-after') &&
+        hero.filename === 'perfume-bottle.webp',
       `${hero.filename} · ${hero.meta}`,
     );
     record('hero compare stage keeps its slider and divider', hero.hasSlider && hero.hasDivider);
@@ -254,11 +254,11 @@ try {
       switched.selected === 'true' &&
         switched.activeClass &&
         switched.otherSelected === 0 &&
-        switched.before.includes('glass-wine-before') &&
-        switched.after.includes('glass-wine-after') &&
-        switched.filename === 'glass-wine.jpg' &&
+        switched.before.includes('crystal-vase-before') &&
+        switched.after.includes('crystal-vase-after') &&
+        switched.filename === 'crystal-vase.webp' &&
         switched.meta.includes('Translucent Glass') &&
-        switched.alt.includes('Wine glass'),
+        switched.alt.includes('Crystal vase'),
       `${switched.filename} · ${switched.meta}`,
     );
     await page.close();
@@ -296,7 +296,7 @@ try {
     const initial = await readState();
     record(
       'the showcase shows exactly one example at a time',
-      initial.panelCount === 9 && initial.tabCount === 9 && initial.visibleCount === 1,
+      initial.panelCount === 8 && initial.tabCount === 8 && initial.visibleCount === 1,
       `visible ${initial.visibleCount}/${initial.panelCount}`,
     );
     record(
@@ -306,7 +306,7 @@ try {
     );
     record('the thumbnail rail sits below the stage', initial.railBelowStage);
     record(
-      'the thumbnail rail scrolls horizontally to reach all nine examples',
+      'the thumbnail rail scrolls horizontally to reach all eight examples',
       initial.railScrolls,
       `scroll ${initial.railScrolls}`,
     );

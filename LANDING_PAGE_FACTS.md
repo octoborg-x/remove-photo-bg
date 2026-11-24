@@ -27,12 +27,11 @@ mock-ups:
   (`model_512_int8_fp16.onnx`, the same SHA-256 as
   `public/models-manifest.json`), downscaled and re-encoded to WebP.
 
-The three original pairs (`product-scent-bottle`, `animal-buddy-dog`,
-`glass-wine`) use `test-images/` originals and the committed
-`smoke-results/benchmark-t4/quality-t4/*_512_cut.png` cut-outs; they are rebuilt
-by `scripts/build-demo-assets.mjs`. The six added examples (`shoes`, `sneakers`,
-`phone`, `watch`, `tshirt`, `jogging`) were produced from the CC0/PD/CC-BY
-sources listed in `public/demo/ATTRIBUTION.md` with the same pinned model.
+All eight pairs (`perfume-bottle`, `golden-retriever`, `crystal-vase`,
+`road-bicycle`, `flower-bouquet`, `wristwatch`, `denim-jacket`,
+`coffee-machine`) use the originals in `test-images/` and are rebuilt by
+`scripts/build-demo-assets.mjs` from full-resolution model cut-outs. Sources and
+credits are in `public/demo/ATTRIBUTION.md`.
 
 ## Model provenance note
 

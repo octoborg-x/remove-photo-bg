@@ -1,14 +1,16 @@
-// Regenerates the three original landing-page before/after demo pairs from the
-// repo's own Phase-1 test photos and the model's committed cut-outs.
+// Regenerates the landing-page before/after demo pairs.
 //
-// The sources are the three public-domain product photos under test-images/;
-// the "after" images are the model's own outputs already committed under
-// smoke-results/benchmark-t4/quality-t4/ (*_512_cut.png, RGBA). Everything is
-// downscaled and re-encoded to WebP in a headless browser so the page stays
-// light. Output: public/demo/<name>-before.webp and <name>-after.webp.
+// Sources are the photos under test-images/; the "after" images are the model's
+// own full-resolution cut-outs, saved as
+// smoke-results/demo-new/<name>/output-full.png by a headless run of the app
+// (see "Regenerating" below). Everything is downscaled and re-encoded to WebP in
+// a headless browser so the page stays light.
+// Output: public/demo/<name>-before.webp and <name>-after.webp.
 //
-// The six additional pairs (shoes, sneakers, phone, watch, tshirt, jogging) are
-// already committed; their sources and licences are in public/demo/ATTRIBUTION.md.
+// Regenerating: start `npm run dev`, run each photo through the app once (the
+// smoke harness's window.runSmoke), save the full-resolution result canvas to
+// smoke-results/demo-new/<name>/output-full.png, then run this script. The
+// committed pairs are already built; a normal build never needs this.
 //
 // Usage: node scripts/build-demo-assets.mjs
 import puppeteer from 'puppeteer-core';
@@ -22,22 +24,19 @@ const OUT = resolve(ROOT, 'public', 'demo');
 const MAX_W = 720;
 
 const PAIRS = [
-  {
-    name: 'glass-wine',
-    before: 'test-images/glass-wine.jpg',
-    after: 'smoke-results/benchmark-t4/quality-t4/glass-wine_512_cut.png',
-  },
-  {
-    name: 'product-scent-bottle',
-    before: 'test-images/product-scent-bottle.jpg',
-    after: 'smoke-results/benchmark-t4/quality-t4/product-scent-bottle_512_cut.png',
-  },
-  {
-    name: 'animal-buddy-dog',
-    before: 'test-images/animal-buddy-dog.jpg',
-    after: 'smoke-results/benchmark-t4/quality-t4/animal-buddy-dog_512_cut.png',
-  },
-];
+  'perfume-bottle',
+  'golden-retriever',
+  'crystal-vase',
+  'road-bicycle',
+  'flower-bouquet',
+  'wristwatch',
+  'denim-jacket',
+  'coffee-machine',
+].map((name) => ({
+  name,
+  before: `test-images/${name}.jpg`,
+  after: `smoke-results/demo-new/${name}/output-full.png`,
+}));
 
 mkdirSync(OUT, { recursive: true });
 

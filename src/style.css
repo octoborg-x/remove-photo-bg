@@ -534,7 +534,7 @@
   /* ——— Showcase gallery: one comparison at a time + a thumb rail ———
      The examples are all in the DOM; only the selected panel is visible, so the
      stage can never overflow the card. The rail is a horizontally scrollable
-     tablist below the stage, which keeps nine examples one row tall. */
+     tablist below the stage, which keeps every example one row tall. */
   .showcaseGallery {
     display: flex;
     flex-direction: column;

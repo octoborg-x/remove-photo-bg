@@ -242,8 +242,8 @@
                 </svg>
               </span>
               <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 min-w-0">
-                <span id="heroShellFilename" class="font-mono text-xs font-medium text-slate-900 truncate">product-scent-bottle.jpg</span>
-                <span id="heroShellMeta" class="font-mono text-[11px] text-slate-500 tabular-nums">1024 × 1024 · Product Silhouette</span>
+                <span id="heroShellFilename" class="font-mono text-xs font-medium text-slate-900 truncate">perfume-bottle.webp</span>
+                <span id="heroShellMeta" class="font-mono text-[11px] text-slate-500 tabular-nums">384 × 512 · Product Silhouette</span>
               </div>
             </div>
 
@@ -277,14 +277,14 @@
                 <img
                   id="heroCompareBefore"
                   class="compareImg compareBefore"
-                  src="./demo/product-scent-bottle-before.webp"
-                  alt="Original photo of a scent bottle on a plain background"
+                  src="./demo/perfume-bottle-before.webp"
+                  alt="Original photo of an amber perfume bottle on a marble table"
                 />
                 <img
                   id="heroCompareAfter"
                   class="compareImg compareAfter"
-                  src="./demo/product-scent-bottle-after.webp"
-                  alt="Scent bottle cut-out with background removed on transparency grid"
+                  src="./demo/perfume-bottle-after.webp"
+                  alt="Perfume bottle cut-out with background removed on transparency grid"
                 />
                 <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
               </div>
@@ -608,10 +608,10 @@
         <div class="showcaseGallery" data-showcase>
           <!-- Main viewer: one before/after example at a time -->
           <div class="showcaseMain">
-            <!-- Item 1: Clean Silhouette Scent Bottle -->
+            <!-- Item 1: Everyday Product -->
             <figure
               id="showcase-panel-1"
-              class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              class="showcasePanel showcasePanel--compact compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
               data-compare
               data-pos="50"
               role="tabpanel"
@@ -620,15 +620,15 @@
               <div class="flex items-center justify-between mb-3 px-1">
                 <div class="flex items-center gap-3">
                   <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Everyday Product</span>
-                  <span class="text-xs text-slate-400">Clean silhouette</span>
+                  <span class="text-xs text-slate-400">Glass &amp; reflections</span>
                 </div>
-                <button type="button" data-sample-url="./test-images/product-scent-bottle.jpg" data-sample-name="product-scent-bottle.jpg" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                <button type="button" data-sample-url="./demo/perfume-bottle-before.webp" data-sample-name="perfume-bottle.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
                   Test in Studio
                 </button>
               </div>
               <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/product-scent-bottle-before.webp" alt="Original photo of a scent bottle on a plain background" />
-                <img class="compareImg compareAfter" src="./demo/product-scent-bottle-after.webp" alt="The same photo with the background removed" />
+                <img class="compareImg compareBefore" src="./demo/perfume-bottle-before.webp" alt="Original photo of an amber perfume bottle on a marble table" />
+                <img class="compareImg compareAfter" src="./demo/perfume-bottle-after.webp" alt="The same perfume bottle with the background removed" />
                 <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
               </div>
               <input
@@ -638,17 +638,17 @@
                 max="100"
                 step="1"
                 value="50"
-                aria-label="Reveal the cut-out for the scent bottle: left is the original, right is the background removed"
+                aria-label="Reveal the cut-out for the perfume bottle: left is the original, right is the background removed"
               />
               <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Sharp edge boundaries with zero jagged fringes.
+                Clear glass and the amber liquid stay intact; the marble table is gone.
               </figcaption>
             </figure>
 
-            <!-- Item 2: Hair & Fur Dog -->
+            <!-- Item 2: Hair & Fur -->
             <figure
               id="showcase-panel-2"
-              class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              class="showcasePanel showcasePanel--compact compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
               data-compare
               data-pos="50"
               role="tabpanel"
@@ -660,13 +660,13 @@
                   <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Hair &amp; Fur</span>
                   <span class="text-xs text-slate-400">Fine strands</span>
                 </div>
-                <button type="button" data-sample-url="./test-images/animal-buddy-dog.jpg" data-sample-name="animal-buddy-dog.jpg" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                <button type="button" data-sample-url="./demo/golden-retriever-before.webp" data-sample-name="golden-retriever.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
                   Test in Studio
                 </button>
               </div>
               <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/animal-buddy-dog-before.webp" alt="Original photo of a dog against a plain background" />
-                <img class="compareImg compareAfter" src="./demo/animal-buddy-dog-after.webp" alt="The same photo with the background removed" />
+                <img class="compareImg compareBefore" src="./demo/golden-retriever-before.webp" alt="Original photo of a golden retriever sitting on grass" />
+                <img class="compareImg compareAfter" src="./demo/golden-retriever-after.webp" alt="The same dog with the background removed, fur strands intact" />
                 <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
               </div>
               <input
@@ -676,14 +676,14 @@
                 max="100"
                 step="1"
                 value="50"
-                aria-label="Reveal the cut-out for the dog photo: left is the original, right is the background removed"
+                aria-label="Reveal the cut-out for the dog: left is the original, right is the background removed"
               />
               <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Individual hair strands preserved without harsh clipping.
+                Individual fur strands preserved without harsh clipping.
               </figcaption>
             </figure>
 
-            <!-- Item 3: Glass & Translucent -->
+            <!-- Item 3: Glass & Crystal -->
             <figure
               id="showcase-panel-3"
               class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
@@ -698,13 +698,13 @@
                   <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Glass &amp; Crystal</span>
                   <span class="text-xs text-slate-400">Translucent optics</span>
                 </div>
-                <button type="button" data-sample-url="./test-images/glass-wine.jpg" data-sample-name="glass-wine.jpg" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                <button type="button" data-sample-url="./demo/crystal-vase-before.webp" data-sample-name="crystal-vase.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
                   Test in Studio
                 </button>
               </div>
               <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/glass-wine-before.webp" alt="Original photo of a wine glass on a white background" />
-                <img class="compareImg compareAfter" src="./demo/glass-wine-after.webp" alt="The same photo with the background removed" />
+                <img class="compareImg compareBefore" src="./demo/crystal-vase-before.webp" alt="Original photo of a cut-crystal vase on a marble counter" />
+                <img class="compareImg compareAfter" src="./demo/crystal-vase-after.webp" alt="The same crystal vase with the background removed" />
                 <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
               </div>
               <input
@@ -714,14 +714,14 @@
                 max="100"
                 step="1"
                 value="50"
-                aria-label="Reveal the cut-out for the wine glass: left is the original, right is the background removed"
+                aria-label="Reveal the cut-out for the crystal vase: left is the original, right is the background removed"
               />
               <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Subtle translucency and delicate stem reflections retained.
+                Cut facets and see-through glass keep their translucency.
               </figcaption>
             </figure>
 
-            <!-- Item 4: Shoes -->
+            <!-- Item 4: Hard Edges -->
             <figure
               id="showcase-panel-4"
               class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
@@ -732,12 +732,17 @@
               hidden
             >
               <div class="flex items-center justify-between mb-3 px-1">
-                <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Shoes</span>
-                <span class="text-xs text-slate-400">Leather pair</span>
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Hard Edges</span>
+                  <span class="text-xs text-slate-400">Spokes &amp; frame</span>
+                </div>
+                <button type="button" data-sample-url="./demo/road-bicycle-before.webp" data-sample-name="road-bicycle.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
               </div>
               <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/shoes-before.webp" alt="Original photo of a pair of leather shoes" />
-                <img class="compareImg compareAfter" src="./demo/shoes-after.webp" alt="The same photo with the background removed" />
+                <img class="compareImg compareBefore" src="./demo/road-bicycle-before.webp" alt="Original studio photo of a black road bicycle" />
+                <img class="compareImg compareAfter" src="./demo/road-bicycle-after.webp" alt="The same bicycle with the background removed" />
                 <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
               </div>
               <input
@@ -747,14 +752,14 @@
                 max="100"
                 step="1"
                 value="50"
-                aria-label="Reveal the cut-out for the shoes: left is the original, right is the background removed"
+                aria-label="Reveal the cut-out for the bicycle: left is the original, right is the background removed"
               />
               <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Both shoes stay separated with crisp leather edges.
+                Thin spokes, cables and frame tubes survive the cut-out.
               </figcaption>
             </figure>
 
-            <!-- Item 5: Sneakers -->
+            <!-- Item 5: Florals -->
             <figure
               id="showcase-panel-5"
               class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
@@ -765,12 +770,17 @@
               hidden
             >
               <div class="flex items-center justify-between mb-3 px-1">
-                <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Sneakers</span>
-                <span class="text-xs text-slate-400">Studio product</span>
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Florals</span>
+                  <span class="text-xs text-slate-400">Dense detail</span>
+                </div>
+                <button type="button" data-sample-url="./demo/flower-bouquet-before.webp" data-sample-name="flower-bouquet.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
               </div>
               <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/sneakers-before.webp" alt="Original studio photo of a white sneaker" />
-                <img class="compareImg compareAfter" src="./demo/sneakers-after.webp" alt="The same photo with the background removed" />
+                <img class="compareImg compareBefore" src="./demo/flower-bouquet-before.webp" alt="Original photo of a colourful flower bouquet" />
+                <img class="compareImg compareAfter" src="./demo/flower-bouquet-after.webp" alt="The same bouquet with the background removed" />
                 <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
               </div>
               <input
@@ -780,17 +790,17 @@
                 max="100"
                 step="1"
                 value="50"
-                aria-label="Reveal the cut-out for the sneaker: left is the original, right is the background removed"
+                aria-label="Reveal the cut-out for the bouquet: left is the original, right is the background removed"
               />
               <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Clean white-background cut-out with no halo.
+                Hundreds of petals and stems isolated from a flat backdrop.
               </figcaption>
             </figure>
 
-            <!-- Item 6: Phone -->
+            <!-- Item 6: Watch -->
             <figure
               id="showcase-panel-6"
-              class="showcasePanel showcasePanel--compact compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
               data-compare
               data-pos="50"
               role="tabpanel"
@@ -798,45 +808,17 @@
               hidden
             >
               <div class="flex items-center justify-between mb-3 px-1">
-                <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Phone</span>
-                <span class="text-xs text-slate-400">Hard edges</span>
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Watch</span>
+                  <span class="text-xs text-slate-400">Metal &amp; detail</span>
+                </div>
+                <button type="button" data-sample-url="./demo/wristwatch-before.webp" data-sample-name="wristwatch.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
               </div>
               <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/phone-before.webp" alt="Original photo of a smartphone" />
-                <img class="compareImg compareAfter" src="./demo/phone-after.webp" alt="The same photo with the background removed" />
-                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-              </div>
-              <input
-                class="compareRange mt-4"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value="50"
-                aria-label="Reveal the cut-out for the phone: left is the original, right is the background removed"
-              />
-              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Sharp corners and the screen bezel kept intact.
-              </figcaption>
-            </figure>
-
-            <!-- Item 7: Watch -->
-            <figure
-              id="showcase-panel-7"
-              class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
-              data-compare
-              data-pos="50"
-              role="tabpanel"
-              aria-labelledby="showcase-tab-7"
-              hidden
-            >
-              <div class="flex items-center justify-between mb-3 px-1">
-                <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Watch</span>
-                <span class="text-xs text-slate-400">Fine detail</span>
-              </div>
-              <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/watch-before.webp" alt="Original photo of a wristwatch" />
-                <img class="compareImg compareAfter" src="./demo/watch-after.webp" alt="The same photo with the background removed" />
+                <img class="compareImg compareBefore" src="./demo/wristwatch-before.webp" alt="Original photo of a steel wristwatch on a leather jacket" />
+                <img class="compareImg compareAfter" src="./demo/wristwatch-after.webp" alt="The same watch with the background removed" />
                 <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
               </div>
               <input
@@ -849,11 +831,49 @@
                 aria-label="Reveal the cut-out for the watch: left is the original, right is the background removed"
               />
               <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Dial, case and strap separated cleanly.
+                Dial, case and linked bracelet separated cleanly.
               </figcaption>
             </figure>
 
-            <!-- Item 8: T-Shirt -->
+            <!-- Item 7: Apparel -->
+            <figure
+              id="showcase-panel-7"
+              class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-7"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Apparel</span>
+                  <span class="text-xs text-slate-400">Fabric texture</span>
+                </div>
+                <button type="button" data-sample-url="./demo/denim-jacket-before.webp" data-sample-name="denim-jacket.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/denim-jacket-before.webp" alt="Original photo of a denim jacket on a hanger" />
+                <img class="compareImg compareAfter" src="./demo/denim-jacket-after.webp" alt="The same denim jacket with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the denim jacket: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Fabric folds, stitching and the hanger stay crisp.
+              </figcaption>
+            </figure>
+
+            <!-- Item 8: Appliance -->
             <figure
               id="showcase-panel-8"
               class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
@@ -864,12 +884,17 @@
               hidden
             >
               <div class="flex items-center justify-between mb-3 px-1">
-                <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">T-Shirt</span>
-                <span class="text-xs text-slate-400">Apparel</span>
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Appliance</span>
+                  <span class="text-xs text-slate-400">Studio product</span>
+                </div>
+                <button type="button" data-sample-url="./demo/coffee-machine-before.webp" data-sample-name="coffee-machine.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
               </div>
               <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/tshirt-before.webp" alt="Original photo of a t-shirt" />
-                <img class="compareImg compareAfter" src="./demo/tshirt-after.webp" alt="The same photo with the background removed" />
+                <img class="compareImg compareBefore" src="./demo/coffee-machine-before.webp" alt="Original photo of a filter coffee machine with a mug" />
+                <img class="compareImg compareAfter" src="./demo/coffee-machine-after.webp" alt="The same coffee machine with the background removed" />
                 <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
               </div>
               <input
@@ -879,43 +904,10 @@
                 max="100"
                 step="1"
                 value="50"
-                aria-label="Reveal the cut-out for the t-shirt: left is the original, right is the background removed"
+                aria-label="Reveal the cut-out for the coffee machine: left is the original, right is the background removed"
               />
               <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Fabric folds and sleeve seams preserved.
-              </figcaption>
-            </figure>
-
-            <!-- Item 9: Jogging -->
-            <figure
-              id="showcase-panel-9"
-              class="showcasePanel showcasePanel--compact compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
-              data-compare
-              data-pos="50"
-              role="tabpanel"
-              aria-labelledby="showcase-tab-9"
-              hidden
-            >
-              <div class="flex items-center justify-between mb-3 px-1">
-                <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Jogging</span>
-                <span class="text-xs text-slate-400">Motion</span>
-              </div>
-              <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/jogging-before.webp" alt="Original photo of a person jogging" />
-                <img class="compareImg compareAfter" src="./demo/jogging-after.webp" alt="The same photo with the background removed" />
-                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-              </div>
-              <input
-                class="compareRange mt-4"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value="50"
-                aria-label="Reveal the cut-out for the jogger: left is the original, right is the background removed"
-              />
-              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                A moving subject isolated from a busy street.
+                Appliance edges and the mug beside it kept together.
               </figcaption>
             </figure>
           </div>
@@ -923,40 +915,36 @@
           <!-- Thumbnail rail: one tab per example -->
           <div class="showcaseRail" role="tablist" aria-orientation="horizontal" aria-label="Before and after examples">
             <button id="showcase-tab-1" class="showcaseThumb is-active" type="button" role="tab" aria-controls="showcase-panel-1" aria-selected="true" tabindex="0">
-              <img src="./demo/product-scent-bottle-before.webp" alt="" loading="lazy" />
+              <img src="./demo/perfume-bottle-before.webp" alt="" loading="lazy" />
               <span class="showcaseThumbLabel">Everyday Product</span>
             </button>
             <button id="showcase-tab-2" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-2" aria-selected="false" tabindex="-1">
-              <img src="./demo/animal-buddy-dog-before.webp" alt="" loading="lazy" />
+              <img src="./demo/golden-retriever-before.webp" alt="" loading="lazy" />
               <span class="showcaseThumbLabel">Hair &amp; Fur</span>
             </button>
             <button id="showcase-tab-3" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-3" aria-selected="false" tabindex="-1">
-              <img src="./demo/glass-wine-before.webp" alt="" loading="lazy" />
+              <img src="./demo/crystal-vase-before.webp" alt="" loading="lazy" />
               <span class="showcaseThumbLabel">Glass &amp; Crystal</span>
             </button>
             <button id="showcase-tab-4" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-4" aria-selected="false" tabindex="-1">
-              <img src="./demo/shoes-before.webp" alt="" loading="lazy" />
-              <span class="showcaseThumbLabel">Shoes</span>
+              <img src="./demo/road-bicycle-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Hard Edges</span>
             </button>
             <button id="showcase-tab-5" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-5" aria-selected="false" tabindex="-1">
-              <img src="./demo/sneakers-before.webp" alt="" loading="lazy" />
-              <span class="showcaseThumbLabel">Sneakers</span>
+              <img src="./demo/flower-bouquet-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Florals</span>
             </button>
             <button id="showcase-tab-6" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-6" aria-selected="false" tabindex="-1">
-              <img src="./demo/phone-before.webp" alt="" loading="lazy" />
-              <span class="showcaseThumbLabel">Phone</span>
-            </button>
-            <button id="showcase-tab-7" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-7" aria-selected="false" tabindex="-1">
-              <img src="./demo/watch-before.webp" alt="" loading="lazy" />
+              <img src="./demo/wristwatch-before.webp" alt="" loading="lazy" />
               <span class="showcaseThumbLabel">Watch</span>
             </button>
-            <button id="showcase-tab-8" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-8" aria-selected="false" tabindex="-1">
-              <img src="./demo/tshirt-before.webp" alt="" loading="lazy" />
-              <span class="showcaseThumbLabel">T-Shirt</span>
+            <button id="showcase-tab-7" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-7" aria-selected="false" tabindex="-1">
+              <img src="./demo/denim-jacket-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Apparel</span>
             </button>
-            <button id="showcase-tab-9" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-9" aria-selected="false" tabindex="-1">
-              <img src="./demo/jogging-before.webp" alt="" loading="lazy" />
-              <span class="showcaseThumbLabel">Jogging</span>
+            <button id="showcase-tab-8" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-8" aria-selected="false" tabindex="-1">
+              <img src="./demo/coffee-machine-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Appliance</span>
             </button>
           </div>
         </div>

@@ -6,6 +6,8 @@
 // guided by the original image, runs client-side, and is skipped entirely when
 // `enabled` is false (so a run can be A/B compared against the unrefined mask).
 
+import { DEFAULT_ISLAND_CLEANUP, isIslandCleanup, type IslandCleanup } from './island-cleanup';
+
 export type MaskInterpolation = 'bilinear' | 'bicubic';
 
 export interface FastRefinementConfig {
@@ -37,6 +39,10 @@ export interface FastRefinementConfig {
     /** Output clamp upper bound. */
     maxAlpha: number;
     removeTinyIsolatedNoise: boolean;
+    /** Which island-area bar drops disconnected specks: `fine` keeps small
+     *  deliberate detail, `strict` clears the benchmark's speckle gate. Applies
+     *  to the Stage-4 cleanup and to the flood-recovery despeckle. */
+    islandCleanup: IslandCleanup;
   };
   performance: {
     useWorker: boolean;
@@ -64,6 +70,7 @@ export const DEFAULT_FAST_REFINEMENT: FastRefinementConfig = {
     minAlpha: 0,
     maxAlpha: 1,
     removeTinyIsolatedNoise: true,
+    islandCleanup: DEFAULT_ISLAND_CLEANUP,
   },
   performance: {
     useWorker: true,
@@ -112,6 +119,7 @@ export function isFastRefinementConfig(v: unknown): v is FastRefinementConfig {
   if (!isFiniteInRange(cl.maxAlpha, 0, 1)) return false;
   if ((cl.minAlpha as number) > (cl.maxAlpha as number)) return false;
   if (typeof cl.removeTinyIsolatedNoise !== 'boolean') return false;
+  if (!isIslandCleanup(cl.islandCleanup)) return false;
   const pf = asRecord(o.performance);
   if (!pf) return false;
   if (typeof pf.useWorker !== 'boolean') return false;
@@ -159,6 +167,7 @@ export function resolveRefinementConfig(
       minAlpha: Math.min(minAlpha, maxAlpha),
       maxAlpha: Math.max(minAlpha, maxAlpha),
       removeTinyIsolatedNoise: cl?.removeTinyIsolatedNoise ?? d.cleanup.removeTinyIsolatedNoise,
+      islandCleanup: isIslandCleanup(cl?.islandCleanup) ? cl!.islandCleanup : d.cleanup.islandCleanup,
     },
     performance: {
       useWorker: pf?.useWorker ?? d.performance.useWorker,
@@ -205,6 +214,10 @@ export function refinementConfigFromParams(params: URLSearchParams): FastRefinem
   if (cleanup !== undefined) cl.enabled = cleanup !== 0;
   if (minAlpha !== undefined) cl.minAlpha = minAlpha;
   if (maxAlpha !== undefined) cl.maxAlpha = maxAlpha;
+  // `?islands=strict` selects the 5e-4 speckle bar; `fine` (the default) keeps
+  // the 2e-5 bar.
+  const islands = params.get('islands');
+  if (isIslandCleanup(islands)) cl.islandCleanup = islands;
   if (Object.keys(cl).length) partial.cleanup = cl as FastRefinementConfig['cleanup'];
 
   return resolveRefinementConfig(partial);

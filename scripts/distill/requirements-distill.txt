@@ -1,7 +1,7 @@
 # Pinned distillation pipeline dependencies (spec §3, §8).
 # Colab GPU mode uses onnxruntime-gpu; CPU smoke / fallback uses onnxruntime.
 # Torch is versioned separately for CPU vs CUDA wheels (CPU wheel in the
-# sandbox, CUDA wheel on Colab per the notebook).
+# sandbox, CUDA wheel on a Colab GPU host).
 onnxruntime==1.31.1
 onnx>=1.16.0
 onnxoptimizer>=0.3.13

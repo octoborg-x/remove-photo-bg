@@ -7,7 +7,7 @@ CUDA 13.0, onnxruntime(-gpu) 1.31.1, Python 3.12.12 · **Space:**
 
 ## Why this exists
 
-The Colab T4 GPU tier expired, so `COLAB_T4_REPORT.md` had two data gaps:
+The Colab T4 GPU tier expired, so the T4 run had two data gaps:
 **10+ warm runs** and **peak VRAM** (only 5 reps and no VRAM were captured).
 This report closes both gaps on Hugging Face's free tier (ZeroGPU) and adds a
 second hardware point (Blackwell, not T4) with the **same methodology and the
@@ -43,7 +43,7 @@ native resolution):
 > edges, which is an artifact, not the model. Measured on a common 1024 grid,
 > **512 is consistently softer** (≈0.22–0.24 vs ≈0.34–0.44), and the
 > transition band is ≈1.5–1.8× wider (≈2.4 px vs ≈1.4 px). See
-> `COLAB_T4_REPORT.md` §5 for the resolved analysis.
+> `PHASE1_REPORT.md` §6 for the resolved analysis.
 
 Same relationship as on the T4: the coarser 512 input is **faster and less
 memory-hungry**, with near-identical foreground fractions and IoU ~0.992, at the
@@ -97,5 +97,5 @@ edge detail is most visible on specular/glass content).
   per-pipeline warm/cold/VRAM/mask-stats.
 - `smoke-results/zerogpu/quality.json` — IoU / diff / edge rows.
 - `smoke-results/zerogpu/masks/*.npy` — raw probability masks for both runs.
-- `notebooks/colab-t4-benchmark.ipynb` — T4 manual; the Space `app.py` mirrors
-  it for automatic reruns.
+- `scripts/benchmark-pipelines.py` — the rerunnable harness the Space `app.py`
+  mirrors for automatic reruns.

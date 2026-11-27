@@ -3,6 +3,20 @@
 Guidance for AI agents working in this repository. `MVP_OPENHANDS.md` holds the product
 spec and `PHASE*_REPORT.md` the history.
 
+## Browser harnesses & the GPU path
+
+The browser harnesses (`scripts/run-smoke.mjs`, `scripts/eval/run-eval.mjs`, and the
+others) launch Chromium CPU-only by default: `headless: 'shell'` (the old
+chrome-headless-shell, which has **no WebGPU**) plus `--disable-gpu`/`--disable-webgpu`.
+That default is correct for the sandbox and CI. The shared launch profile lives in
+`scripts/lib/gpu-browser.mjs` (`browserArgs`, `headlessMode`, `gpuRequested`,
+`assertHardwareGpu`); set `RUN_GPU=1` on a host with a real GPU to switch to the new
+headless mode plus the Vulkan/WebGPU flags headless Chrome needs, and to make the
+harness refuse to run on a software adapter (SwiftShader/llvmpipe). **WebGPU uses the
+browser's local GPU, so a tunnel from a GPU-less machine cannot test it** — run on the
+GPU host. `scripts/colab-webgpu.sh` scripts the whole Colab T4 run (drivers, flags,
+build, eval). See README "WebGPU on a real GPU".
+
 ## Analytics & quality reporting
 
 Privacy-first product analytics live in `src/features/analytics/` (consent-gated,
@@ -111,7 +125,7 @@ For DOM work, use `puppeteer-core` — and run throwaway scripts **from the repo
 
 ```js
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: '/usr/bin/chromium', headless: 'shell',
+const b = await puppeteer.launch({ executablePath: process.env.CHROME_BIN || '/usr/bin/chromium', headless: 'shell',
   args: ['--no-sandbox', '--disable-gpu'] });
 const p = await b.newPage();
 await p.goto('file:///tmp/img/on_white.png');

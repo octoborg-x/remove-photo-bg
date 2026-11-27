@@ -48,19 +48,20 @@ and thin structures.
 
 ## 3. Compute: Google Colab GPU is mandatory for all GPU work
 
-1. Primary mode: remote Colab GPU over SSH using `colab/colab-ssh-t4-polished.ipynb`.
-   I run the notebook and paste the trycloudflare hostname. Connect from OpenHands via
+1. Primary mode: remote Colab GPU over SSH (the harness lives in
+   `scripts/benchmark-pipelines.py`). I start the Colab session and paste the
+   trycloudflare hostname. Connect from OpenHands via
    SSH with the cloudflared ProxyCommand, run `nvidia-smi`, and record GPU name,
    driver, CUDA, Python, torch and onnxruntime-gpu versions in `run-metadata.json`.
    If no GPU is visible, STOP and tell me. Never present CPU numbers as GPU results.
-2. Security fix BEFORE first use: edit that notebook so it does NOT set a fixed root
-   password, sets `PasswordAuthentication no` (key-only) and does not print secrets.
+2. Security fix BEFORE first use: the Colab setup script must NOT set a fixed root
+   password, must set `PasswordAuthentication no` (key-only) and must not print secrets.
    Commit it on the branch.
 3. Check the current Colab FAQ/terms for limits on SSH or remote access and record
    the finding and the risk in `DISTILL_PLAN.md`. Never try to evade runtime limits,
    idle timeouts or usage policies. Do not run keep-alive hacks.
 4. Fallback mode if SSH is unavailable or disallowed: write a self-contained
-   `notebooks/distill-colab.ipynb` that I run by hand. All code must be resumable.
+   distillation script that I run by hand. All code must be resumable.
 5. Colab is ephemeral. Mount Google Drive (I authorise it). Persist only manifests,
    labels (tar), checkpoints, logs, contact sheets and the final ONNX. Run long jobs in
    `tmux` or `nohup`, log to Drive, checkpoint at least every 10 minutes, make every
@@ -210,7 +211,7 @@ only for something destructive or paid.
   seeded.
 - Tests: ONNX validity, I/O contract, preprocessing parity with the app, loss/shape
   smoke test, and a tiny overfit run showing loss decreases. Do not claim trained quality.
-- Provide the Colab notebook/SSH run script. Report per run: GPU, epoch time, loss
+- Provide the Colab SSH run script. Report per run: GPU, epoch time, loss
   curves, checkpoint hashes. STOP and report after a first short GPU run; continue to
   full training only if the smoke run behaves and I agree.
 
@@ -231,7 +232,8 @@ only for something destructive or paid.
   false background pixels. Report per image, per category and aggregate. Then a separate
   diagnostic threshold sweep (0.30, 0.40, 0.45, 0.50, 0.55, 0.60, 0.70). Never tune the
   threshold per candidate to hide regressions. Resolve the known discrepancy in
-  edge-sharpness measurements between `PHASE1_REPORT.md` and `COLAB_T4_REPORT.md` before
+  edge-sharpness measurements between `PHASE1_REPORT.md` §6 and the earlier T4
+  pass before
   trusting any edge metric.
 - Save per eval image: original, teacher mask, student mask, absolute difference map
   (fixed colour scale), checkerboard cutout, zoomed edge crops; write a per-image CSV.
@@ -261,7 +263,7 @@ If not met, the verdict is NO-GO and the FP32 model stays in production.
 - `DISTILL_PROVENANCE.md`, `DISTILL_PLAN.md`, `DISTILL_RESULTS.md`
 - `scripts/distill/` (fetchers, select, make-labels, composite, train, export, evaluate,
   refine) and pinned `requirements-distill.txt`
-- Colab notebook(s), the key-only SSH notebook fix, and `run-metadata.json` per run
+- Colab SSH run script, the key-only SSH fix, and `run-metadata.json` per run
 - Tests per Phase 3 plus the existing suite
 - `DISTILL_RESULTS.md`: table of size, SHA-256, method, latency, memory, error metrics,
   pass/fail; per-image CSV; visual comparisons; limitations; untested configurations;

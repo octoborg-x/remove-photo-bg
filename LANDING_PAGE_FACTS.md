@@ -7,13 +7,13 @@ figure on the page changes.
 
 | Page claim | Value | Source |
 |---|---|---|
-| Model name "QMix Cut-512" (id `qmix-cut-512`) | Product name for the optimised BiRefNet Lite export; not a new architecture | `MODEL_CARD.md` ("Product name vs architecture"), `public/models-manifest.json` |
+| Model display name "Background Model 512 (INT8/FP16)", technical id `birefnet-lite-engine-512-int8-fp16` (retired id `qmix-cut-512` still resolves) | Display name + precision tag for the optimised BiRefNet Lite export; not a new architecture | `MODEL_CARD.md` ("Product name vs architecture"), `public/models-manifest.json` |
 | Model download size | ~58 MB (60,763,193 B) | `public/models-manifest.json`, `MODEL_CARD.md` |
 | One model served, quality equal to the larger variants | int8+fp16 vs fp32 teacher: IoU@0.5 0.9987, 0 pixels crossing the 0.5 threshold | `MODEL_CARD.md` ("Measured parity…") |
 | Inference ~4 s per image (CPU/WASM) | 3.6–4.0 s warm on a desktop CPU; ~6.9 s on a phone | `PHASE2_REPORT.md`, `README.md`, `HARDWARE_TESTING.md` §4 |
 | Works without a GPU; older/software GPUs default to CPU but stay selectable | `classifyGpuAdapter()` flags software renderers and known-slow GPUs, which become the non-default option and warn when chosen; verified in-browser | `src/features/background-removal/provider-gate.ts`, this change |
-| 64-image evaluation, all exported, no crash | 64 images / 8 categories, 64 ok | `EVALUATION.md` |
-| 8 of 64 outputs empty | 8 / 64 empty or near-empty | `EVALUATION.md` |
+| 64-image evaluation, all exported, no crash | 64 images / 8 categories, 64 / 64 processed with no errors | `EVALUATION.md` |
+| 59 of 64 outputs are usable cut-outs | 59 / 64 non-empty (5 empty or near-empty: `hair-fur-07`, `hair-fur-08`, `complex-bg-05`, `complex-bg-07`, `thin-structure-04`) | `artifacts/wasm-64-2026-11-26/quality.json` (2026-11-26 re-run), `EVALUATION.md` |
 | No image upload; restrictive CSP; SHA-256-pinned model | 0 third-party requests in the smoke harness; CSP in `scripts/write-headers.mjs`; SHA-256 in the manifest | `PHASE2_REPORT.md`, `PHASE3_REPORT.md`, `scripts/run-smoke.mjs` |
 | Input limits 20 MB / 4096 px; PNG·JPG·WebP output | `DEFAULT_UPLOAD_LIMITS`, `EXPORT_FORMATS` | `src/features/background-removal/image-validation.ts`, `src/features/background-removal/export-image.ts` |
 
@@ -22,10 +22,16 @@ figure on the page changes.
 The before/after pairs under `public/demo/` are the model's own outputs, not
 mock-ups:
 
-- `before` = the original test photo (public domain) under `test-images/`.
-- `after` = the model's committed cut-out under
-  `smoke-results/benchmark-t4/quality-t4/*_512_cut.png` (RGBA), downscaled and
-  re-encoded to WebP by `scripts/build-demo-assets.mjs`.
+- `before` = the original photo.
+- `after` = the RGBA cut-out produced by the pinned Background Model 512 (INT8/FP16)
+  (`model_512_int8_fp16.onnx`, the same SHA-256 as
+  `public/models-manifest.json`), downscaled and re-encoded to WebP.
+
+All eight pairs (`perfume-bottle`, `golden-retriever`, `crystal-vase`,
+`road-bicycle`, `flower-bouquet`, `wristwatch`, `denim-jacket`,
+`coffee-machine`) use the originals in `test-images/` and are rebuilt by
+`scripts/build-demo-assets.mjs` from full-resolution model cut-outs. Sources and
+credits are in `public/demo/ATTRIBUTION.md`.
 
 ## Model provenance note
 

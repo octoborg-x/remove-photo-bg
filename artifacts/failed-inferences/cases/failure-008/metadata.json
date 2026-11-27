@@ -1,0 +1,52 @@
+{
+  "caseId": "failure-008",
+  "title": "File:Bottle, scent (51359099367).jpg",
+  "category": "partial-subject-removal",
+  "severity": "medium",
+  "input": {
+    "source": "eval/images/glass-transparent-06.jpg",
+    "title": "File:Bottle, scent (51359099367).jpg",
+    "license": "CC BY 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Bottle,_scent_(51359099367).jpg",
+    "width": 1280,
+    "height": 853,
+    "sha256_original": "8ebc3a18f5824d623226192379fb8d7fb34b52124a13f7a177d424ff577d2e84",
+    "asset_scale": 0.625
+  },
+  "inference": {
+    "model": "qmix-cut-512",
+    "modelFile": "models/model_512_int8_fp16.onnx",
+    "modelSha256": "10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26",
+    "provider": "wasm",
+    "inputSize": 512
+  },
+  "result": {
+    "foreground_frac": 0.05007,
+    "alpha_max_255": 255,
+    "opaque_fraction": 0.047,
+    "any_fraction": 0.05656,
+    "empty": false,
+    "verdict": "ok",
+    "rawMask": {
+      "min": 0.0,
+      "mean": 0.03333,
+      "max": 1.0,
+      "below_01_fraction": 0.96545,
+      "above_095_fraction": 0.03143
+    },
+    "bimodalTail": 0.9969
+  },
+  "reproduction": {
+    "status": "reproduced",
+    "method": "shipped model over the eval set, offline CPU (ONNX Runtime)",
+    "command": "python3 scripts/eval/build-failure-gallery.py --model <model.onnx>"
+  },
+  "observedProblem": "Borderline: 5.0% of pixels kept for a scent bottle. Most of the subject is removed.",
+  "suspectedCause": "A small, translucent glass bottle; transparent subjects have little solid area for the model to lock onto.",
+  "investigation": [],
+  "fix": {
+    "implemented": false,
+    "description": null,
+    "passesAfterFix": null
+  }
+}

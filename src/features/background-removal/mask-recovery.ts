@@ -1,6 +1,6 @@
 // Recovery for the model's "flooded mask" failure mode.
 //
-// BiRefNet_lite (QMix Cut-512) segments most photos well, but on some inputs it
+// BiRefNet_lite (Background Model 512) segments most photos well, but on some inputs it
 // does not separate a subject at all: it returns near-1.0 probability across the
 // whole frame, so the "cut-out" is the original image with the background still
 // attached. It reproduces identically at int8, fp16 and fp32 precision, so it is
@@ -22,6 +22,7 @@
 // with a genuinely busy, non-uniform background keeps the model's mask.
 
 import { upscaleMask } from './mask-postprocess';
+import { DEFAULT_ISLAND_CLEANUP, ISLAND_CLEANUP_FRACTIONS } from './island-cleanup';
 
 export interface RecoveryOptions {
   /** Longest side of the working resolution for the flood fill. */
@@ -32,6 +33,9 @@ export interface RecoveryOptions {
   floodFraction?: number;
   /** Border-band foreground fraction above which the flood is confirmed. */
   borderFraction?: number;
+  /** Island-area bar for the despeckle, as a fraction of the image. Defaults to
+   *  the `fine` variant; the engine controls pass the user's choice. */
+  minIslandFraction?: number;
 }
 
 export const DEFAULT_RECOVERY_OPTIONS: Required<RecoveryOptions> = {
@@ -39,6 +43,7 @@ export const DEFAULT_RECOVERY_OPTIONS: Required<RecoveryOptions> = {
   tolerance: 24,
   floodFraction: 0.75,
   borderFraction: 0.7,
+  minIslandFraction: ISLAND_CLEANUP_FRACTIONS[DEFAULT_ISLAND_CLEANUP],
 };
 
 /** Fraction of an 8-bit mask at or above `threshold` (default: the 0.5 cut). */
@@ -86,6 +91,66 @@ export function isFloodedMask(
     foregroundFraction(mask) > o.floodFraction &&
     borderForegroundFraction(mask, width, height) > o.borderFraction
   );
+}
+
+/** Smallest isolated island kept by the flood-recovery despeckle by default, as
+ *  a fraction of the image. Below this a foreground island is background texture
+ *  the fill could not reach (grain, reflections, gaps between product parts),
+ *  not subject. This is the `fine` variant — the same number as
+ *  `MIN_ISLAND_FRACTION` (refine-mask.ts) — and the caller overrides it with
+ *  `strict` (5e-4, the benchmark's `SPECKLE_ISLAND_FRACTION`) when that island
+ *  cleanup is selected. See `docs/accuracy-benchmark.md` §5.1.1. */
+export const MIN_RECOVERY_ISLAND_FRACTION = ISLAND_CLEANUP_FRACTIONS[DEFAULT_ISLAND_CLEANUP];
+
+/** Drops foreground islands smaller than `minFraction` of the image, keeping the
+ *  alpha of the rest. The flood fill is seeded from the border, so on a busy
+ *  background it leaves speckle: disconnected patches of subject-coloured
+ *  texture it could not walk through. They are invisible in the preview but make
+ *  the export noisy and fail the speckle gate, so they are removed here rather
+ *  than shipped. Large structures are untouched, so a genuinely multi-part
+ *  subject (a bunch of flowers, a set of cutlery) survives. */
+export function despeckleRecoveredMask(
+  mask: Uint8ClampedArray,
+  width: number,
+  height: number,
+  minFraction: number = MIN_RECOVERY_ISLAND_FRACTION,
+): Uint8ClampedArray {
+  const n = width * height;
+  const minArea = Math.max(16, Math.round(n * minFraction));
+  const seen = new Uint8Array(n);
+  const stack: number[] = [];
+  const comp: number[] = [];
+  const keep = new Uint8Array(n);
+  for (let start = 0; start < n; start++) {
+    if (seen[start] || mask[start] < 128) continue;
+    stack.length = 0;
+    comp.length = 0;
+    stack.push(start);
+    seen[start] = 1;
+    while (stack.length) {
+      const idx = stack.pop() as number;
+      comp.push(idx);
+      const y = (idx / width) | 0;
+      const x = idx - y * width;
+      for (let dy = -1; dy <= 1; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          const ni = ny * width + nx;
+          if (!seen[ni] && mask[ni] >= 128) {
+            seen[ni] = 1;
+            stack.push(ni);
+          }
+        }
+      }
+    }
+    if (comp.length >= minArea) for (const idx of comp) keep[idx] = 1;
+  }
+  const out = new Uint8ClampedArray(mask.length);
+  for (let i = 0; i < n; i++) if (keep[i]) out[i] = mask[i];
+  return out;
 }
 
 /** Box-average downsample of RGBA pixels to `ww x wh`, dropping alpha. Keeps the
@@ -201,7 +266,14 @@ export function recoverForegroundMask(
   if (!isFloodedMask(modelMask, image.width, image.height, o)) {
     return { mask: modelMask, recovered: false };
   }
-  const recovered = floodFillForeground(image, o);
+  // The border-seeded fill leaves speckle on textured backgrounds; drop it so
+  // the acceptance gates below judge the mask we actually ship.
+  const recovered = despeckleRecoveredMask(
+    floodFillForeground(image, o),
+    image.width,
+    image.height,
+    o.minIslandFraction,
+  );
   const modelFg = foregroundFraction(modelMask);
   const recoveredFg = foregroundFraction(recovered);
   // Accept the recovery only when it is a genuine, usable cut-out: it must

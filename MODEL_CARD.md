@@ -1,4 +1,4 @@
-# MODEL_CARD — QMix Cut-512 (BiRefNet_lite, ONNX, 512×512)
+# MODEL_CARD — Background Model 512 (INT8/FP16) · BiRefNet Lite, ONNX, 512×512
 
 Current record for the model served by this project. See also
 `THIRD_PARTY_LEGAL_NOTICES.md` (hashes/licences), `LICENSE_AUDIT.md`
@@ -6,9 +6,10 @@ Current record for the model served by this project. See also
 
 ## Product name vs architecture
 
-- **Product name**: **QMix Cut-512** — the name shown in the UI (`#modelName`).
-- **Technical model ID**: `qmix-cut-512` — the manifest `id` and the value the
-  UI prints as the "Technical model ID".
+- **Product name**: **Background Model 512 (INT8/FP16)** — the name shown in the UI (`#modelName`).
+- **Technical model ID**: `birefnet-lite-engine-512-int8-fp16` — the manifest `id` and the value the
+  UI prints as the "Technical model ID". The retired id `qmix-cut-512` is kept as a manifest
+  `alias`, so older `?model=qmix-cut-512` links still resolve.
 - **Architecture**: this is **not** a newly trained model. It is an optimised
   **BiRefNet Lite** variant (the optimised export described under "Shipped
   artifact" below). BiRefNet attribution is retained throughout this card and in
@@ -42,7 +43,7 @@ Current record for the model served by this project. See also
 
   | id (manifest) | file | size | method | role |
   |---|---|---|---|---|
-  | `qmix-cut-512` (product name **QMix Cut-512**) | `model_512_int8_fp16.onnx` | 60,763,193 B (≈58 MB) | per-output-channel **int8** for the backbone (`m.bb.*`, `m.squeeze_module.*`) + **fp16** decoder, all cast back to fp32; PyTorch debug metadata and duplicate initializers stripped (lossless) | **the only model served** |
+  | `birefnet-lite-engine-512-int8-fp16` (product name **Background Model 512 (INT8/FP16)**) | `model_512_int8_fp16.onnx` | 60,763,193 B (≈58 MB) | per-output-channel **int8** for the backbone (`m.bb.*`, `m.squeeze_module.*`) + **fp16** decoder, all cast back to fp32; PyTorch debug metadata and duplicate initializers stripped (lossless) | **the only model served** |
 
   Earlier builds also offered `model_512_int0_fp16` and `model_512_int0_fp32`.
   They are the same graph at higher weight-storage precision; because every

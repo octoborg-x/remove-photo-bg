@@ -1,0 +1,73 @@
+{
+  "caseId": "failure-003",
+  "title": "File:Burning Man 2013 Dance Party in Deep Playa (10226923844).jpg",
+  "category": "empty-output",
+  "severity": "high",
+  "input": {
+    "source": "eval/images/complex-bg-05.jpg",
+    "title": "File:Burning Man 2013 Dance Party in Deep Playa (10226923844).jpg",
+    "license": "CC BY 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Burning_Man_2013_Dance_Party_in_Deep_Playa_(10226923844).jpg",
+    "width": 1280,
+    "height": 960,
+    "sha256_original": "a07464a694ab432bc4a250a3d745319b01002eddb07782650418dd6cf9e26cbd",
+    "asset_scale": 0.625
+  },
+  "inference": {
+    "model": "qmix-cut-512",
+    "modelFile": "models/model_512_int8_fp16.onnx",
+    "modelSha256": "10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26",
+    "provider": "wasm",
+    "inputSize": 512
+  },
+  "result": {
+    "foreground_frac": 0.0,
+    "alpha_max_255": 0,
+    "opaque_fraction": 0.0,
+    "any_fraction": 0.0,
+    "empty": true,
+    "verdict": "empty",
+    "rawMask": {
+      "min": 0.0,
+      "mean": 1e-05,
+      "max": 6e-05,
+      "below_01_fraction": 1.0,
+      "above_095_fraction": 0.0
+    },
+    "bimodalTail": 1.0
+  },
+  "reproduction": {
+    "status": "reproduced",
+    "method": "shipped model over the eval set, offline CPU (ONNX Runtime)",
+    "command": "python3 scripts/eval/build-failure-gallery.py --model <model.onnx>"
+  },
+  "observedProblem": "Fully transparent output against a cluttered, multi-subject background.",
+  "suspectedCause": "A crowded night scene with no single dominant subject. The model has no clear figure to latch onto and returns an empty mask.",
+  "investigation": [
+    {
+      "lever": "Raw model output",
+      "finding": "min 0.000 / mean 0.00001 / max 0.00006 \u2014 effectively a hard zero."
+    },
+    {
+      "lever": "Model precision",
+      "finding": "fp16 also empty \u2014 not a quantisation artefact."
+    },
+    {
+      "lever": "Input contrast stretch",
+      "finding": "No effect on the mask max."
+    },
+    {
+      "lever": "2x2 tiled inference",
+      "finding": "All four tiles return exactly 0.000."
+    },
+    {
+      "lever": "Post-inference knobs",
+      "finding": "Cannot raise a zero mask."
+    }
+  ],
+  "fix": {
+    "implemented": false,
+    "description": null,
+    "passesAfterFix": null
+  }
+}

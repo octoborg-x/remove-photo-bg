@@ -1,13 +1,13 @@
-// Landing showcase: one before/after example at a time, chosen from a vertical
-// rail of thumbnails.
+// Landing showcase: one before/after example at a time, chosen from a
+// horizontally scrollable rail of thumbnails.
 //
 // Each example is a self-contained `[data-compare]` figure (its own images,
 // range and caption), so the existing compare-slider wiring is untouched — this
 // module only decides which panel is visible and keeps the rail's tab state in
-// sync. The rail is a vertical tablist: arrow keys move the selection (wrapping),
-// Home/End jump to the ends, and the roving tabindex keeps a single tab stop.
+// sync. The rail is a tablist: arrow keys move the selection (wrapping), Home/End
+// jump to the ends, and the roving tabindex keeps a single tab stop.
 
-/** The next selected index for a vertical tablist key, or `null` when unhandled. */
+/** The next selected index for a tablist key, or `null` when unhandled. */
 export function galleryStep(key: string, index: number, count: number): number | null {
   if (count <= 0) return null;
   switch (key) {

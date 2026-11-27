@@ -5,3 +5,15 @@
 - `glass-wine.jpg` — commons.wikimedia.org/wiki/File:Glass_wine_white_background.jpg (source URL preserved)
 - `portrait-hair.jpg` — commons.wikimedia.org/wiki/File:Studio_portrait_of_a_young_Venezuelan_woman_with_wavy_hair_and_dangling_earrings_in_1948.jpg (source URL preserved)
 - `jewelry-chain.jpg` — commons.wikimedia.org/wiki/File:Anglo-Saxon_necklace_(Desborough).jpg (source URL preserved)
+
+Landing-page showcase photos (supplied by the project owner; original
+resolution, re-encoded to JPEG at quality 92):
+
+- `perfume-bottle.jpg`
+- `golden-retriever.jpg`
+- `crystal-vase.jpg`
+- `road-bicycle.jpg`
+- `flower-bouquet.jpg`
+- `wristwatch.jpg`
+- `denim-jacket.jpg`
+- `coffee-machine.jpg`

@@ -1,0 +1,52 @@
+{
+  "caseId": "failure-006",
+  "title": "File:Ad pillar, street view, portrait, lady, handbag Fortepan 52840.jpg",
+  "category": "partial-subject-removal",
+  "severity": "medium",
+  "input": {
+    "source": "eval/images/accessory-07.jpg",
+    "title": "File:Ad pillar, street view, portrait, lady, handbag Fortepan 52840.jpg",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Ad_pillar,_street_view,_portrait,_lady,_handbag_Fortepan_52840.jpg",
+    "width": 1280,
+    "height": 940,
+    "sha256_original": "62186a970689d10ed48b142ed9232fcae76115595b3ba09016dfd6d80a0a5219",
+    "asset_scale": 0.625
+  },
+  "inference": {
+    "model": "qmix-cut-512",
+    "modelFile": "models/model_512_int8_fp16.onnx",
+    "modelSha256": "10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26",
+    "provider": "wasm",
+    "inputSize": 512
+  },
+  "result": {
+    "foreground_frac": 0.03781,
+    "alpha_max_255": 254,
+    "opaque_fraction": 0.03578,
+    "any_fraction": 0.04246,
+    "empty": false,
+    "verdict": "ok",
+    "rawMask": {
+      "min": 0.0,
+      "mean": 0.02776,
+      "max": 1.0,
+      "below_01_fraction": 0.97109,
+      "above_095_fraction": 0.02624
+    },
+    "bimodalTail": 0.9973
+  },
+  "reproduction": {
+    "status": "reproduced",
+    "method": "shipped model over the eval set, offline CPU (ONNX Runtime)",
+    "command": "python3 scripts/eval/build-failure-gallery.py --model <model.onnx>"
+  },
+  "observedProblem": "Borderline: only 3.8% of pixels are kept. Much of the subject is removed; a small fragment survives.",
+  "suspectedCause": "A street-scene advertisement pillar with several figures; the model keeps one small region and discards the rest.",
+  "investigation": [],
+  "fix": {
+    "implemented": false,
+    "description": null,
+    "passesAfterFix": null
+  }
+}

@@ -42,10 +42,18 @@ No secret or account is required — inference is entirely local. See
 ### Browser requirements
 
 - A modern browser with **Web Workers + WebAssembly SIMD/threads**: Chrome/Edge
-  ≥ 90, Firefox ≥ 90, Safari ≥ 15. WebGPU is used automatically when an adapter
-  is present; otherwise the app runs on WASM (CPU).
+  ≥ 90, Firefox ≥ 90, Safari ≥ 15. WebGPU is used automatically on desktop when
+  a modern hardware adapter is present; a phone adapter the gate has no evidence
+  for defaults to WASM (CPU) and remains selectable. Otherwise the app runs on
+  WASM.
 - First visit downloads the model once (~68 MB by default) and caches it in the
   Cache API; later visits load it from the device.
+- **Adaptive source size.** A decoded source is capped before it is read into an
+  `ImageData`: 4096 px on desktop (the documented upload limit), 3072 px on a
+  phone, and 2048 px on a phone reporting ≤ 2 GB of memory (or ≤ 2 cores). The
+  original is never upscaled. A larger photo is reduced instead of rejected, and
+  the Console states the change. `?maxSourceSide=` overrides the cap for
+  scripted runs. See `MOBILE_OPTIMIZATION_REPORT.md`.
 
 ## Result — WASM path on a real phone
 
@@ -142,12 +150,12 @@ single model is served — the smallest artifact, weight-only quantised and
 materialised to fp32 so the runtime kernels and the mask are identical to the
 full-precision teacher:
 
-The served artifact is named **QMix Cut-512** (technical id `qmix-cut-512`), an
+The served artifact is named **Background Model 512 (INT8/FP16)** (technical id `birefnet-lite-engine-512-int8-fp16`), an
 optimised **BiRefNet Lite** variant — the file keeps its precision-stating name:
 
 | id (product name) | file | size | what |
 |---|---|---|---|
-| `qmix-cut-512` (QMix Cut-512) | `models/model_512_int8_fp16.onnx` | 60.8 MB | int8 backbone + fp16 decoder; PyTorch debug metadata and duplicate initializers stripped (lossless). On the repo test images it reproduces the fp32 teacher at IoU@0.5 0.9987 with 0 pixels crossing the 0.5 threshold; on the wider 62-image eval set it averages 0.981 with one empty-mask miss (`clothing-04.jpg`). |
+| `birefnet-lite-engine-512-int8-fp16` (Background Model 512 (INT8/FP16)) | `models/model_512_int8_fp16.onnx` | 60.8 MB | int8 backbone + fp16 decoder; PyTorch debug metadata and duplicate initializers stripped (lossless). On the repo test images it reproduces the fp32 teacher at IoU@0.5 0.9987 with 0 pixels crossing the 0.5 threshold; on the wider 62-image eval set it averages 0.981 with one empty-mask miss (`clothing-04.jpg`). |
 
 Every artifact was the raw export with its PyTorch `torch.onnx` debug metadata
 and duplicate initializers removed (`scripts/distill/optimize-onnx.py --scope
@@ -228,6 +236,14 @@ browser cannot encode (WebP on some builds) is shown disabled rather than
 silently producing a mislabelled file. The choice is persisted and can be
 forced with `?format=png|jpeg|webp`.
 
+The background picker sits beside the formats. A transparent background lets
+PNG and WebP keep the cut-out's alpha; a solid colour is composited underneath
+and switches the format to JPG, because a colour has no transparency to carry.
+Choosing PNG or WebP therefore clears a solid colour — those formats exist to
+carry alpha — while a see-through colour (alpha below 100%) is kept, since it
+already carries alpha. The alpha slider only refines a chosen colour and is
+inert on a transparent background, so it can never silently flatten a cut-out.
+
 ### If something goes wrong
 
 Failures are explained in plain language with a one-tap retry instead of a raw
@@ -256,26 +272,50 @@ Outputs to `--out`:
 
 ## WebGPU on a real GPU (Google Colab, free T4)
 
-The sandbox and CI have no GPU, so the app's WebGPU path could never be
-exercised against the real product — until now. `notebooks/colab-webgpu-smoke.ipynb`
-runs Google's official headless-Chrome-with-Vulkan recipe on a free Colab T4,
-opens the deployed app, forces `?provider=webgpu`, and asserts the provider
-comes back as `webgpu` (plus logs timings, the adapter report, and every network
-request for the privacy check). Cost: $0.
+The sandbox and CI have no GPU, so the app's WebGPU path cannot be exercised
+there. Google's official headless-Chrome-with-Vulkan recipe runs on a free Colab
+T4; cost: $0.
 
-The GPU path needs the host to serve the WebGPU-capable ORT bundle. Fetch it
-before starting the local preview server:
+**A tunnel from a GPU-less machine cannot test WebGPU.** WebGPU uses the
+*browser's* local GPU, so the browser must run on the machine that owns the GPU —
+the tunnel only moves bytes, not GPU access. Run the whole test **on Colab**
+(the app is built and served there too):
 
 ```bash
-npm run fetch-models -- --webgpu   # also copies ort.all.min.js + jsep wasm
-npm run build                      # or: vite preview after fetch-models --webgpu
-npx vite preview --port 4173 &
-npx cloudflared tunnel --url http://localhost:4173   # gives the notebook a HTTPS URL
+# In a Colab cell with Runtime → Change runtime type → T4 GPU:
+!git clone <repo> && cd <repo> && bash scripts/colab-webgpu.sh
 ```
 
-Then paste the returned URL into the notebook's `PAGE_URL` cell and run all cells.
-The driver honors `RUN_GPU=1 node scripts/run-smoke.mjs …` for a local GPU too,
-but the notebook is the supported path (correct Vulkan/WebGPU flags for Colab).
+`scripts/colab-webgpu.sh` does the whole thing — GPU/driver check, the NVIDIA
+driver + Vulkan install, Chrome install, `npm ci`, `fetch-models --webgpu`,
+`build`, then `RUN_GPU=1 npm run eval:run -- --provider webgpu` against a local
+`vite preview` server. Narrow it with `--only <category>` / `--provider wasm`.
+
+**Two traps the flags and the driver install exist to avoid** (both documented by
+Chrome's guide, <https://developer.chrome.com/blog/supercharge-web-ai-testing>):
+
+1. Headless Chrome disables the GPU by default and gates WebGPU behind flags on
+   Linux. With `RUN_GPU=1` the harness uses the new headless mode and adds
+   `--use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface
+   --enable-unsafe-webgpu` (see `scripts/lib/gpu-browser.mjs`). Without them
+   `chrome://gpu` reports WebGPU as *disabled* or *software only*.
+2. Colab's default userspace GL driver makes Chrome fall back to **SwiftShader**,
+   where WebGPU is "available" but software — a timing there is not a GPU
+   timing. The script installs `libnvidia-gl-<major>` + `vulkan-tools` so
+   `vulkaninfo --summary` names the real GPU.
+
+The harness refuses to run on a software adapter: `assertHardwareGpu()` throws
+with the driver-fix hint rather than recording a fake WebGPU result.
+
+To drive a **deployed** URL instead (browser on Colab → Vercel), skip the build
+and point the smoke driver at it:
+
+```bash
+RUN_GPU=1 node scripts/run-smoke.mjs <page-url> --provider webgpu --runs 5
+```
+
+`RUN_GPU=1` is the supported path for any host with a real GPU (it also drops the
+`--disable-gpu`/`--disable-webgpu` flags the sandbox needs).
 
 ## Reference inference (native CPU, fast)
 
@@ -312,22 +352,81 @@ diffed after any model or runtime change.
 - `scripts/eval/analyze-eval.py` — measures edge-character metrics from those
   PNGs (foreground share, soft-edge band, edge contrast, components, speckle)
   and writes `quality.json` / `quality.md`.
+- `scripts/eval/accuracy-benchmark.py` — the quantitative layer: a per-image
+  checklist (identity, success, dimensions, timing, alpha character, empty,
+  segmentation character) scored against `eval/thresholds.json` into
+  PASS/REVIEW/FAIL verdicts, plus IoU/Dice/boundary-F/MAE wherever a ground-truth mask
+  exists. Writes `benchmark.json` / `checklist.csv` / `benchmark.md`. See
+  [`docs/accuracy-benchmark.md`](./docs/accuracy-benchmark.md).
 
 ```bash
 npm run eval:set                       # download the pinned images (once)
 npm run build
 npm run eval:run -- --provider wasm --out eval-results/wasm
 npm run eval:analyze                   # or: python3 scripts/eval/analyze-eval.py eval-results/wasm
-# WebGPU, on a machine that has it:
+npm run eval:benchmark -- eval-results/wasm   # per-image checklist + verdicts
+# WebGPU, on a machine that has it (a real GPU; NOT this sandbox).
+# On Colab, scripts/colab-webgpu.sh does the driver + flags + run in one step:
+#   bash scripts/colab-webgpu.sh            # see "WebGPU on a real GPU" above
 RUN_GPU=1 npm run eval:run -- --provider webgpu --out eval-results/webgpu
 ```
+
+`eval:run` prints the current operation on an interval — the app's live stage
+line plus the newest Console line — while it waits on the model or an image, so a
+stall shows where it is. Tune the cadence with `EVAL_PROGRESS_MS` (ms) or silence
+it with `--quiet` (or `EVAL_QUIET=1`). A `--provider webgpu` run without
+`RUN_GPU=1` warns up front: this Chromium disables WebGPU, so the forced GPU path
+would fail with `backend not found`.
 
 The metrics are descriptive, not accuracy scores (there is no ground-truth mask
 for these images). Use them for regression comparison and review
 `eval-results/<run>/outputs/*.png` visually — a mask that looks correct to the
 customer matters more than a faster inference time. See
 [`EVALUATION.md`](./EVALUATION.md) for the full method and the recorded baseline
-(64/64 succeeded, 0 wrong dimensions, mean 4.1 s/image, 8 empty outputs).
+(64/64 succeeded, 0 wrong dimensions, mean 4.1 s/image, 8 empty outputs). To turn
+the descriptive metrics into an actual accuracy score, add reference masks under
+`eval/ground-truth/` and re-run `eval:benchmark` — see
+[`docs/accuracy-benchmark.md`](./docs/accuracy-benchmark.md).
+
+### Evaluation gallery (original, before and after — all 64 images)
+
+`public/eval-gallery/` is a static, self-contained page covering all 64 evaluation
+images. Every card stacks **three layers**:
+
+| Layer | Image | Revealed by |
+|---|---|---|
+| 0 (bottom) | the older pipeline's cut-out | always visible on the left of the vertical bar |
+| 1 (middle) | the newer pipeline's cut-out | the horizontal bar (`--x`) wipes it in from the right |
+| 2 (top) | the source photo | the vertical bar (`--y`) reveals it from the top |
+
+So the same card shows the source photo, and lets you wipe the old cut-out against
+the new one — the before/after of a pipeline change (the committed copy compares the
+`eval-results/wasm` run with the `eval-results/after-145` run from issue #145).
+Both bars have a grip to drag, and each axis has a range input underneath so the
+comparison works with the keyboard and screen readers. Cards are badged with the
+newer run's accuracy-benchmark verdict (`PASS` / `REVIEW` / `FAIL(gate)` /
+`FAIL(empty)`) and filterable by category and verdict.
+
+The gallery is built in two steps, both writing WebP (the eval PNGs are ~3 MB each,
+192 MB total) with a headless browser — the same approach as `build-demo`:
+
+```bash
+# 1. one gallery per run, into scratch dirs under eval-results/ (gitignored)
+node scripts/build-eval-gallery.mjs --wasm eval-results/wasm --gpu eval-results/webgpu   # -> eval-results/gallery-backends
+node scripts/build-eval-gallery.mjs --run eval-results/after-145                        # -> eval-results/gallery-2up
+
+# 2. merge them into the committed page (copies the WebP files, no re-encode)
+node scripts/merge-eval-galleries.mjs \
+  --first eval-results/gallery-backends --second eval-results/gallery-2up \
+  --out public/eval-gallery
+```
+
+`--first-layer` / `--second-layer` pick which WebP suffix each source contributes
+(`wasm` / `cutout` by default). The merged page is 192 WebP files, ~15 MB; the two
+galleries it replaces were ~26 MB. Serve it over HTTP
+(`python3 -m http.server -d public`) and open `/eval-gallery/` — the page fetches
+`gallery.json`, so opening the file directly will not work. `gallery.json` records
+both sources in its `sources` array so the provenance of each layer stays visible.
 
 ## Commands
 
@@ -343,6 +442,10 @@ customer matters more than a faster inference time. See
 | `npm run eval:set` | download the fixed evaluation images (`eval/images/`) |
 | `npm run eval:run` | run the deployed pipeline over the evaluation set (WASM; `RUN_GPU=1` for WebGPU) |
 | `npm run eval:analyze` | edge-character metrics from an evaluation run's output PNGs |
+| `npm run eval:benchmark -- <run-dir>` | per-image accuracy checklist + PASS/REVIEW/FAIL verdicts (+ IoU/Dice with ground truth) |
+| `npm run eval:gallery:backends` | build the scratch original/WASM/WebGPU gallery for all 64 eval images |
+| `npm run eval:gallery:single` | build the scratch original-vs-cut-out gallery for one run |
+| `npm run eval:gallery:merge` | merge two galleries into the committed `public/eval-gallery/` page |
 | `npm run verify` | lint + typecheck + unit tests + build |
 | `npm run fetch-models` | download + verify model/WASM artifacts (also prepares `public/wasm/` for local dev) |
 | `npm run license:audit` | dependency licence audit (all permissive; see `LICENSE_AUDIT.md`) |
@@ -370,8 +473,8 @@ Deploy (one-time manual steps in the dashboard):
    jsep runtime, skips the hundreds-of-MB model bodies — models come from HF at
    runtime via the service worker) then `vite build` then strips `dist/models/`.
 
-That produces a WebGPU-capable site. Verify with the Colab T4 notebook
-(`notebooks/colab-webgpu-smoke.ipynb`).
+That produces a WebGPU-capable site. Verify it with the smoke driver on a
+GPU host (`RUN_GPU=1 node scripts/run-smoke.mjs <page-url> --provider webgpu`).
 
 **Branch deployments.** `vercel.json` limits builds to the three release
 branches (`git.deploymentEnabled`: `main`, `staging`, `production`), so pushing
@@ -477,7 +580,7 @@ copyrighted materials. See [LICENSE](./LICENSE) for the terms.
   product and fur silhouettes are visually equivalent. This is an accepted
   trade-off, not a defect. Note that an earlier edge-sharpness metric reported
   the opposite direction; that was a grid-sampling artifact, corrected in
-  `COLAB_T4_REPORT.md` §5.
+  `PHASE1_REPORT.md` §6.
 - WASM/CPU inference on the 512×512 export takes roughly 3–6 s per image
   (native CPU ~2.2 s), so the CPU path is usable rather than a last resort.
 - A quantised variant was evaluated and rejected: dynamic int8 shrank the file
@@ -490,16 +593,20 @@ copyrighted materials. See [LICENSE](./LICENSE) for the terms.
   worker (whose shared ORT module the aborted run may have corrupted): the page
   discards the worker and retries on a **fresh** one pinned to the CPU (PR #124,
   `HARDWARE_TESTING.md` §8).
-- WebGPU is **on by default when the browser exposes an adapter** (no allowlist).
-  `navigator.gpu` existing + `requestAdapter()` returning an adapter is enough
-  to offer it. A GPU that fails to build/run the session falls back to WASM
-  automatically; a silently-wrong mask (observed on Adreno-6xx) is the reason
-  the fallback path exists, so verify results on a new device before trusting
-  the GPU path (`HARDWARE_TESTING.md` §3, `PHASE1_REPORT.md` §9).
+- WebGPU is **on by default on desktop when a modern hardware adapter passes
+  the gate**; it is always *offered* whenever an adapter exists. On a phone, an
+  adapter the classifier has no evidence for is not the default: the app logs
+  `unverified mobile GPU adapter; defaulting to CPU for reliability` and runs
+  WASM. The GPU stays selectable and `?provider=webgpu` still forces it. A GPU
+  that fails to build/run the session falls back to WASM automatically; a
+  silently-wrong mask (observed on Adreno-6xx) is the reason the fallback path
+  exists, so verify results on a new device before trusting the GPU path
+  (`HARDWARE_TESTING.md` §3, `PHASE1_REPORT.md` §9).
 - WebGPU runs are bounded by a watchdog: 180 s for the first run (it compiles
-  shaders) and 120 s afterwards. A run that never settles would otherwise leave
-  the UI with no output and no error. On timeout the run falls back to WASM.
-  WASM runs are deliberately unbounded — they are slow, not stalled.
+  shaders), then 120 s on desktop and **30 s on a phone** (≈4× the measured
+  6.5–7.3 s warm time). A run that never settles would otherwise leave the UI
+  with no output and no error. On timeout the run falls back to WASM. WASM runs
+  are deliberately unbounded — they are slow, not stalled.
 - The shipped model is float32 internally, so WebGPU no longer depends on the
   adapter's `shader-f16` feature (fp16 emulation was the cause of the Intel
   Gen-9 stalls). The log still reports `shader-f16=yes|no` for the chosen

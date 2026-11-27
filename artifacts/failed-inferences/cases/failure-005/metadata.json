@@ -1,0 +1,52 @@
+{
+  "caseId": "failure-005",
+  "title": "File:Man standing in a tall tree forest (49488603843).jpg",
+  "category": "near-empty-output",
+  "severity": "high",
+  "input": {
+    "source": "eval/images/complex-bg-07.jpg",
+    "title": "File:Man standing in a tall tree forest (49488603843).jpg",
+    "license": "CC BY 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Man_standing_in_a_tall_tree_forest_(49488603843).jpg",
+    "width": 1280,
+    "height": 1707,
+    "sha256_original": "6a5b59424ab6f45f68c510dd1d037133acb641c515bba65c0000c32cbd2b3c9a",
+    "asset_scale": 0.4687
+  },
+  "inference": {
+    "model": "qmix-cut-512",
+    "modelFile": "models/model_512_int8_fp16.onnx",
+    "modelSha256": "10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26",
+    "provider": "wasm",
+    "inputSize": 512
+  },
+  "result": {
+    "foreground_frac": 0.00766,
+    "alpha_max_255": 255,
+    "opaque_fraction": 0.00677,
+    "any_fraction": 0.00973,
+    "empty": false,
+    "verdict": "ok",
+    "rawMask": {
+      "min": 0.0,
+      "mean": 0.00574,
+      "max": 1.0,
+      "below_01_fraction": 0.99379,
+      "above_095_fraction": 0.00506
+    },
+    "bimodalTail": 0.9988
+  },
+  "reproduction": {
+    "status": "reproduced",
+    "method": "shipped model over the eval set, offline CPU (ONNX Runtime)",
+    "command": "python3 scripts/eval/build-failure-gallery.py --model <model.onnx>"
+  },
+  "observedProblem": "Near-empty output: only 0.77% of pixels are kept, so the subject (a person in a forest) is almost entirely removed.",
+  "suspectedCause": "The subject is a small, low-contrast figure against a tall-tree forest, a background with strong vertical texture that the model prefers over the thin human figure.",
+  "investigation": [],
+  "fix": {
+    "implemented": false,
+    "description": null,
+    "passesAfterFix": null
+  }
+}

@@ -81,6 +81,10 @@ is in `PHASE1_REPORT.md` §4.
 - Accepted formats: JPEG, PNG, WebP (MIME checked, extension never trusted).
 - **20 MB** maximum file size; **4096 px** maximum longest side. Both are
   disclosed in the UI and enforced before/after decoding.
+- A photo larger than the device's source cap is reduced on this device before
+  it is read into memory (4096 px on desktop; 3072 px on a phone, or 2048 px on
+  a phone reporting ≤ 2 GB of memory). The Console states the reduction, and the
+  export uses the reduced size. The original is never upscaled.
 - Files that fail validation are rejected with an actionable message; no partial
   or decoded data is retained.
 

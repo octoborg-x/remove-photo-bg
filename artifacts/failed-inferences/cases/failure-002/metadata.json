@@ -1,0 +1,73 @@
+{
+  "caseId": "failure-002",
+  "title": "File:Le Horse White Eagle (i.e. White Horse Eagle, chef am\u00e9rindien Sioux de 107 ans) au Soldat inconnu, 13-12-28 - btv1b532075002.jpg",
+  "category": "empty-output",
+  "severity": "high",
+  "input": {
+    "source": "eval/images/hair-fur-08.jpg",
+    "title": "File:Le Horse White Eagle (i.e. White Horse Eagle, chef am\u00e9rindien Sioux de 107 ans) au Soldat inconnu, 13-12-28 - btv1b532075002.jpg",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Le_Horse_White_Eagle_(i.e._White_Horse_Eagle,_chef_am%C3%A9rindien_Sioux_de_107_ans)_au_Soldat_inconnu,_13-12-28_-_btv1b532075002.jpg",
+    "width": 1280,
+    "height": 917,
+    "sha256_original": "df481237b394a7f6e1e27138661fe4ff5a550f0cc017fec92d23839c581d80ba",
+    "asset_scale": 0.625
+  },
+  "inference": {
+    "model": "qmix-cut-512",
+    "modelFile": "models/model_512_int8_fp16.onnx",
+    "modelSha256": "10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26",
+    "provider": "wasm",
+    "inputSize": 512
+  },
+  "result": {
+    "foreground_frac": 0.0,
+    "alpha_max_255": 0,
+    "opaque_fraction": 0.0,
+    "any_fraction": 0.0,
+    "empty": true,
+    "verdict": "empty",
+    "rawMask": {
+      "min": 0.0,
+      "mean": 1e-05,
+      "max": 5e-05,
+      "below_01_fraction": 1.0,
+      "above_095_fraction": 0.0
+    },
+    "bimodalTail": 1.0
+  },
+  "reproduction": {
+    "status": "reproduced",
+    "method": "shipped model over the eval set, offline CPU (ONNX Runtime)",
+    "command": "python3 scripts/eval/build-failure-gallery.py --model <model.onnx>"
+  },
+  "observedProblem": "Fully transparent output. The subject is removed entirely.",
+  "suspectedCause": "A very dark, historic black-and-white photograph (mean luminance 68/255). The subject is barely separated from an almost-black background, so the mask collapses to empty.",
+  "investigation": [
+    {
+      "lever": "Raw model output",
+      "finding": "min 0.000 / mean 0.00001 / max 0.00005 \u2014 effectively a hard zero."
+    },
+    {
+      "lever": "Model precision",
+      "finding": "fp16 also empty \u2014 not a quantisation artefact."
+    },
+    {
+      "lever": "Input contrast stretch",
+      "finding": "No effect on the mask max."
+    },
+    {
+      "lever": "2x2 tiled inference",
+      "finding": "All four tiles return exactly 0.000."
+    },
+    {
+      "lever": "Post-inference knobs",
+      "finding": "Cannot raise a zero mask."
+    }
+  ],
+  "fix": {
+    "implemented": false,
+    "description": null,
+    "passesAfterFix": null
+  }
+}

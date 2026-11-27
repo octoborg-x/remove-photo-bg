@@ -13,6 +13,7 @@
 
 import { resizeMaskFloat, type ResizeInterpolation } from './mask-resize';
 import { guidedFilter } from './guided-filter';
+import { DEFAULT_ISLAND_CLEANUP, ISLAND_CLEANUP_FRACTIONS, islandFraction } from './island-cleanup';
 import type { FastRefinementConfig } from './refinement-config';
 
 export interface RefineHooks {
@@ -68,9 +69,47 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : Number.isFinite(v) ? v : 0;
 }
 
-/** Smallest isolated island worth keeping, scaled to the image size. */
-export function minIslandArea(width: number, height: number): number {
-  return Math.max(16, Math.round(width * height * 2e-5));
+/**
+ * Smallest isolated island worth keeping, as a fraction of the **output** image
+ * area, for the default (`fine`) cleanup variant. The Stage-4 cleanup uses the
+ * fraction of the selected `cleanup.islandCleanup` variant (see
+ * `island-cleanup.ts`); the accuracy benchmark's speckle gate
+ * (`scripts/eval/quality_metrics.py`, `SPECKLE_ISLAND_FRACTION`) counts islands
+ * below the `strict` variant, and `threshold-sync.test.ts` plus
+ * `accuracy-benchmark.py --self-test` fail if the numbers drift apart. See
+ * `docs/accuracy-benchmark.md` §3.8.
+ *
+ * 2e-5 (0.002 % of the frame) is the original Stage-4 bar: on a 1920x2939 photo
+ * it is ~113 px, i.e. a ~11 px square. It drops grain and 1-2 px flecks while
+ * keeping small deliberate detail — a distant earring, a thin stem, a detached
+ * product part. Only *disconnected* blobs below it are dropped.
+ */
+export const MIN_ISLAND_FRACTION = ISLAND_CLEANUP_FRACTIONS[DEFAULT_ISLAND_CLEANUP];
+
+/** The `strict` variant: 5e-4 of the frame, the bar the benchmark counts as
+ *  speckle. On a 1920x2939 photo it is ~2800 px (a ~53 px square), so only
+ *  parts a buyer would read as product survive. */
+export const MIN_ISLAND_FRACTION_STRICT = ISLAND_CLEANUP_FRACTIONS.strict;
+
+/** Absolute floor, in output pixels, so 1-2 px specks go even on thumbnails. */
+const MIN_ISLAND_PIXELS = 16;
+
+/**
+ * Island-area bar in the pixel grid being cleaned, `width * height`.
+ * `referenceArea` is the **output** image area; Stage 4 may run on a copy
+ * downscaled to `performance.maxProcessingPixels`, so the bar is rescaled into
+ * that grid instead of being recomputed from it. The effective fraction is
+ * therefore identical at any working resolution. `fraction` is the selected
+ * island-cleanup variant (defaults to `fine`).
+ */
+export function minIslandArea(
+  width: number,
+  height: number,
+  referenceArea: number = width * height,
+  fraction: number = MIN_ISLAND_FRACTION,
+): number {
+  const bar = Math.max(MIN_ISLAND_PIXELS, referenceArea * fraction);
+  return Math.max(1, Math.round((bar * width * height) / referenceArea));
 }
 
 /**
@@ -243,7 +282,15 @@ export async function refineMask(input: RefineInput, hooks: RefineHooks = {}): P
   const tClean = now();
   if (config.enabled && config.cleanup.enabled) {
     if (config.cleanup.removeTinyIsolatedNoise) {
-      removeTinyIslands(alpha, workW, workH, minIslandArea(workW, workH));
+      // `pixels` is the output area, not the (possibly downscaled) work area:
+      // the island bar is defined on the delivered image so a downscale cannot
+      // silently change it. See minIslandArea() and docs/accuracy-benchmark.md.
+      removeTinyIslands(
+        alpha,
+        workW,
+        workH,
+        minIslandArea(workW, workH, pixels, islandFraction(config.cleanup.islandCleanup)),
+      );
     }
     smoothTransitionZone(alpha, guide, workW, workH, Math.max(2, config.edgeRefinement.radius >> 1));
     const lo = config.cleanup.minAlpha;

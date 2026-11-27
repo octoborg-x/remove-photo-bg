@@ -1,0 +1,73 @@
+{
+  "caseId": "failure-001",
+  "title": "File:Black and white picture of a horse on a river bank. Houses and vehicles in the background (51151104640).jpg",
+  "category": "empty-output",
+  "severity": "high",
+  "input": {
+    "source": "eval/images/hair-fur-07.jpg",
+    "title": "File:Black and white picture of a horse on a river bank. Houses and vehicles in the background (51151104640).jpg",
+    "license": "CC BY 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Black_and_white_picture_of_a_horse_on_a_river_bank._Houses_and_vehicles_in_the_background_(51151104640).jpg",
+    "width": 1280,
+    "height": 959,
+    "sha256_original": "723caee791873c30d1fc1ae911b94686651decfa91bc74e7d2e5f9058bfa6eff",
+    "asset_scale": 0.625
+  },
+  "inference": {
+    "model": "qmix-cut-512",
+    "modelFile": "models/model_512_int8_fp16.onnx",
+    "modelSha256": "10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26",
+    "provider": "wasm",
+    "inputSize": 512
+  },
+  "result": {
+    "foreground_frac": 0.0,
+    "alpha_max_255": 0,
+    "opaque_fraction": 0.0,
+    "any_fraction": 0.0,
+    "empty": true,
+    "verdict": "empty",
+    "rawMask": {
+      "min": 0.0,
+      "mean": 1e-05,
+      "max": 2e-05,
+      "below_01_fraction": 1.0,
+      "above_095_fraction": 0.0
+    },
+    "bimodalTail": 1.0
+  },
+  "reproduction": {
+    "status": "reproduced",
+    "method": "shipped model over the eval set, offline CPU (ONNX Runtime)",
+    "command": "python3 scripts/eval/build-failure-gallery.py --model <model.onnx>"
+  },
+  "observedProblem": "The model returned a fully transparent mask: nothing of the subject survives. Every pixel is alpha 0.",
+  "suspectedCause": "A black-and-white, low-contrast frame (a pale horse on a pale river bank). With no colour cue and little luminance separation between subject and background, the model finds no confident foreground.",
+  "investigation": [
+    {
+      "lever": "Raw model output",
+      "finding": "min 0.000 / mean 0.000 / max 0.000 \u2014 a hard zero, not a low-confidence mask."
+    },
+    {
+      "lever": "Model precision",
+      "finding": "The fp16 variant (model_512_int0_fp16.onnx) also returns empty, so this is not an int8 quantisation artefact."
+    },
+    {
+      "lever": "Input contrast stretch",
+      "finding": "Per-channel histogram stretch before inference leaves the mask max unchanged."
+    },
+    {
+      "lever": "2x2 tiled inference",
+      "finding": "All four tiles return exactly 0.000 \u2014 a closer view does not help."
+    },
+    {
+      "lever": "Post-inference knobs",
+      "finding": "Threshold, feather and the refinement config all operate on a zero mask and cannot raise it."
+    }
+  ],
+  "fix": {
+    "implemented": false,
+    "description": null,
+    "passesAfterFix": null
+  }
+}

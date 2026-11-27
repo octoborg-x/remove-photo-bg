@@ -5,24 +5,97 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <title>SmartCutAI — World-Class In-Browser AI Background Remover</title>
+    <title>SmartCutAI — In-Browser AI Background Remover, No Upload</title>
     <meta
       name="description"
-      content="SmartCutAI removes backgrounds from photos entirely inside your browser. Download transparent PNGs or white-background JPGs with zero uploads, total privacy, and neural AI precision."
+      content="Remove backgrounds from product photos right in your browser — no upload, no account, no watermark. Free PNG, JPG, or WebP exports."
     />
-    <!-- Theme bootstrap: apply a stored light/dark override before the first
-         paint (no flash). With no override the page follows the operating
-         system through `color-scheme`. Kept as a same-origin file so the
-         strict `script-src 'self'` policy allows it. -->
+    <meta property="og:title" content="SmartCutAI — In-Browser AI Background Remover, No Upload" />
+    <meta
+      property="og:description"
+      content="Remove backgrounds from product photos right in your browser — no upload, no account, no watermark. Free PNG, JPG, or WebP exports."
+    />
+    <!-- Structured data: product + FAQ (SEO and generative-engine discoverability). -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "name": "SmartCutAI",
+            "applicationCategory": "MultimediaApplication",
+            "operatingSystem": "Any modern browser",
+            "url": "https://remove-photo-bg.vercel.app/",
+            "description": "In-browser AI background remover for product photos. Images are processed on-device with WebGPU or SIMD WebAssembly and are never uploaded.",
+            "featureList": [
+              "On-device background removal",
+              "Tiled inference",
+              "Guided-filter edge refinement",
+              "Flood-mask recovery",
+              "Island and contour cleanup",
+              "Transparent PNG, JPG and WebP export",
+              "Batch processing of up to 5 photos"
+            ],
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "How accurate is it?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "59 of 64 test photos produced a usable cut-out on the first pass, and all 64 processed with no errors. Dark or very busy backgrounds can return an empty result; the built-in retouch brush fixes those."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is my photo uploaded to any server or cloud database?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. SmartCutAI is fully client-side; the model runs in your browser's WebAssembly or WebGPU sandbox and you can run it offline once cached."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Why is there a one-time download when opening the app?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "The quantized model weights (~58 MB) download once on the first visit and persist in the browser Cache API, so later visits launch with no network download."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Do I need a discrete graphics card (GPU)?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. It runs on standard CPUs via multi-threaded WebAssembly SIMD and uses hardware WebGPU acceleration when a desktop GPU is available."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What image file formats and resolutions are supported?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "PNG, JPEG and WebP up to 20 MB and 4096 px on the longest side; exports include transparent PNG, white-background JPG and compressed WebP."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+    <!-- Same-origin pre-paint theme bootstrap (`script-src 'self'`). -->
     <script src="./theme-init.js"></script>
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-blue-500/15 selection:text-blue-900">
-    <!-- Floating notifications host -->
-    <div id="toastHost" class="toastHost" aria-live="polite" aria-atomic="false"></div>
+    <!-- Floating notifications host. -->
+    <div id="toastHost" class="toastHost" aria-live="polite" aria-atomic="false">
+      <div id="recovery" class="recovery rounded-xl p-4 bg-red-50 border border-red-200 text-red-900 text-sm" hidden></div>
+    </div>
 
-    <!-- Analytics consent banner. Shown only while no decision is recorded and
-         only when an analytics endpoint is configured (see main.ts). The choice
-         is remembered; it can be changed any time from the footer. -->
+    <!-- Analytics consent banner (shown only when VITE_ANALYTICS_ENDPOINT is configured). -->
     <div id="consentBanner" class="consentBanner" role="region" aria-label="Analytics consent" hidden>
       <p class="consentText">
         We use privacy-first, first-party analytics to see which pages work and whether image
@@ -35,18 +108,22 @@
       </div>
     </div>
 
-    <!-- Top Navigation Bar: 3-Zone Contract -->
-    <header id="siteHeader" class="siteHeader sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/80 transition-all" data-collapsed="false">
-      <div class="siteHeaderInner max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-8 header-stagger">
-        <!-- Zone 1: Brand — full lockup at rest, figure-only once the page scrolls -->
+    <!-- 3-Zone Glassmorphic Light Header -->
+    <header
+      id="siteHeader"
+      class="siteHeader sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/80 shadow-float transition-all"
+      data-collapsed="false"
+    >
+      <div class="siteHeaderInner max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-6 header-stagger">
+        <!-- Zone 1: Brand lockup (crossfades to mark on downward scroll) -->
         <a
           id="brandLink"
           href="/"
           data-collapsed="false"
           aria-label="SmartCutAI home"
-          class="flex items-center shrink-0 group focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-xl p-1"
+          class="flex items-center shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 rounded-lg py-1"
         >
-          <span class="brandStack h-9 sm:h-10">
+          <span class="brandStack h-8 sm:h-9">
             <img
               id="brandLockup"
               src="./assets/brand/smartcutai-lockup.png"
@@ -70,49 +147,63 @@
           </span>
         </a>
 
-        <!-- Zone 2: Navigation Links -->
-        <nav class="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600">
-          <a href="#studio" class="hover:text-blue-600 transition-colors whitespace-nowrap">Studio</a>
-          <a href="#showcase" class="hover:text-blue-600 transition-colors whitespace-nowrap">Showcase</a>
-          <a href="#how" class="hover:text-blue-600 transition-colors whitespace-nowrap">How It Works</a>
-          <a href="#benchmarks" class="hover:text-blue-600 transition-colors whitespace-nowrap">Benchmarks</a>
-          <a href="#support" class="hover:text-blue-600 transition-colors whitespace-nowrap">What's Supported</a>
-          <a href="#faq" class="hover:text-blue-600 transition-colors whitespace-nowrap">FAQ</a>
+        <!-- Zone 2: Minimal Single-Line Navigation -->
+        <nav class="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600" aria-label="Primary navigation">
+          <a href="#showcase" class="hover:text-slate-900 transition-colors whitespace-nowrap">Showcase</a>
+          <a href="#how" class="hover:text-slate-900 transition-colors whitespace-nowrap">Architecture</a>
+          <a href="#benchmarks" class="hover:text-slate-900 transition-colors whitespace-nowrap">Benchmarks</a>
+          <a href="#support" class="hover:text-slate-900 transition-colors whitespace-nowrap">Capabilities</a>
+          <a href="#faq" class="hover:text-slate-900 transition-colors whitespace-nowrap">FAQ</a>
         </nav>
 
-        <!-- Zone 3: Primary Action -->
-        <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <!-- Zone 3: Command Search Trigger, Theme Toggle & Obsidian Primary CTA -->
+        <div class="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            data-cmd-open
+            aria-label="Open command search (Command K)"
+            class="hidden lg:inline-flex items-center gap-2.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-100/70 hover:bg-slate-100 hover:border-slate-300 text-xs text-slate-500 transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          >
+            <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <span>Quick actions</span>
+            <kbd class="cmdKbd">⌘K</kbd>
+          </button>
+
           <button id="themeToggle" type="button" class="themeToggle" aria-label="Switch colour theme">
-            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="4" />
               <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
             </svg>
-            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
           </button>
+
           <button
             id="studioLaunch"
             type="button"
-            class="studioLaunchBtn inline-flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-semibold text-on-accent bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-sm hover:shadow-md hover:from-blue-700 hover:to-indigo-700 transition-all whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="studioLaunchBtn btn-obsidian inline-flex items-center justify-center h-9 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
           >
-            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-              <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-              <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
-              <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="3" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="m21 15-5-5L5 21" />
             </svg>
-            <span class="studioLaunchText">Studio</span>
+            <span class="studioLaunchText">Open Studio</span>
           </button>
+
           <button
             id="menuToggle"
             type="button"
-            class="menuToggle"
+            class="menuToggle md:hidden"
             aria-label="Open menu"
             aria-expanded="false"
             aria-controls="menuPanel"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
               <line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" />
             </svg>
           </button>
@@ -120,21 +211,22 @@
       </div>
     </header>
 
-    <!-- Slide-in menu: navigation + user profile + theme mode -->
+    <!-- Slide-in Menu Drawer (mobile nav + theme preference + session info) -->
     <div id="menuScrim" class="menuScrim" hidden></div>
     <aside id="menuPanel" class="menuPanel" aria-hidden="true" aria-label="Site menu">
       <div class="menuHead">
-        <span class="menuTitle">Menu</span>
+        <span class="menuTitle">Navigation</span>
         <button id="menuClose" type="button" class="menuClose" aria-label="Close menu">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
             <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
           </svg>
         </button>
       </div>
       <nav class="menuNav" aria-label="Menu navigation">
         <a href="#showcase" class="menuNavLink">Showcase</a>
-        <a href="#how" class="menuNavLink">How It Works</a>
+        <a href="#how" class="menuNavLink">Architecture</a>
         <a href="#benchmarks" class="menuNavLink">Benchmarks</a>
+        <a href="#support" class="menuNavLink">Capabilities</a>
         <a href="#faq" class="menuNavLink">FAQ</a>
         <button type="button" class="menuNavLink menuNavAction" data-studio-launch>Open Studio</button>
       </nav>
@@ -142,12 +234,12 @@
         <div class="menuProfile">
           <span class="menuAvatar" aria-hidden="true">SC</span>
           <span class="menuProfileText">
-            <strong>Guest</strong>
-            <small>Local-only session</small>
+            <strong>Local Session</strong>
+            <small>Zero-upload browser runtime</small>
           </span>
         </div>
         <div class="menuThemeRow">
-          <span class="menuThemeLabel">Theme mode</span>
+          <span class="menuThemeLabel">Appearance</span>
           <div class="menuThemeModes" role="radiogroup" aria-label="Colour theme mode">
             <button type="button" class="menuThemeMode" data-theme-mode="light" aria-pressed="false">Light</button>
             <button type="button" class="menuThemeMode" data-theme-mode="dark" aria-pressed="false">Dark</button>
@@ -157,136 +249,794 @@
       </div>
     </aside>
 
-    <main class="space-y-24 pb-28">
-      <!-- Hero Section -->
-      <section class="relative pt-12 pb-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto overflow-hidden text-center">
-        <!-- Subtle ambient background glow -->
-        <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-[650px] h-[350px] bg-gradient-to-r from-cyan-400/20 via-blue-500/20 to-purple-500/20 blur-3xl rounded-full pointer-events-none -z-10"></div>
+    <!-- Main Content -->
+    <main class="space-y-20 lg:space-y-24 pb-24">
+      <!-- Hero / Primary Workspace Canvas -->
+      <section class="pt-7 sm:pt-10 pb-2 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+        <div class="max-w-3xl mx-auto text-center">
+          <p class="text-[11px] sm:text-xs font-mono uppercase tracking-[0.14em] text-slate-500 mb-3">
+            On-Device BiRefNet · WebGPU &amp; SIMD WASM · Background Model 512 (INT8/FP16)
+          </p>
 
-        <div class="heroTagline mb-6">
-          <div class="heroTaglineTrack" aria-label="100% In-Browser · Zero Data Uploads · Private Neural Engine">
-            <span class="heroTaglineText text-xs sm:text-sm uppercase tracking-wide text-slate-500/70" aria-hidden="true">
-              100% In-Browser · Zero Data Uploads · Private Neural Engine
-            </span>
-            <span class="heroTaglineText text-xs sm:text-sm uppercase tracking-wide text-slate-500/70" aria-hidden="true">
-              100% In-Browser · Zero Data Uploads · Private Neural Engine
-            </span>
+          <h1 class="text-4xl sm:text-5xl lg:text-[3.25rem] font-bold text-slate-900 tracking-[-0.03em] leading-[1.08] text-balance">
+            Cut out backgrounds without ever uploading a photo.
+          </h1>
+
+          <p class="mt-4 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto text-balance leading-relaxed">
+            Clean cut-outs for product photos, done right in your browser. No account, no credit packs, no watermark —
+            your photo never touches a server.
+          </p>
+
+          <div class="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              id="studioLaunchHero"
+              type="button"
+              data-studio-launch
+              class="btn-obsidian inline-flex items-center gap-2 h-11 px-6 rounded-lg font-medium text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+            >
+              <span>Open Studio</span>
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+            </button>
+            <a
+              href="#showcase"
+              class="btn-surface inline-flex items-center gap-2 h-11 px-5 rounded-lg font-medium text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            >
+              Inspect Live Cut-Outs
+            </a>
+            <button
+              type="button"
+              data-cmd-open
+              class="lg:hidden btn-surface inline-flex items-center gap-2 h-11 px-4 rounded-lg font-medium text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            >
+              <span>Commands</span>
+              <kbd class="cmdKbd">⌘K</kbd>
+            </button>
           </div>
-        </div>
 
-        <h1 class="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight text-balance max-w-4xl mx-auto leading-tight">
-          Professional Background Removal with
-          <span class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-            Studio AI Precision
-          </span>
-        </h1>
-
-        <p class="mt-5 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto text-balance leading-relaxed">
-          Drop any product photo, portrait, or complex image to generate razor-sharp transparent cut-outs instantly.
-          Powered by on-device BiRefNet INT8/FP16 WebAssembly &amp; WebGPU.
-        </p>
-
-        <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <button
-            id="studioLaunchHero"
-            type="button"
-            data-studio-launch
-            class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-on-accent font-semibold text-sm shadow-md hover:shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-              <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-              <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
-              <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
-            </svg>
-            Start Removing Backgrounds
-          </button>
-          <a
-            href="#showcase"
-            class="px-6 py-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm border border-slate-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-300"
-          >
-            View Interactive Showcase
-          </a>
-        </div>
-
-        <!-- Trust Badges Strip -->
-        <div class="mt-12 pt-8 border-t border-slate-200/80 flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-xs sm:text-sm font-medium text-slate-500">
-          <div class="flex items-center gap-2">
-            <span class="text-emerald-500 font-bold">✓</span>
-            <span>Photos Never Leave Device</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-emerald-500 font-bold">✓</span>
-            <span>Zero Account Required</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-emerald-500 font-bold">✓</span>
-            <span>GPU &amp; CPU Acceleration</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-emerald-500 font-bold">✓</span>
-            <span>Transparent PNG · JPG · WebP</span>
-          </div>
-        </div>
-      </section>
-
-
-      <!-- How It Works Flow -->
-      <section id="how" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-        <div class="text-center max-w-2xl mx-auto mb-14">
-          <span class="text-xs font-bold text-blue-600 tracking-wider uppercase mb-2 block">Architecture Flow</span>
-          <h2 class="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-            How SmartCutAI Works In Your Browser
-          </h2>
-          <p class="text-sm sm:text-base text-slate-600 mt-3">
-            A frictionless pipeline engineered for high performance, device autonomy, and uncompromising privacy.
+          <p class="mt-4 text-xs sm:text-sm text-slate-500 font-medium">
+            Your photo never leaves this device · Up to 20 MB &amp; 4096 px · PNG, JPG &amp; WebP export · Processes up to 5 photos at once
           </p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm mb-4">01</div>
-            <h3 class="text-base font-bold text-slate-900 mb-2">Drop Photo</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              Accepts PNG, JPG, or WebP up to 20 MB and 4096 px. Decoded directly into local canvas memory without sending a single byte over the network.
-            </p>
+        <!-- Interactive App Shell Preview -->
+        <div class="heroShell mt-7">
+          <div class="heroShellBar">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-white border border-slate-200 text-slate-700 shrink-0">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="18" rx="3" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <path d="m21 15-5-5L5 21" />
+                </svg>
+              </span>
+              <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 min-w-0">
+                <span id="heroShellFilename" class="font-mono text-xs font-medium text-slate-900 truncate">perfume-bottle.webp</span>
+                <span id="heroShellMeta" class="font-mono text-[11px] text-slate-500 tabular-nums">384 × 512 · Product Silhouette</span>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="heroSampleTabs" role="tablist" aria-label="Preview sample selector">
+                <button type="button" class="heroSampleTab is-active" role="tab" aria-selected="true" data-hero-sample="product">Product</button>
+                <button type="button" class="heroSampleTab" role="tab" aria-selected="false" data-hero-sample="fur">Hair &amp; Fur</button>
+                <button type="button" class="heroSampleTab" role="tab" aria-selected="false" data-hero-sample="glass">Glass</button>
+              </div>
+              <button
+                id="heroRunSample"
+                type="button"
+                class="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-blue-600 hover:bg-blue-700 text-on-accent text-xs font-medium transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                <span>Run in Studio</span>
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
+                </svg>
+              </button>
+            </div>
           </div>
 
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm mb-4">02</div>
-            <h3 class="text-base font-bold text-slate-900 mb-2">Neural Segmentation</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              BiRefNet Lite runs via onnxruntime-web. The model executes with WebGPU when hardware acceleration is present, falling back to multi-threaded SIMD WASM.
-            </p>
-          </div>
-
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm mb-4">03</div>
-            <h3 class="text-base font-bold text-slate-900 mb-2">Alpha Refinement</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              Probability tensors upscale back to your image's full native resolution. Threshold cut-off and feather radii are tunable in real time.
-            </p>
-          </div>
-
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm mb-4">04</div>
-            <h3 class="text-base font-bold text-slate-900 mb-2">Lossless Export</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              Download clean transparent PNGs, marketplace studio-white JPGs, or compact WebPs. Zero watermarks, zero limits.
-            </p>
+          <div class="p-3 sm:p-4 bg-white">
+            <figure
+              id="heroCompareStage"
+              class="heroCompareFigure compare max-w-[19rem] sm:max-w-[20.5rem] mx-auto"
+              data-compare
+              data-pos="50"
+            >
+              <div class="compareStage">
+                <img
+                  id="heroCompareBefore"
+                  class="compareImg compareBefore"
+                  src="./demo/perfume-bottle-before.webp"
+                  alt="Original photo of an amber perfume bottle on a marble table"
+                />
+                <img
+                  id="heroCompareAfter"
+                  class="compareImg compareAfter"
+                  src="./demo/perfume-bottle-after.webp"
+                  alt="Perfume bottle cut-out with background removed on transparency grid"
+                />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <div class="mt-3 flex items-center gap-4">
+                <span class="font-mono text-[11px] uppercase tracking-wider text-slate-400 shrink-0">Original</span>
+                <input
+                  class="compareRange"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="50"
+                  aria-label="Drag to compare original photo and cut-out result"
+                />
+                <span class="font-mono text-[11px] uppercase tracking-wider text-blue-600 shrink-0">Cut-Out</span>
+              </div>
+            </figure>
           </div>
         </div>
       </section>
 
-      <!-- What's Supported (plain-language capability reference) -->
+      <!-- Bento Feature & Architecture Grid (Asymmetric 12-Column) -->
+      <section id="how" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
+        <div class="max-w-2xl mb-10">
+          <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">01 · Architecture</p>
+          <h2 class="text-2xl sm:text-4xl font-bold text-slate-900 tracking-[-0.025em] text-balance">
+            What happens when you drop in a photo.
+          </h2>
+          <p class="text-sm sm:text-base text-slate-600 mt-2.5 leading-relaxed">
+            Four steps, start to finish — reading the file, running the model, sharpening the edges, and exporting the
+            result — all inside your browser. Nothing goes over the network.
+          </p>
+          <p class="font-mono text-[11px] text-slate-400 mt-2.5">
+            Tiled inference · guided-filter edge refinement · flood-mask recovery · island/contour cleanup
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <!-- Left 7 cols: 4-step workflow grid -->
+          <div class="lg:col-span-7 saas-card p-6 sm:p-7 flex flex-col justify-between">
+            <div class="flex items-center justify-between gap-4 pb-5 mb-5 border-b border-slate-200/80">
+              <div>
+                <h3 class="text-base font-semibold text-slate-900">On-Device Inference Flow</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Background Model 512 (INT8/FP16) · ~58 MB cached once</p>
+                <p class="font-mono text-[10px] text-slate-400 mt-0.5">birefnet-lite-engine-512-int8-fp16</p>
+              </div>
+              <span class="font-mono text-xs text-slate-500 tabular-nums whitespace-nowrap">WebGPU → SIMD WASM</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div class="saas-well p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <svg class="w-4 h-4 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  <span class="font-mono text-[11px] text-slate-400 tabular-nums">01</span>
+                </div>
+                <h4 class="text-sm font-semibold text-slate-900">Local Canvas Decode</h4>
+                <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Reads PNG, JPG, and WebP up to 20 MB / 4096 px directly into ImageData with automatic mobile memory caps.
+                </p>
+              </div>
+
+              <div class="saas-well p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <svg class="w-4 h-4 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                    <rect x="9" y="9" width="6" height="6" />
+                    <path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2" />
+                  </svg>
+                  <span class="font-mono text-[11px] text-slate-400 tabular-nums">02</span>
+                </div>
+                <h4 class="text-sm font-semibold text-slate-900">Hardware-Gated Matting</h4>
+                <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Detects real WebGPU adapters; routes slow/software renderers to multi-threaded SIMD WASM automatically.
+                </p>
+              </div>
+
+              <div class="saas-well p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <svg class="w-4 h-4 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
+                    <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+                    <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+                    <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
+                  </svg>
+                  <span class="font-mono text-[11px] text-slate-400 tabular-nums">03</span>
+                </div>
+                <h4 class="text-sm font-semibold text-slate-900">Guided Edge Refinement</h4>
+                <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Progressive worker sharpens borders against source luminance with tunable threshold, feather, tiling, and brush retouch.
+                </p>
+              </div>
+
+              <div class="saas-well p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <svg class="w-4 h-4 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  <span class="font-mono text-[11px] text-slate-400 tabular-nums">04</span>
+                </div>
+                <h4 class="text-sm font-semibold text-slate-900">Native-Res Strip Export</h4>
+                <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Composites off-main-thread in bounded strips so large 4K cut-outs stay responsive and export without watermarks.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right 5 cols: Interactive Format & Limits Bento -->
+          <div class="lg:col-span-5 saas-card p-6 sm:p-7 flex flex-col justify-between gap-4">
+            <div class="space-y-4">
+              <div class="flex items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+                <h3 class="text-base font-semibold text-slate-900">Export Format Matrix</h3>
+                <div class="heroSampleTabs" role="tablist" aria-label="Output format preview">
+                  <button type="button" class="bentoFormatTab is-active" role="tab" aria-selected="true" data-format-tab="png">PNG</button>
+                  <button type="button" class="bentoFormatTab" role="tab" aria-selected="false" data-format-tab="jpg">JPG</button>
+                  <button type="button" class="bentoFormatTab" role="tab" aria-selected="false" data-format-tab="webp">WebP</button>
+                </div>
+              </div>
+
+              <div class="saas-well p-4">
+                <p id="bentoFormatTitle" class="font-mono text-xs font-semibold text-slate-900">PNG · Lossless RGBA</p>
+                <p id="bentoFormatDetail" class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                  Preserves full 8-bit alpha channel for crisp overlays and design tools.
+                </p>
+                <dl class="mt-4 pt-3 border-t border-slate-200/80 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <dt class="text-[11px] text-slate-400 uppercase tracking-wider font-mono">Alpha Support</dt>
+                    <dd id="bentoFormatAlpha" class="font-medium text-slate-800 mt-0.5">True Transparency</dd>
+                  </div>
+                  <div>
+                    <dt class="text-[11px] text-slate-400 uppercase tracking-wider font-mono">Best For</dt>
+                    <dd id="bentoFormatUseCase" class="font-medium text-slate-800 mt-0.5">Figma, Canva, Web UI, Print</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div class="divide-y divide-slate-200/70 text-xs px-1">
+                <div class="py-2 flex items-center justify-between gap-3">
+                  <span class="text-slate-600">Canvas compositing</span>
+                  <span class="font-mono text-slate-900 tabular-nums">Off-main-thread strips</span>
+                </div>
+                <div class="py-2 flex items-center justify-between gap-3">
+                  <span class="text-slate-600">Background fill</span>
+                  <span class="font-mono text-slate-900">Alpha · Custom · Eyedropper</span>
+                </div>
+                <div class="py-2 flex items-center justify-between gap-3">
+                  <span class="text-slate-600">Mask refinement</span>
+                  <span class="font-mono text-slate-900">Threshold · Feather · Brush</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+              <div class="border border-slate-200/80 rounded-lg p-3 bg-white">
+                <p class="font-mono text-base font-bold text-slate-900 tabular-nums">20 MB</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Max input file</p>
+              </div>
+              <div class="border border-slate-200/80 rounded-lg p-3 bg-white">
+                <p class="font-mono text-base font-bold text-slate-900 tabular-nums">4096 px</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Max long side</p>
+              </div>
+              <div class="border border-slate-200/80 rounded-lg p-3 bg-white">
+                <p class="font-mono text-base font-bold text-blue-600 tabular-nums">5× ZIP</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Batch studio queue</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Benchmarks & Measured Parity (Clean Light Analytical Grid) -->
+      <section id="benchmarks" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
+        <div class="saas-card p-6 sm:p-10">
+          <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-8 border-b border-slate-200/80">
+            <div class="max-w-2xl">
+              <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">02 · Measured Evaluation</p>
+              <h2 class="text-2xl sm:text-3xl font-bold text-slate-900 tracking-[-0.025em] text-balance">
+                Benchmarked on 64 licence-verified photos.
+              </h2>
+              <p class="text-sm text-slate-600 mt-2 leading-relaxed">
+                Every figure comes from the repository’s real Chromium WASM harness and model parity evaluation against
+                the FP32 teacher baseline.
+              </p>
+            </div>
+            <div class="font-mono text-xs text-slate-500 tabular-nums">
+              Artifact SHA-256 pinned · 8 categories × 8 images
+            </div>
+          </div>
+
+          <!-- Top 4 Tabular Metrics -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-6 py-8 border-b border-slate-200/80">
+            <div>
+              <p class="font-mono text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight tabular-nums">~4s</p>
+              <p class="text-xs font-medium text-slate-600 mt-1">Mean CPU inference</p>
+              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">3.6–4.0s desktop, ~6.9s on phone</p>
+            </div>
+            <div>
+              <p class="font-mono text-3xl sm:text-4xl font-bold text-blue-600 tracking-tight tabular-nums">0.9987</p>
+              <p class="text-xs font-medium text-slate-600 mt-1">Parity with the FP32 teacher</p>
+              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">same architecture, INT8/FP16 vs. full precision</p>
+            </div>
+            <div>
+              <p class="font-mono text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight tabular-nums">0 B</p>
+              <p class="text-xs font-medium text-slate-600 mt-1">Image bytes ever uploaded</p>
+              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">no image-upload code path in the app</p>
+            </div>
+            <div>
+              <p class="font-mono text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight tabular-nums">59 / 64</p>
+              <p class="text-xs font-medium text-slate-600 mt-1">Usable cut-out on the first pass</p>
+              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">64 / 64 processed with no errors</p>
+            </div>
+          </div>
+
+          <!-- Asymmetric 12-Col Breakdown -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-8">
+            <div class="lg:col-span-7">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-slate-900">Boundary Contrast by Category (64-Image Suite)</h3>
+                <span class="font-mono text-[11px] text-slate-400 tabular-nums">Mean |∂α| · Edge sharpness</span>
+              </div>
+              <div class="space-y-2.5">
+                <div class="grid grid-cols-12 items-center gap-3 text-xs">
+                  <span class="col-span-4 font-mono text-slate-600 truncate">thin-structure</span>
+                  <div class="col-span-6 h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-blue-600 rounded-full" style="width: 93%"></div></div>
+                  <span class="col-span-2 text-right font-mono text-slate-900 tabular-nums">0.233</span>
+                </div>
+                <div class="grid grid-cols-12 items-center gap-3 text-xs">
+                  <span class="col-span-4 font-mono text-slate-600 truncate">ordinary-product</span>
+                  <div class="col-span-6 h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-slate-900 rounded-full" style="width: 88%"></div></div>
+                  <span class="col-span-2 text-right font-mono text-slate-900 tabular-nums">0.220</span>
+                </div>
+                <div class="grid grid-cols-12 items-center gap-3 text-xs">
+                  <span class="col-span-4 font-mono text-slate-600 truncate">glass-transparent</span>
+                  <div class="col-span-6 h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-blue-600 rounded-full" style="width: 85%"></div></div>
+                  <span class="col-span-2 text-right font-mono text-slate-900 tabular-nums">0.212</span>
+                </div>
+                <div class="grid grid-cols-12 items-center gap-3 text-xs">
+                  <span class="col-span-4 font-mono text-slate-600 truncate">accessory</span>
+                  <div class="col-span-6 h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-slate-900 rounded-full" style="width: 84%"></div></div>
+                  <span class="col-span-2 text-right font-mono text-slate-900 tabular-nums">0.209</span>
+                </div>
+                <div class="grid grid-cols-12 items-center gap-3 text-xs">
+                  <span class="col-span-4 font-mono text-slate-600 truncate">complex-bg</span>
+                  <div class="col-span-6 h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-slate-700 rounded-full" style="width: 75%"></div></div>
+                  <span class="col-span-2 text-right font-mono text-slate-900 tabular-nums">0.187</span>
+                </div>
+                <div class="grid grid-cols-12 items-center gap-3 text-xs">
+                  <span class="col-span-4 font-mono text-slate-600 truncate">clothing</span>
+                  <div class="col-span-6 h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-slate-700 rounded-full" style="width: 67%"></div></div>
+                  <span class="col-span-2 text-right font-mono text-slate-900 tabular-nums">0.166</span>
+                </div>
+                <div class="grid grid-cols-12 items-center gap-3 text-xs">
+                  <span class="col-span-4 font-mono text-slate-600 truncate">hair-fur</span>
+                  <div class="col-span-6 h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-blue-500 rounded-full" style="width: 63%"></div></div>
+                  <span class="col-span-2 text-right font-mono text-slate-900 tabular-nums">0.156</span>
+                </div>
+                <div class="grid grid-cols-12 items-center gap-3 text-xs">
+                  <span class="col-span-4 font-mono text-slate-600 truncate">large (1920 px)</span>
+                  <div class="col-span-6 h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-slate-500 rounded-full" style="width: 48%"></div></div>
+                  <span class="col-span-2 text-right font-mono text-slate-900 tabular-nums">0.120</span>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500 mt-4 leading-relaxed">
+                Thin structures and ordinary products score highest for edge sharpness in the 64-image suite.
+              </p>
+            </div>
+
+            <div class="lg:col-span-5 saas-well p-5 flex flex-col justify-between gap-4">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Deterministic Hardware Routing</h3>
+                <p class="text-xs text-slate-600 mt-1">
+                  Transparent runtime selection with manual override in Studio Engine Controls.
+                </p>
+              </div>
+              <div class="divide-y divide-slate-200/80 text-xs">
+                <div class="py-2.5 flex items-center justify-between gap-3">
+                  <span class="font-medium text-slate-800">Hardware WebGPU</span>
+                  <span class="font-mono text-blue-600">Auto-default on desktop GPU</span>
+                </div>
+                <div class="py-2.5 flex items-center justify-between gap-3">
+                  <span class="font-medium text-slate-800">SIMD Multi-Thread WASM</span>
+                  <span class="font-mono text-slate-500">Safe CPU &amp; mobile default</span>
+                </div>
+                <div class="py-2.5 flex items-center justify-between gap-3">
+                  <span class="font-medium text-slate-800">Border-Flood Fallback</span>
+                  <span class="font-mono text-slate-500">Recovers flooded masks</span>
+                </div>
+                <div class="py-2.5 flex items-center justify-between gap-3">
+                  <span class="font-medium text-slate-800">Metered Data Preflight</span>
+                  <span class="font-mono text-slate-500">Prompts before 58 MB fetch</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Interactive Before & After Showcase Section -->
+      <section id="showcase" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
+        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 max-w-4xl mx-auto mb-10">
+          <div>
+            <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">03 · Real Model Outputs</p>
+            <h2 class="text-2xl sm:text-4xl font-bold text-slate-900 tracking-[-0.025em]">
+              Before &amp; After Neural Matting
+            </h2>
+            <p class="text-sm sm:text-base text-slate-600 mt-2">
+              Select any example from the strip and drag the divider to inspect real Background Model 512 cut-outs.
+            </p>
+          </div>
+          <button
+            type="button"
+            data-studio-launch
+            class="btn-surface inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-xs font-medium shrink-0 self-start sm:self-auto"
+          >
+            <span>Open Studio</span>
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="showcaseGallery" data-showcase>
+          <!-- Main viewer: one before/after example at a time -->
+          <div class="showcaseMain">
+            <!-- Item 1: Everyday Product -->
+            <figure
+              id="showcase-panel-1"
+              class="showcasePanel showcasePanel--compact compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-1"
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Everyday Product</span>
+                  <span class="text-xs text-slate-400">Glass &amp; reflections</span>
+                </div>
+                <button type="button" data-sample-url="./demo/perfume-bottle-before.webp" data-sample-name="perfume-bottle.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/perfume-bottle-before.webp" alt="Original photo of an amber perfume bottle on a marble table" />
+                <img class="compareImg compareAfter" src="./demo/perfume-bottle-after.webp" alt="The same perfume bottle with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the perfume bottle: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Clear glass and the amber liquid stay intact; the marble table is gone.
+              </figcaption>
+            </figure>
+
+            <!-- Item 2: Hair & Fur -->
+            <figure
+              id="showcase-panel-2"
+              class="showcasePanel showcasePanel--compact compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-2"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Hair &amp; Fur</span>
+                  <span class="text-xs text-slate-400">Fine strands</span>
+                </div>
+                <button type="button" data-sample-url="./demo/golden-retriever-before.webp" data-sample-name="golden-retriever.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/golden-retriever-before.webp" alt="Original photo of a golden retriever sitting on grass" />
+                <img class="compareImg compareAfter" src="./demo/golden-retriever-after.webp" alt="The same dog with the background removed, fur strands intact" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the dog: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Individual fur strands preserved without harsh clipping.
+              </figcaption>
+            </figure>
+
+            <!-- Item 3: Glass & Crystal -->
+            <figure
+              id="showcase-panel-3"
+              class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-3"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Glass &amp; Crystal</span>
+                  <span class="text-xs text-slate-400">Translucent optics</span>
+                </div>
+                <button type="button" data-sample-url="./demo/crystal-vase-before.webp" data-sample-name="crystal-vase.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/crystal-vase-before.webp" alt="Original photo of a cut-crystal vase on a marble counter" />
+                <img class="compareImg compareAfter" src="./demo/crystal-vase-after.webp" alt="The same crystal vase with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the crystal vase: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Cut facets and see-through glass keep their translucency.
+              </figcaption>
+            </figure>
+
+            <!-- Item 4: Hard Edges -->
+            <figure
+              id="showcase-panel-4"
+              class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-4"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Hard Edges</span>
+                  <span class="text-xs text-slate-400">Spokes &amp; frame</span>
+                </div>
+                <button type="button" data-sample-url="./demo/road-bicycle-before.webp" data-sample-name="road-bicycle.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/road-bicycle-before.webp" alt="Original studio photo of a black road bicycle" />
+                <img class="compareImg compareAfter" src="./demo/road-bicycle-after.webp" alt="The same bicycle with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the bicycle: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Thin spokes, cables and frame tubes survive the cut-out.
+              </figcaption>
+            </figure>
+
+            <!-- Item 5: Florals -->
+            <figure
+              id="showcase-panel-5"
+              class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-5"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Florals</span>
+                  <span class="text-xs text-slate-400">Dense detail</span>
+                </div>
+                <button type="button" data-sample-url="./demo/flower-bouquet-before.webp" data-sample-name="flower-bouquet.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/flower-bouquet-before.webp" alt="Original photo of a colourful flower bouquet" />
+                <img class="compareImg compareAfter" src="./demo/flower-bouquet-after.webp" alt="The same bouquet with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the bouquet: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Hundreds of petals and stems isolated from a flat backdrop.
+              </figcaption>
+            </figure>
+
+            <!-- Item 6: Watch -->
+            <figure
+              id="showcase-panel-6"
+              class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-6"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Watch</span>
+                  <span class="text-xs text-slate-400">Metal &amp; detail</span>
+                </div>
+                <button type="button" data-sample-url="./demo/wristwatch-before.webp" data-sample-name="wristwatch.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/wristwatch-before.webp" alt="Original photo of a steel wristwatch on a leather jacket" />
+                <img class="compareImg compareAfter" src="./demo/wristwatch-after.webp" alt="The same watch with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the watch: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Dial, case and linked bracelet separated cleanly.
+              </figcaption>
+            </figure>
+
+            <!-- Item 7: Apparel -->
+            <figure
+              id="showcase-panel-7"
+              class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-7"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Apparel</span>
+                  <span class="text-xs text-slate-400">Fabric texture</span>
+                </div>
+                <button type="button" data-sample-url="./demo/denim-jacket-before.webp" data-sample-name="denim-jacket.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/denim-jacket-before.webp" alt="Original photo of a denim jacket on a hanger" />
+                <img class="compareImg compareAfter" src="./demo/denim-jacket-after.webp" alt="The same denim jacket with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the denim jacket: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Fabric folds, stitching and the hanger stay crisp.
+              </figcaption>
+            </figure>
+
+            <!-- Item 8: Appliance -->
+            <figure
+              id="showcase-panel-8"
+              class="showcasePanel compare group bg-white border border-slate-200/85 rounded-2xl p-4 sm:p-5"
+              data-compare
+              data-pos="50"
+              role="tabpanel"
+              aria-labelledby="showcase-tab-8"
+              hidden
+            >
+              <div class="flex items-center justify-between mb-3 px-1">
+                <div class="flex items-center gap-3">
+                  <span class="font-mono text-xs font-semibold text-blue-600 uppercase tracking-wider">Appliance</span>
+                  <span class="text-xs text-slate-400">Studio product</span>
+                </div>
+                <button type="button" data-sample-url="./demo/coffee-machine-before.webp" data-sample-name="coffee-machine.webp" class="text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-4">
+                  Test in Studio
+                </button>
+              </div>
+              <div class="compareStage">
+                <img class="compareImg compareBefore" src="./demo/coffee-machine-before.webp" alt="Original photo of a filter coffee machine with a mug" />
+                <img class="compareImg compareAfter" src="./demo/coffee-machine-after.webp" alt="The same coffee machine with the background removed" />
+                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+              </div>
+              <input
+                class="compareRange mt-4"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="50"
+                aria-label="Reveal the cut-out for the coffee machine: left is the original, right is the background removed"
+              />
+              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
+                Appliance edges and the mug beside it kept together.
+              </figcaption>
+            </figure>
+          </div>
+
+          <!-- Thumbnail rail: one tab per example -->
+          <div class="showcaseRail" role="tablist" aria-orientation="horizontal" aria-label="Before and after examples">
+            <button id="showcase-tab-1" class="showcaseThumb is-active" type="button" role="tab" aria-controls="showcase-panel-1" aria-selected="true" tabindex="0">
+              <img src="./demo/perfume-bottle-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Everyday Product</span>
+            </button>
+            <button id="showcase-tab-2" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-2" aria-selected="false" tabindex="-1">
+              <img src="./demo/golden-retriever-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Hair &amp; Fur</span>
+            </button>
+            <button id="showcase-tab-3" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-3" aria-selected="false" tabindex="-1">
+              <img src="./demo/crystal-vase-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Glass &amp; Crystal</span>
+            </button>
+            <button id="showcase-tab-4" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-4" aria-selected="false" tabindex="-1">
+              <img src="./demo/road-bicycle-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Hard Edges</span>
+            </button>
+            <button id="showcase-tab-5" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-5" aria-selected="false" tabindex="-1">
+              <img src="./demo/flower-bouquet-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Florals</span>
+            </button>
+            <button id="showcase-tab-6" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-6" aria-selected="false" tabindex="-1">
+              <img src="./demo/wristwatch-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Watch</span>
+            </button>
+            <button id="showcase-tab-7" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-7" aria-selected="false" tabindex="-1">
+              <img src="./demo/denim-jacket-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Apparel</span>
+            </button>
+            <button id="showcase-tab-8" class="showcaseThumb" type="button" role="tab" aria-controls="showcase-panel-8" aria-selected="false" tabindex="-1">
+              <img src="./demo/coffee-machine-before.webp" alt="" loading="lazy" />
+              <span class="showcaseThumbLabel">Appliance</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Plain-Language Capabilities Carousel -->
       <section id="support" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-        <div class="text-center max-w-2xl mx-auto mb-12">
-          <span class="text-xs font-bold text-blue-600 tracking-wider uppercase mb-2 block">Plain-Language Reference</span>
-          <h2 class="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+        <div class="text-center max-w-2xl mx-auto mb-10">
+          <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">04 · Plain-Language Reference</p>
+          <h2 class="text-2xl sm:text-4xl font-bold text-slate-900 tracking-[-0.025em]">
             What SmartCutAI Supports
           </h2>
-          <p class="text-sm sm:text-base text-slate-600 mt-3">
-            No jargon required. Here is exactly what works, what it runs on, and what you get back.
+          <p class="text-sm sm:text-base text-slate-600 mt-2">
+            Exact formats, hardware rules, and privacy guarantees — without vague marketing claims.
           </p>
         </div>
 
@@ -295,7 +1045,7 @@
             <div class="supportTrack" id="supportTrack" data-support-track>
               <article class="supportSlide is-active" id="supportSlide-1" role="tabpanel" aria-labelledby="supportDot-1" data-support-slide>
                 <span class="supportIcon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="3" />
                     <circle cx="8.5" cy="9" r="1.6" />
                     <path d="m21 15-4.5-4.5L6 21" />
@@ -304,100 +1054,85 @@
                 <h3 class="supportSlideTitle">Photos you can drop in</h3>
                 <p class="supportSlideBody">
                   PNG, JPEG, and WebP images up to <strong>20 MB</strong> and <strong>4096 pixels</strong> on the
-                  longest side. Files are read as-is — the app never trusts the file name, and a mislabelled or
-                  corrupt image is caught and explained instead of silently failing.
+                  longest side. Files are read as-is — mislabelled or corrupt files are caught and explained cleanly.
                 </p>
               </article>
 
               <article class="supportSlide" id="supportSlide-2" role="tabpanel" aria-labelledby="supportDot-2" aria-hidden="true" inert data-support-slide>
                 <span class="supportIcon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2m0-12-2 2M8 16l-2 2" />
                     <circle cx="12" cy="12" r="3.5" />
                   </svg>
                 </span>
                 <h3 class="supportSlideTitle">Images it handles well</h3>
                 <p class="supportSlideBody">
-                  Product shots, portraits, clothing, accessories, hair and fur, glass and transparent items, and
-                  busy or flat backgrounds. Very wide or very tall images (like banners and logos) are padded with a
-                  faithful copy of their edges, so the subject is not stretched out of shape. When the AI keeps the
-                  whole frame, the app falls back to a classic edge-based cut-out so you still get a clean result.
+                  Product shots, clothing, and accessories cut cleanly on the first pass. Hair, fur, glass, and busy
+                  backgrounds are supported too — the retouch brush is built in for the occasional edge that needs a
+                  nudge.
                 </p>
               </article>
 
               <article class="supportSlide" id="supportSlide-3" role="tabpanel" aria-labelledby="supportDot-3" aria-hidden="true" inert data-support-slide>
                 <span class="supportIcon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="4" width="18" height="13" rx="2.5" />
                     <path d="M8 21h8m-4-4v4" />
                   </svg>
                 </span>
                 <h3 class="supportSlideTitle">Where it runs</h3>
                 <p class="supportSlideBody">
-                  Any modern browser. It uses the GPU automatically when a real, capable graphics chip is available
-                  (WebGPU), and otherwise runs on the CPU with multi-threaded WebAssembly. Software-only "fake GPUs"
-                  and known-slow mobile chips are detected and steered to the CPU, which is faster and more accurate
-                  there. You can override the choice in the Studio's advanced options.
+                  Runs in any modern browser. Uses WebGPU automatically on verified hardware GPUs and falls back to
+                  multi-threaded SIMD WebAssembly on CPUs and mobile chips, with manual override in Engine Controls.
                 </p>
               </article>
 
               <article class="supportSlide" id="supportSlide-4" role="tabpanel" aria-labelledby="supportDot-4" aria-hidden="true" inert data-support-slide>
                 <span class="supportIcon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 3v12m0 0 4-4m-4 4-4-4" />
                     <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
                   </svg>
                 </span>
                 <h3 class="supportSlideTitle">What you get back</h3>
                 <p class="supportSlideBody">
-                  A transparent <strong>PNG</strong> by default, a studio-white <strong>JPG</strong> for marketplaces,
-                  or a compact <strong>WebP</strong> that keeps transparency. You can also place the cut-out on a solid
-                  colour, on pure white, or leave it transparent — and tune the mask's edge with a threshold and a
-                  feather slider before you download.
+                  Transparent <strong>PNG</strong> by default, marketplace <strong>JPG</strong> on pure white or any
+                  chosen colour, or compact <strong>WebP</strong> with alpha — plus live threshold, feather, and brush retouch.
                 </p>
               </article>
 
               <article class="supportSlide" id="supportSlide-5" role="tabpanel" aria-labelledby="supportDot-5" aria-hidden="true" inert data-support-slide>
                 <span class="supportIcon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
                   </svg>
                 </span>
                 <h3 class="supportSlideTitle">Speed and the one-time download</h3>
                 <p class="supportSlideBody">
-                  The model is about <strong>58 MB</strong> and downloads once, then stays cached on your device.
-                  Inference is typically a few seconds per photo on the CPU and faster on a GPU. On a metered mobile
-                  link the app asks before that first download. Large photos are composited in bounded strips off the
-                  main thread, so the page stays responsive.
+                  The quantized model is ~<strong>58 MB</strong>, downloads once into your browser Cache API, and stays
+                  offline-ready. Metered mobile connections ask before downloading.
                 </p>
               </article>
 
               <article class="supportSlide" id="supportSlide-6" role="tabpanel" aria-labelledby="supportDot-6" aria-hidden="true" inert data-support-slide>
                 <span class="supportIcon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 3l7 3v5.5c0 4.3-3 8.1-7 9.5-4-1.4-7-5.2-7-9.5V6l7-3Z" />
                     <path d="m9 12 2 2 4-4" />
                   </svg>
                 </span>
-                <h3 class="supportSlideTitle">Privacy and what is never done</h3>
+                <h3 class="supportSlideTitle">Privacy and zero upload path</h3>
                 <p class="supportSlideBody">
-                  Your photo never leaves your device — there is no upload path in the app at all. No account, no
-                  watermark, no per-image limit, and no third-party scripts or fonts loaded. Everything runs in your
-                  browser, and you can verify it in your browser's Network tab or by going fully offline.
+                  Your photos never leave device memory — there is zero image upload code in the app, zero third-party
+                  font CDNs, and strict COOP/COEP isolation headers.
                 </p>
               </article>
             </div>
           </div>
 
           <div class="supportControls">
-            <button
-              class="supportNav"
-              type="button"
-              data-support-prev
-              aria-label="Show the previous capability"
-              aria-controls="supportTrack"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <button class="supportNav" type="button" data-support-prev aria-label="Show the previous capability" aria-controls="supportTrack">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="m15 18-6-6 6-6" />
               </svg>
             </button>
@@ -411,14 +1146,8 @@
               <button class="supportDot" id="supportDot-6" type="button" role="tab" data-support-dot aria-controls="supportSlide-6" aria-selected="false" tabindex="-1" aria-label="Show capability 6 of 6"></button>
             </div>
 
-            <button
-              class="supportNav"
-              type="button"
-              data-support-next
-              aria-label="Show the next capability"
-              aria-controls="supportTrack"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <button class="supportNav" type="button" data-support-next aria-label="Show the next capability" aria-controls="supportTrack">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="m9 18 6-6-6-6" />
               </svg>
             </button>
@@ -426,307 +1155,167 @@
         </div>
       </section>
 
-      <!-- Interactive Before & After Showcase Section -->
-      <section id="showcase" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-        <div class="text-center max-w-2xl mx-auto mb-12">
-          <span class="text-xs font-bold text-blue-600 tracking-wider uppercase mb-2 block">Real Model Outputs</span>
-          <h2 class="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-            Before &amp; After Neural Matting
-          </h2>
-          <p class="text-sm sm:text-base text-slate-600 mt-3">
-            Pick a sample from the thumbnails, then drag the interactive slider to inspect the precision of on-device segmentation against difficult silhouettes.
-          </p>
-        </div>
-
-        <div class="showcaseGallery" data-showcase>
-          <!-- Main viewer: one before/after example at a time -->
-          <div class="showcaseMain">
-            <!-- Item 1: Clean Silhouette Scent Bottle -->
-            <figure
-              id="showcase-panel-1"
-              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
-              data-compare
-              data-pos="50"
-              role="tabpanel"
-              aria-labelledby="showcase-tab-1"
-            >
-              <div class="flex items-center justify-between mb-3 px-1">
-                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Everyday Product</span>
-                <span class="text-[11px] text-slate-400 font-medium">Clean silhouette</span>
-              </div>
-              <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/product-scent-bottle-before.webp" alt="Original photo of a scent bottle on a plain background" />
-                <img class="compareImg compareAfter" src="./demo/product-scent-bottle-after.webp" alt="The same photo with the background removed" />
-                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-              </div>
-              <input
-                class="compareRange mt-4"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value="50"
-                aria-label="Reveal the cut-out for the scent bottle: left is the original, right is the background removed"
-              />
-              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Sharp edge boundaries with zero jagged fringes.
-              </figcaption>
-            </figure>
-
-            <!-- Item 2: Hair & Fur Dog -->
-            <figure
-              id="showcase-panel-2"
-              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
-              data-compare
-              data-pos="50"
-              role="tabpanel"
-              aria-labelledby="showcase-tab-2"
-              hidden
-            >
-              <div class="flex items-center justify-between mb-3 px-1">
-                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Hair &amp; Fur</span>
-                <span class="text-[11px] text-slate-400 font-medium">Fine strands</span>
-              </div>
-              <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/animal-buddy-dog-before.webp" alt="Original photo of a dog against a plain background" />
-                <img class="compareImg compareAfter" src="./demo/animal-buddy-dog-after.webp" alt="The same photo with the background removed" />
-                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-              </div>
-              <input
-                class="compareRange mt-4"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value="50"
-                aria-label="Reveal the cut-out for the dog photo: left is the original, right is the background removed"
-              />
-              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Individual hair strands preserved without harsh clipping.
-              </figcaption>
-            </figure>
-
-            <!-- Item 3: Glass & Translucent -->
-            <figure
-              id="showcase-panel-3"
-              class="showcasePanel compare group bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm"
-              data-compare
-              data-pos="50"
-              role="tabpanel"
-              aria-labelledby="showcase-tab-3"
-              hidden
-            >
-              <div class="flex items-center justify-between mb-3 px-1">
-                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Glass &amp; Crystal</span>
-                <span class="text-[11px] text-slate-400 font-medium">Translucent optics</span>
-              </div>
-              <div class="compareStage">
-                <img class="compareImg compareBefore" src="./demo/glass-wine-before.webp" alt="Original photo of a wine glass on a white background" />
-                <img class="compareImg compareAfter" src="./demo/glass-wine-after.webp" alt="The same photo with the background removed" />
-                <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-              </div>
-              <input
-                class="compareRange mt-4"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value="50"
-                aria-label="Reveal the cut-out for the wine glass: left is the original, right is the background removed"
-              />
-              <figcaption class="text-xs text-slate-500 mt-2 px-1 text-center font-medium">
-                Subtle translucency and delicate stem reflections retained.
-              </figcaption>
-            </figure>
-          </div>
-
-          <!-- Vertical thumbnail rail: one tab per example -->
-          <div class="showcaseRail" role="tablist" aria-orientation="vertical" aria-label="Before and after examples">
-            <button
-              id="showcase-tab-1"
-              class="showcaseThumb is-active"
-              type="button"
-              role="tab"
-              aria-controls="showcase-panel-1"
-              aria-selected="true"
-              tabindex="0"
-            >
-              <img src="./demo/product-scent-bottle-before.webp" alt="" loading="lazy" />
-              <span class="showcaseThumbLabel">Everyday Product</span>
-            </button>
-            <button
-              id="showcase-tab-2"
-              class="showcaseThumb"
-              type="button"
-              role="tab"
-              aria-controls="showcase-panel-2"
-              aria-selected="false"
-              tabindex="-1"
-            >
-              <img src="./demo/animal-buddy-dog-before.webp" alt="" loading="lazy" />
-              <span class="showcaseThumbLabel">Hair &amp; Fur</span>
-            </button>
-            <button
-              id="showcase-tab-3"
-              class="showcaseThumb"
-              type="button"
-              role="tab"
-              aria-controls="showcase-panel-3"
-              aria-selected="false"
-              tabindex="-1"
-            >
-              <img src="./demo/glass-wine-before.webp" alt="" loading="lazy" />
-              <span class="showcaseThumbLabel">Glass &amp; Crystal</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Benchmarks & Scientific Rigor -->
-      <section id="benchmarks" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-        <div class="theme-inverse rounded-3xl bg-slate-900 text-on-accent p-8 sm:p-12 shadow-2xl relative overflow-hidden">
-          <div class="absolute -right-24 -bottom-24 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-          <div class="max-w-2xl mb-10">
-            <span class="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2 block">Performance Validation</span>
-            <h2 class="text-2xl sm:text-4xl font-extrabold tracking-tight text-on-accent">
-              Measured On 64 High-Resolution Evaluation Images
-            </h2>
-            <p class="text-slate-400 text-sm mt-3 leading-relaxed">
-              Rigorous test-suite parity benchmarks comparing the INT8/FP16 distilled browser model against full-precision FP32 server baselines.
-            </p>
-          </div>
-
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-6 pt-6 border-t border-slate-800 text-left">
-            <div>
-              <p class="text-3xl sm:text-4xl font-black text-cyan-400 font-mono">4.2s</p>
-              <p class="text-xs text-slate-400 mt-1 font-medium">Average CPU Inference</p>
-            </div>
-            <div>
-              <p class="text-3xl sm:text-4xl font-black text-blue-400 font-mono">0.981</p>
-              <p class="text-xs text-slate-400 mt-1 font-medium">IoU Parity Score</p>
-            </div>
-            <div>
-              <p class="text-3xl sm:text-4xl font-black text-emerald-400 font-mono">0 B</p>
-              <p class="text-xs text-slate-400 mt-1 font-medium">External Data Transferred</p>
-            </div>
-            <div>
-              <p class="text-3xl sm:text-4xl font-black text-purple-400 font-mono">100%</p>
-              <p class="text-xs text-slate-400 mt-1 font-medium">Free &amp; Unlimited</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- FAQ Section -->
-      <section id="faq" class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
+      <section id="faq" class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
         <div class="text-center mb-10">
-          <span class="text-xs font-bold text-blue-600 tracking-wider uppercase mb-2 block">Common Questions</span>
-          <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">05 · Documentation</p>
+          <h2 class="text-2xl sm:text-3xl font-bold text-slate-900 tracking-[-0.025em]">
             Frequently Asked Questions
           </h2>
         </div>
 
-        <div class="space-y-4">
-          <details class="group bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm transition-all">
-            <summary class="flex items-center justify-between font-bold text-sm sm:text-base text-slate-900 cursor-pointer select-none">
+        <div class="space-y-3">
+          <details class="group saas-card saas-card-interactive p-5">
+            <summary class="flex items-center justify-between font-semibold text-sm sm:text-base text-slate-900 cursor-pointer select-none">
+              <span>How accurate is it?</span>
+              <span class="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
+            </summary>
+            <p class="mt-3 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
+              Very good on product shots and most categories — 59 of 64 test photos came out with a usable cut-out on
+              the first pass, and all 64 processed with no errors. A handful of dark or very busy-background photos can
+              return an empty result; the built-in retouch brush fixes those in a few seconds. We haven't benchmarked
+              against remove.bg or similar tools, so we won't claim we're better — judge the cut-outs yourself in the
+              Showcase above.
+            </p>
+          </details>
+
+          <details class="group saas-card saas-card-interactive p-5">
+            <summary class="flex items-center justify-between font-semibold text-sm sm:text-base text-slate-900 cursor-pointer select-none">
               <span>Is my photo uploaded to any server or cloud database?</span>
               <span class="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
             </summary>
             <p class="mt-3 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
-              No, never. SmartCutAI is completely client-side. The entire neural network executes in your browser's WebAssembly sandbox. You can verify this by checking your browser's Network tab or even running the tool completely offline.
+              No, never. SmartCutAI is completely client-side. The neural network runs inside your browser's WebAssembly or
+              WebGPU sandbox. You can verify this in the Network tab or run the tool completely offline once cached.
             </p>
           </details>
 
-          <details class="group bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm transition-all">
-            <summary class="flex items-center justify-between font-bold text-sm sm:text-base text-slate-900 cursor-pointer select-none">
+          <details class="group saas-card saas-card-interactive p-5">
+            <summary class="flex items-center justify-between font-semibold text-sm sm:text-base text-slate-900 cursor-pointer select-none">
               <span>Why is there a one-time download when opening the app?</span>
               <span class="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
             </summary>
             <p class="mt-3 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
-              The AI model weights (~58 MB) download once on your first visit. They are automatically cached in your browser's persistent Cache API, meaning subsequent visits start instantly without downloading anything again.
+              The quantized model weights (~58 MB) download once on your first visit and persist in your browser's Cache
+              API, so later visits launch instantly with zero network download.
             </p>
           </details>
 
-          <details class="group bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm transition-all">
-            <summary class="flex items-center justify-between font-bold text-sm sm:text-base text-slate-900 cursor-pointer select-none">
+          <details class="group saas-card saas-card-interactive p-5">
+            <summary class="flex items-center justify-between font-semibold text-sm sm:text-base text-slate-900 cursor-pointer select-none">
               <span>Do I need a discrete graphics card (GPU)?</span>
               <span class="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
             </summary>
             <p class="mt-3 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
-              No. SmartCutAI is optimized to run smoothly on standard CPUs using multi-threaded WebAssembly SIMD. If your computer or phone has a supported modern GPU with WebGPU, it automatically accelerates inference for even faster processing.
+              No. SmartCutAI runs reliably on standard CPUs via multi-threaded WebAssembly SIMD, and automatically uses
+              hardware WebGPU acceleration when available on your desktop GPU.
             </p>
           </details>
 
-          <details class="group bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm transition-all">
-            <summary class="flex items-center justify-between font-bold text-sm sm:text-base text-slate-900 cursor-pointer select-none">
+          <details class="group saas-card saas-card-interactive p-5">
+            <summary class="flex items-center justify-between font-semibold text-sm sm:text-base text-slate-900 cursor-pointer select-none">
               <span>What image file formats and resolutions are supported?</span>
               <span class="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
             </summary>
             <p class="mt-3 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
-              You can upload PNG, JPEG, and WebP images up to 20 MB and 4096 px on the longest side. Exports are available in transparent PNG, studio-white JPG, or compressed WebP.
+              Inputs support PNG, JPEG, and WebP up to 20 MB and 4096 px on the longest side (mobile devices scale
+              oversized photos down safely in local memory). Exports include transparent PNG, studio-white JPG, and
+              compressed WebP.
             </p>
           </details>
         </div>
       </section>
     </main>
 
-      <!-- Main Studio Section -->
-      <section id="studio" class="studio-layer" aria-hidden="true" aria-label="Studio workspace">
-        <!-- Studio top bar: figure logo on the left, close on the right -->
-        <div class="studioTopBar shrink-0">
-          <div class="flex items-center gap-2.5">
-            <img src="./assets/brand/smartcutai-mark.png" alt="SmartCutAI" class="h-7 w-7 object-contain" />
-            <span class="text-sm font-bold text-slate-800">Studio</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <button
-              id="consoleToggle"
-              type="button"
-              class="studioBarBtn"
-              aria-label="Show console"
-              aria-pressed="true"
-              aria-controls="studioConsoleCol"
-              title="Show or hide the console"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
-              </svg>
-            </button>
-            <!-- Show/hide the result settings sidebar (like the console toggle).
-                 Only meaningful in the Result tab, so it appears there. -->
-            <button
-              id="sidebarToggle"
-              type="button"
-              class="studioBarBtn"
-              aria-label="Hide settings sidebar"
-              aria-pressed="true"
-              aria-controls="settingsSidebar"
-              title="Show or hide the settings sidebar"
-              hidden
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <line x1="9" y1="4" x2="9" y2="20" />
-              </svg>
-            </button>
-            <button id="studioThemeToggle" type="button" class="themeToggle" aria-label="Switch colour theme">
-              <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-              </svg>
-              <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-              </svg>
-            </button>
-            <button id="studioClose" type="button" aria-label="Close studio" class="studioCloseBtn">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+    <!-- Command Palette Modal (⌘K / Ctrl+K) -->
+    <div id="cmdPalette" class="cmdPalette" role="dialog" aria-modal="true" aria-label="Quick command search" hidden>
+      <div class="cmdBackdrop" data-cmd-close></div>
+      <div class="cmdDialog">
+        <div class="cmdSearchRow">
+          <svg class="w-4 h-4 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            id="cmdPaletteInput"
+            type="search"
+            class="cmdInput"
+            placeholder="Search actions, sample images, sections, or themes…"
+            autocomplete="off"
+            aria-label="Filter commands"
+          />
+          <button type="button" data-cmd-close class="cmdKbd cursor-pointer hover:text-slate-900">Esc</button>
+        </div>
+        <div id="cmdPaletteList" class="cmdList" role="listbox" aria-label="Available commands"></div>
+        <p id="cmdPaletteEmpty" class="cmdEmpty" hidden>No matching actions found.</p>
+        <div class="cmdFooter">
+          <span>Navigate with ↑↓ · Enter to execute</span>
+          <span class="font-mono">On-device · Local only</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Studio Section (All Studio IDs & Test Contracts Preserved) -->
+    <section id="studio" class="studio-layer" aria-hidden="true" aria-label="Studio workspace">
+      <div id="studioSplash" class="studioSplash" aria-hidden="true">
+        <div class="studioSplashInner">
+          <span class="studioSplashTitle">Studio</span>
+          <span class="studioSplashSpinner" aria-hidden="true"></span>
+        </div>
+      </div>
+
+      <!-- Studio top bar -->
+      <div class="studioTopBar shrink-0">
+        <div class="flex items-center gap-2.5">
+          <img src="./assets/brand/smartcutai-mark.png" alt="SmartCutAI" class="h-6 w-6 object-contain" />
+          <span class="text-sm font-semibold text-slate-900 tracking-tight">Studio</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            id="consoleToggle"
+            type="button"
+            class="studioBarBtn"
+            aria-label="Show console"
+            aria-pressed="false"
+            aria-controls="studioConsoleCol"
+            title="Show or hide the console"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+          </button>
+          <button
+            id="sidebarToggle"
+            type="button"
+            class="studioBarBtn"
+            aria-label="Show settings sidebar"
+            aria-pressed="false"
+            aria-controls="settingsSidebar"
+            title="Show or hide the settings sidebar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <line x1="9" y1="4" x2="9" y2="20" />
+            </svg>
+          </button>
+          <button id="studioThemeToggle" type="button" class="themeToggle" aria-label="Switch colour theme">
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+            </svg>
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+          <button id="studioClose" type="button" aria-label="Close studio" class="studioCloseBtn">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
               <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
             </svg>
-            </button>
-          </div>
+          </button>
         </div>
-        <div class="studioBody">
+      </div>
+
+      <div class="studioBody">
         <!-- Metered Connection Preflight Warning -->
         <div id="netWarn" class="netWarn" role="dialog" aria-modal="true" aria-labelledby="netWarnText" hidden>
           <p id="netWarnText" class="mb-3 font-medium"></p>
@@ -736,371 +1325,611 @@
           </div>
         </div>
 
-        <!-- 2-Column Studio Workspace (fills the fixed studio height) -->
-        <div class="studioGrid">
-          <!-- Left Column: the editor (input → processing → result) -->
+        <div class="studioGrid" data-console="hidden">
           <div class="studioEditorCol">
             <div class="studioCard">
-              <!-- Editor tab bar -->
-              <div class="studioTabs" role="tablist" aria-label="Studio editor">
-                <button id="tabInput" class="editorTab" role="tab" data-tab="input" aria-selected="true" aria-controls="panelInput">Photo</button>
-                <button id="tabProcessing" class="editorTab" role="tab" data-tab="processing" aria-selected="false" aria-controls="panelProcessing" disabled>Processing</button>
-                <button id="tabResult" class="editorTab" role="tab" data-tab="result" aria-selected="false" aria-controls="panelResult" disabled>Result</button>
-                <button id="tabCompare" class="editorTab" role="tab" data-tab="compare" aria-selected="false" aria-controls="panelCompare" disabled>Compare</button>
-              </div>
-              <div class="studioTabBody">
-            <!-- Input tab: the chosen photo + the drop zone (default editor view) -->
-            <div id="panelInput" class="editorPanel" role="tabpanel" aria-labelledby="tabInput">
-            <!-- Selected photo preview (hidden until a photo is chosen). Clicking
-                 it re-opens the system file picker, so the drop zone can be hidden
-                 once a photo exists. -->
-            <div
-              id="inputPreview"
-              class="inputPreview"
-              hidden
-              role="button"
-              tabindex="0"
-              aria-label="Selected photo — click to choose a different image"
-              title="Click to choose a different image"
-            >
-              <img id="inputPreviewImg" class="inputPreviewImg" alt="Selected photo" />
-              <span class="inputPreviewBadge">Selected photo</span>
-              <span class="inputPreviewHint">Click to change image</span>
-            </div>
-            <!-- Drop Zone: Styled strictly like Image 3 (No "Choose a photo" title) -->
-            <div
-              id="dropZone"
-              class="dropZone group relative flex flex-col items-center justify-center p-8 sm:p-12 border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-3xl bg-white hover:bg-blue-50/30 text-center cursor-pointer transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/20"
-              role="button"
-              tabindex="0"
-              aria-label="Drop your image here, or browse"
-            >
-              <!-- Center Image Icon matching Image 3 (violet→blue theme accent) -->
-              <div class="dzIcon w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-100 to-blue-50 border border-violet-200/80 shadow-sm flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                <svg class="w-10 h-10 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <defs>
-                    <linearGradient id="dzIconGrad" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stop-color="#8b5cf6" />
-                      <stop offset="1" stop-color="#2563eb" />
-                    </linearGradient>
-                  </defs>
-                  <rect x="3" y="3" width="18" height="18" rx="4" fill="url(#dzIconGrad)" fill-opacity="0.14" stroke="url(#dzIconGrad)" />
-                  <circle cx="8.5" cy="8.5" r="1.75" fill="#8b5cf6" stroke="none" />
-                  <path d="M21 16l-5-5-5.5 6-2.5-2.5L3 18.5" stroke="url(#dzIconGrad)" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </div>
-
-              <!-- Typography matching Image 3 -->
-              <p class="text-base sm:text-lg font-semibold text-slate-800 mb-1.5">
-                Drop your image here, or <span class="text-blue-600 underline underline-offset-4 hover:text-blue-700">browse</span>
-              </p>
-              <p class="text-xs sm:text-sm text-slate-400 font-medium">
-                Supports: PNG, JPG, JPEG, WEBP <span class="hidden sm:inline">· Max <span id="limitBytes">20 MB</span> · Up to <span id="limitSide">4096</span> px</span>
-              </p>
-            </div>
-            </div>
-
-            <!-- Processing tab: animated "AI is working" visual + progress -->
-            <div id="panelProcessing" class="editorPanel" role="tabpanel" aria-labelledby="tabProcessing" hidden>
-              <div class="procWallpaper">
-                <div class="procGrid" aria-hidden="true"></div>
-                <div class="procGlow" aria-hidden="true"></div>
-                <div class="procScan" aria-hidden="true"></div>
-                <div class="procStage">
-                  <div class="procSpinner" aria-hidden="true">
-                    <span class="procSpinnerTrack"></span>
-                    <span class="procSpinnerArc"></span>
-                    <svg class="procSpinnerIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-                      <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" stroke-linecap="round" />
-                      <circle cx="12" cy="12" r="3.2" />
-                    </svg>
-                  </div>
-                  <div class="procStatus">
-                    <span class="procStatusDot" aria-hidden="true"></span>
-                    <span class="procStatusText">Removing background with on-device AI…</span>
-                  </div>
+              <div class="studioTabs">
+                <div class="studioTablist" role="tablist" aria-label="Studio editor">
+                  <button id="tabStep" class="editorTab" role="tab" data-tab="step" aria-selected="true" aria-controls="panelStep">Photo</button>
+                  <button id="tabBulk" class="editorTab" role="tab" data-tab="bulk" aria-selected="false" aria-controls="panelBulk">Bulk</button>
+                  <button id="tabLibrary" class="editorTab" role="tab" data-tab="library" aria-selected="false" aria-controls="panelLibrary">Library</button>
                 </div>
-                <div class="procProgress">
-                  <span id="procPct" class="procProgressPct">0%</span>
-                  <span id="procStageLabel" class="procProgressLabel">Preparing</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Result tab: the generated cut-out -->
-            <div id="panelResult" class="editorPanel" role="tabpanel" aria-labelledby="tabResult" hidden>
-              <section id="outputSection" class="relative rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-7 shadow-sm transition-all" hidden aria-label="Background-removed output">
-              <!-- Result workspace: the engine settings sidebar on the left, the
-                   cut-out preview on the right. The sidebar collapses (chevron in
-                   its header) and drag-resizes up to 50% of the workspace. -->
-              <div id="resultWorkspace" class="resultWorkspace">
-              <aside id="settingsSidebar" class="settingsSidebar" aria-label="Studio engine settings">
-                <div class="sidebarHead">
-                  <div class="sidebarHeadTitle">
-                    <span class="w-2 h-2 rounded-full bg-blue-600"></span>
-                    <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Studio Engine Controls</h4>
-                  </div>
+                <div id="libraryMenuWrap" class="libraryMenuWrap" hidden>
                   <button
-                    id="sidebarCollapse"
+                    id="libraryMenuBtn"
                     type="button"
-                    class="sidebarToggle"
-                    aria-label="Collapse settings sidebar"
-                    aria-pressed="true"
-                    aria-controls="settingsSidebarBody"
-                    title="Collapse the settings sidebar"
+                    class="libraryMenuBtn"
+                    aria-haspopup="menu"
+                    aria-expanded="false"
+                    aria-controls="libraryMenu"
+                    aria-label="Library options"
+                    title="Library options"
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <polyline points="15 6 9 12 15 18" />
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+                      <circle cx="12" cy="5" r="1" />
+                      <circle cx="12" cy="12" r="1" />
+                      <circle cx="12" cy="19" r="1" />
                     </svg>
                   </button>
-                </div>
-
-                <div id="settingsSidebarBody" class="settingsSidebarBody">
-                  <div class="space-y-4 text-xs">
-                    <!-- Runtime Provider Select -->
-                    <div>
-                      <label for="providerToggle" class="block font-semibold text-slate-700 mb-1">Execution Runtime</label>
-                      <select
-                        id="providerToggle"
-                        disabled
-                        class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      ></select>
-                      <span class="hint block text-[11px] text-slate-400 mt-1" id="providerHint"></span>
+                  <div id="libraryMenu" class="libraryMenu" role="menu" aria-label="Library options" hidden>
+                    <button
+                      id="librarySaveToggle"
+                      type="button"
+                      class="libraryMenuItem"
+                      role="menuitemcheckbox"
+                      aria-checked="true"
+                    >
+                      <span class="libraryMenuLabel">Save new cut-outs</span>
+                      <span id="librarySaveState" class="libraryMenuState">On</span>
+                      <span class="saveSwitchTrack" aria-hidden="true"><span class="saveSwitchKnob"></span></span>
+                    </button>
+                    <div id="libraryStats" class="libraryStats" role="status" aria-live="polite">
+                      <div class="libraryStatRow"><span class="libraryStatLabel">Used</span><strong id="libraryStatUsed" class="libraryStatValue">0 B</strong></div>
+                      <div class="libraryStatRow"><span class="libraryStatLabel">Left</span><strong id="libraryStatLeft" class="libraryStatValue">256.0 MB</strong></div>
+                      <div class="libraryStatRow"><span class="libraryStatLabel">Total</span><strong id="libraryStatTotal" class="libraryStatValue">256.0 MB</strong></div>
                     </div>
+                  </div>
+                </div>
+              </div>
 
-                    <!-- Mask Threshold Range -->
-                    <div>
-                      <div class="flex items-center justify-between mb-1">
-                        <label for="maskThreshold" class="font-semibold text-slate-700">Mask Threshold</label>
-                        <span class="hint font-mono text-blue-600 font-bold" id="maskThresholdValue">off</span>
+              <div id="studioWorkspace" class="studioWorkspace">
+                <aside id="settingsSidebar" class="settingsSidebar" data-collapsed="true" aria-label="Studio engine settings">
+                  <div class="sidebarHead">
+                    <div class="sidebarHeadTitle">
+                      <svg class="w-3.5 h-3.5 text-slate-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
+                        <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+                        <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+                      </svg>
+                      <h4 class="text-[10.5px] font-semibold text-slate-900 uppercase tracking-[0.04em] whitespace-nowrap">Engine Controls</h4>
+                      <span class="sidebarBadge" title="These controls are experimental and may change">Experimental</span>
+                    </div>
+                    <button
+                      id="sidebarCollapse"
+                      type="button"
+                      class="sidebarToggle"
+                      aria-label="Expand settings sidebar"
+                      aria-pressed="false"
+                      aria-controls="settingsSidebarBody"
+                      title="Expand the settings sidebar"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                        <line x1="9" y1="4" x2="9" y2="20" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div id="settingsSidebarBody" class="settingsSidebarBody">
+                    <div class="space-y-3 text-xs">
+                      <!-- Runtime Provider Select -->
+                      <div>
+                        <div class="sidebarFieldHead">
+                          <label for="providerToggle" class="font-semibold text-slate-700">Execution Runtime</label>
+                          <button type="button" class="infoBubble" aria-label="About the execution runtime" aria-expanded="false" aria-controls="providerInfo" data-info-target="providerInfo">?</button>
+                        </div>
+                        <select
+                          id="providerToggle"
+                          disabled
+                          class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                        ></select>
+                        <div id="providerInfo" class="infoPanel" hidden>
+                          <p><strong>Where inference runs.</strong> GPU (WebGPU) uses your graphics card; CPU (WASM) always works. The app picks the faster, safer option for this device.</p>
+                          <p id="providerHint"></p>
+                        </div>
                       </div>
-                      <input
-                        type="range"
-                        id="maskThreshold"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value="0"
-                        class="w-full accent-blue-600"
-                        title="Forces alpha to 0 below this cut-off (0 = off)"
-                      />
-                      <span class="text-[10px] text-slate-400">Higher values trim translucent halo noise.</span>
-                    </div>
 
-                    <!-- Mask Feather Range -->
-                    <div>
-                      <div class="flex items-center justify-between mb-1">
-                        <label for="maskFeather" class="font-semibold text-slate-700">Mask Feather</label>
-                        <span class="hint font-mono text-blue-600 font-bold" id="maskFeatherValue">off</span>
+                      <!-- Mask Threshold Range -->
+                      <div>
+                        <div class="flex items-center justify-between mb-1">
+                          <label for="maskThreshold" class="font-semibold text-slate-700">Mask Threshold</label>
+                          <span class="hint font-mono text-blue-600 font-semibold tabular-nums" id="maskThresholdValue">off</span>
+                          <button type="button" class="infoBubble" aria-label="About mask threshold" aria-expanded="false" aria-controls="maskThresholdInfo" data-info-target="maskThresholdInfo">?</button>
+                        </div>
+                        <input type="range" id="maskThreshold" min="0" max="100" step="1" value="0" class="w-full accent-blue-600" title="Forces alpha to 0 below this cut-off (0 = off)" />
+                        <div id="maskThresholdInfo" class="infoPanel" hidden>
+                          <p><strong>Mask threshold.</strong> Forces alpha to 0 below this cut-off (0 = off). Higher values trim translucent halo noise.</p>
+                        </div>
                       </div>
-                      <input
-                        type="range"
-                        id="maskFeather"
-                        min="0"
-                        max="64"
-                        step="1"
-                        value="0"
-                        class="w-full accent-blue-600"
-                        title="Softens the mask edge by this many output pixels (0 = off)"
-                      />
-                      <span class="text-[10px] text-slate-400">Softens edge transitions for fur and glass.</span>
+
+                      <!-- Mask Feather Range -->
+                      <div>
+                        <div class="flex items-center justify-between mb-1">
+                          <label for="maskFeather" class="font-semibold text-slate-700">Mask Feather</label>
+                          <span class="hint font-mono text-blue-600 font-semibold tabular-nums" id="maskFeatherValue">off</span>
+                          <button type="button" class="infoBubble" aria-label="About mask feather" aria-expanded="false" aria-controls="maskFeatherInfo" data-info-target="maskFeatherInfo">?</button>
+                        </div>
+                        <input type="range" id="maskFeather" min="0" max="64" step="1" value="0" class="w-full accent-blue-600" title="Softens the mask edge by this many output pixels (0 = off)" />
+                        <div id="maskFeatherInfo" class="infoPanel" hidden>
+                          <p><strong>Mask feather.</strong> Softens the mask edge by this many output pixels (0 = off). Softens edge transitions for fur and glass.</p>
+                        </div>
+                      </div>
+
+                      <!-- Tiled inference -->
+                      <div class="sidebarField" id="tilingField">
+                        <div class="sidebarFieldHead">
+                          <label for="tilingSelect" class="font-semibold text-slate-700">Tiled inference</label>
+                          <span class="hint font-mono text-blue-600 font-semibold tabular-nums" id="tilingValue">Off</span>
+                          <button type="button" class="infoBubble" aria-label="About tiled inference" aria-expanded="false" aria-controls="tilingInfo" data-info-target="tilingInfo">?</button>
+                        </div>
+                        <select id="tilingSelect" class="sidebarSelect">
+                          <option value="off">Off — one 512px pass (fastest)</option>
+                          <option value="2">2 × 2 tiles — sharper edges (~4× slower)</option>
+                          <option value="3">3 × 3 tiles — maximum detail (~9× slower)</option>
+                          <option value="4">4 × 4 tiles — extreme detail (~16× slower)</option>
+                        </select>
+                        <div id="tilingInfo" class="infoPanel" hidden>
+                          <p><strong>Why it helps.</strong> The model always works at 512 × 512, so a big photo produces a mask that must be stretched to full size. Running 2 × 2 overlapping tiles makes each mask stretch about half as far, so the edges of a subject the model already found come out crisper — finer hair, cleaner glass rims.</p>
+                          <p><strong>What it cannot do.</strong> Tiling only sharpens an edge; it does not find a subject the model missed.</p>
+                          <p><strong>Cost.</strong> Each tile is a full 512px run, so 2 × 2 is about four times slower and 3 × 3 about nine times.</p>
+                          <p><strong>Stitching.</strong> Neighbouring tiles overlap by 25% and are blended with a linear crossfade whose weights sum to one.</p>
+                          <p><strong>Tip.</strong> Below ~1024px on the long side the model already sees the photo at about 1×.</p>
+                          <p id="tilingHint"></p>
+                          <p id="tilingAdvice" hidden></p>
+                          <button type="button" id="tilingApply" class="infoApply" hidden>Run 2 × 2 tiles</button>
+                        </div>
+                      </div>
+
+                      <!-- Edge refinement -->
+                      <div class="sidebarField" id="refineField">
+                        <div class="sidebarFieldHead">
+                          <label for="refineToggle" class="font-semibold text-slate-700">Edge refinement</label>
+                          <span class="hint font-mono text-blue-600 font-semibold tabular-nums" id="refineValue">On</span>
+                          <button type="button" class="infoBubble" aria-label="About edge refinement" aria-expanded="false" aria-controls="refineInfo" data-info-target="refineInfo">?</button>
+                        </div>
+                        <select id="refineToggle" class="sidebarSelect">
+                          <option value="on">On — guided-filter edge sharpening</option>
+                          <option value="off">Off — raw Stage-1 mask (worst case)</option>
+                        </select>
+
+                        <div class="sidebarSubField" id="refineStrengthField">
+                          <div class="flex items-center justify-between mb-1">
+                            <label for="refineStrength" class="font-semibold text-slate-700">Refine strength</label>
+                            <span class="hint font-mono text-blue-600 font-semibold tabular-nums" id="refineStrengthValue">0.50</span>
+                          </div>
+                          <input type="range" id="refineStrength" min="0" max="100" step="1" value="50" class="w-full accent-blue-600" title="Blend between the raw mask (0) and the fully filtered mask (1)" />
+                        </div>
+
+                        <div class="sidebarSubField" id="refineSensitivityField">
+                          <div class="flex items-center justify-between mb-1">
+                            <label for="refineEdgeSensitivity" class="font-semibold text-slate-700">Edge sensitivity</label>
+                            <span class="hint font-mono text-blue-600 font-semibold tabular-nums" id="refineEdgeSensitivityValue">1.00</span>
+                          </div>
+                          <input type="range" id="refineEdgeSensitivity" min="5" max="400" step="5" value="100" class="w-full accent-blue-600" title="Higher follows image edges more closely (sharper); lower smooths more" />
+                        </div>
+
+                        <div id="refineInfo" class="infoPanel" hidden>
+                          <p><strong>What it does.</strong> After the model returns a soft mask, a guided filter (guided by the original photo) snaps the mask to the real image edges.</p>
+                          <p><strong>Strength.</strong> Blends the raw mask (0) with the fully filtered mask (1).</p>
+                          <p><strong>Edge sensitivity.</strong> How aggressively a boundary is treated as real versus noise.</p>
+                        </div>
+                      </div>
+
+                      <!-- Island cleanup -->
+                      <div class="sidebarField" id="islandCleanupField">
+                        <div class="sidebarFieldHead">
+                          <label for="islandCleanupSelect" class="font-semibold text-slate-700">Island cleanup</label>
+                          <span class="hint font-mono text-blue-600 font-semibold tabular-nums" id="islandCleanupValue">Fine</span>
+                          <button type="button" class="infoBubble" aria-label="About island cleanup" aria-expanded="false" aria-controls="islandCleanupInfo" data-info-target="islandCleanupInfo">?</button>
+                        </div>
+                        <select id="islandCleanupSelect" class="sidebarSelect">
+                          <option value="fine">Fine — keep small detail (2e-5)</option>
+                          <option value="strict">Strict — remove speckle (5e-4)</option>
+                        </select>
+                        <div id="islandCleanupInfo" class="infoPanel" hidden>
+                          <p><strong>What it does.</strong> Drops disconnected foreground specks away from the subject while keeping connected details.</p>
+                          <p><strong>Fine (2e-5).</strong> Default: removes 1–2 px flecks while preserving small details.</p>
+                          <p><strong>Strict (5e-4).</strong> Removes larger speckle noise.</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      id="reprocessBtn"
+                      type="button"
+                      hidden
+                      class="btn-obsidian mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    >
+                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
+                      </svg>
+                      Re-process with these settings
+                    </button>
+
+                    <button
+                      id="resetEngineBtn"
+                      type="button"
+                      class="resetEngineBtn"
+                      title="Reset every engine option to its default"
+                    >
+                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
+                      </svg>
+                      Reset engine options
+                    </button>
+                  </div>
+
+                  <div
+                    id="sidebarResize"
+                    class="sidebarResize"
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="Resize settings sidebar"
+                    tabindex="0"
+                    title="Drag to resize the settings sidebar"
+                  >
+                    <span class="sidebarResizeGrip" aria-hidden="true"></span>
+                  </div>
+                </aside>
+
+                <div class="studioTabBody">
+                  <div id="panelStep" class="editorPanel stepPanel" role="tabpanel" aria-labelledby="tabStep">
+                    <div id="stepInput" class="stepView">
+                      <div
+                        id="inputPreview"
+                        class="inputPreview"
+                        hidden
+                        role="button"
+                        tabindex="0"
+                        aria-label="Selected photo — click to choose a different image"
+                        title="Click to choose a different image"
+                      >
+                        <img id="inputPreviewImg" class="inputPreviewImg" alt="Selected photo" />
+                        <span class="inputPreviewBadge">Selected photo</span>
+                        <span class="inputPreviewHint">Click to change image</span>
+                      </div>
+
+                      <div
+                        id="dropZone"
+                        class="dropZone group relative flex flex-col items-center justify-center p-8 sm:p-14 border border-dashed border-slate-300 hover:border-blue-600 rounded-2xl bg-slate-50/70 hover:bg-blue-50/30 text-center cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        role="button"
+                        tabindex="0"
+                        aria-label="Drop your image here, or browse"
+                      >
+                        <div class="dzIcon w-14 h-14 rounded-xl bg-white border border-slate-200 flex items-center justify-center mb-4 group-hover:border-slate-300 transition-colors">
+                          <svg class="w-6 h-6 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="3" y="3" width="18" height="18" rx="3" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <path d="m21 15-5-5L5 21" />
+                          </svg>
+                        </div>
+
+                        <p class="text-base sm:text-lg font-semibold text-slate-900 mb-1">
+                          Drop your image here, or <span class="text-blue-600 underline underline-offset-4 hover:text-blue-700">browse</span>
+                        </p>
+                        <p class="text-xs sm:text-sm text-slate-500 font-mono tabular-nums">
+                          PNG, JPG, JPEG, WEBP <span class="hidden sm:inline">· Max <span id="limitBytes">20 MB</span> · Up to <span id="limitSide">4096</span> px</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div id="stepProcessing" class="stepView" hidden>
+                      <div class="procWallpaper">
+                        <div class="procGrid" aria-hidden="true"></div>
+                        <div class="procGlow" aria-hidden="true"></div>
+                        <div class="procScan" aria-hidden="true"></div>
+                        <div class="procStage">
+                          <div class="procSpinner" aria-hidden="true">
+                            <span class="procSpinnerTrack"></span>
+                            <span class="procSpinnerArc"></span>
+                            <svg class="procSpinnerIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                              <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" stroke-linecap="round" />
+                              <circle cx="12" cy="12" r="3.2" />
+                            </svg>
+                          </div>
+                          <div class="procStatus">
+                            <span class="procStatusDot" aria-hidden="true"></span>
+                            <span class="procStatusText">Removing background with on-device AI…</span>
+                          </div>
+                        </div>
+                        <div class="procProgress">
+                          <span id="procPct" class="procProgressPct">0%</span>
+                          <span id="procStageLabel" class="procProgressLabel">Preparing</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div id="stepResult" class="stepView" hidden>
+                      <div class="stepResultHead">
+                        <div class="resultActions" role="group" aria-label="Photo actions">
+                          <button
+                            id="newPhotoBtn"
+                            type="button"
+                            class="newPhotoBtn resultIconBtn"
+                            aria-label="Choose another photo"
+                            title="Choose another photo"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <rect x="3" y="3" width="18" height="18" rx="3" />
+                              <circle cx="8.5" cy="8.5" r="1.5" />
+                              <path d="m21 15-5-5L5 21" />
+                            </svg>
+                          </button>
+                          <button
+                            id="bgColorButton"
+                            type="button"
+                            class="bgColorButton resultIconBtn"
+                            aria-haspopup="dialog"
+                            aria-expanded="false"
+                            aria-label="Background colour"
+                            title="Background colour"
+                          >
+                            <span id="bgColorSwatch" class="colorButtonSwatch" aria-hidden="true"></span>
+                          </button>
+                          <button
+                            id="downloadMenuBtn"
+                            type="button"
+                            class="resultIconBtn"
+                            aria-haspopup="menu"
+                            aria-expanded="false"
+                            aria-controls="downloadMenu"
+                            aria-label="Download options"
+                            title="Download"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1" />
+                              <path d="m8 11 4 4 4-4" />
+                              <path d="M12 4v11" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <section id="outputSection" class="relative rounded-2xl bg-white border border-slate-200/85 p-4 sm:p-6 transition-all" hidden aria-label="Background-removed output">
+                        <div class="resultMain">
+                          <div id="outputFrame" class="relative rounded-xl overflow-hidden border border-slate-200/80 bg-slate-100 group/output">
+                            <div id="outputBox" class="outputBox min-h-[320px] flex items-center justify-center p-6 checkerboard-pattern"></div>
+
+                            <button
+                              id="resultCompareToggle"
+                              type="button"
+                              class="resultCompareToggle"
+                              aria-label="Compare with the original photo"
+                              aria-pressed="false"
+                              title="Compare with the original photo"
+                              hidden
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect x="3" y="5" width="18" height="14" rx="2" />
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <polyline points="7 10 5 12 7 14" />
+                                <polyline points="17 10 19 12 17 14" />
+                              </svg>
+                              <span>Compare</span>
+                            </button>
+
+                            <div id="refineNotice" class="refineNotice" role="status" hidden>
+                              <span class="refineSpinner" aria-hidden="true"></span>
+                              <span>Refining edges…</span>
+                            </div>
+
+                            <button
+                              id="resultEditToggle"
+                              type="button"
+                              class="resultEditToggle"
+                              aria-label="Retouch the cut-out"
+                              title="Retouch the cut-out"
+                              hidden
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                              </svg>
+                            </button>
+                          </div>
+
+                          <div class="qualityReport">
+                            <button
+                              id="reportProblemBtn"
+                              type="button"
+                              class="reportProblemBtn"
+                              aria-expanded="false"
+                              aria-controls="qualityReportForm"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M12 9v4" /><path d="M12 17h.01" />
+                                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                              </svg>
+                              Report a quality problem
+                            </button>
+
+                            <form id="qualityReportForm" class="qualityReportForm" hidden novalidate>
+                              <div class="reportField">
+                                <label for="reportCategory" class="reportLabel">What went wrong?</label>
+                                <select id="reportCategory" class="reportSelect" required>
+                                  <option value="" selected disabled>Choose a problem…</option>
+                                </select>
+                              </div>
+
+                              <div class="reportField">
+                                <label for="reportDescription" class="reportLabel">Describe it (optional)</label>
+                                <textarea id="reportDescription" class="reportTextarea" rows="3" maxlength="500" placeholder="What did you expect to happen?"></textarea>
+                                <span id="reportDescCount" class="reportHint">0 / 500</span>
+                              </div>
+
+                              <label class="reportCheckbox">
+                                <input id="reportAttachDiagnostics" type="checkbox" />
+                                <span>
+                                  Attach technical diagnostics
+                                  <span class="reportHint">Off by default. Nothing technical is sent unless you tick this box.</span>
+                                </span>
+                              </label>
+
+                              <div id="reportDiagnosticsPreview" class="reportDiagnosticsPreview" hidden>
+                                <span class="reportHint">This exact information will be submitted:</span>
+                                <pre id="reportDiagnosticsJson" class="reportDiagnosticsJson"></pre>
+                              </div>
+
+                              <p id="reportError" class="reportError" role="alert" hidden></p>
+
+                              <div class="reportActions">
+                                <button id="reportSubmit" type="submit" class="reportSubmitBtn">Send report</button>
+                                <button id="reportCancel" type="button" class="reportCancelBtn">Cancel</button>
+                                <span class="reportHint">No name or email is collected.</span>
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      </section>
                     </div>
                   </div>
 
-                  <!-- Re-run inference with the current engine settings, then
-                       jump to the Processing tab. Shown once the settings differ
-                       from those the on-screen result was produced with. -->
-                  <button
-                    id="reprocessBtn"
-                    type="button"
-                    hidden
-                    class="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-on-accent bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-sm hover:from-blue-700 hover:to-indigo-700 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
-                    </svg>
-                    Re-process with these settings
-                  </button>
-                </div>
-                <!-- Drag the right edge to resize the sidebar (up to 50%). -->
-                <div
-                  id="sidebarResize"
-                  class="sidebarResize"
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="Resize settings sidebar"
-                  tabindex="0"
-                  title="Drag to resize the settings sidebar"
-                >
-                  <span class="sidebarResizeGrip" aria-hidden="true"></span>
-                </div>
-              </aside>
-              <div class="resultMain">
-              <!-- Relative Image Container -->
-              <div id="outputFrame" class="relative rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-100 shadow-inner group/output">
-                <!-- Output Image Box with Checkerboard Background -->
-                <div id="outputBox" class="outputBox min-h-[320px] flex items-center justify-center p-6 checkerboard-pattern"></div>
-
-                <!-- Refinement banner: shown over the already-usable preview while
-                     the edge-refinement stage sharpens it (no fabricated %). -->
-                <div id="refineNotice" class="refineNotice" role="status" hidden>
-                  <span class="refineSpinner" aria-hidden="true"></span>
-                  <span>Refining edges…</span>
-                </div>
-              </div>
-
-              <!-- Background: one system colour picker (native input + screen eyedropper) -->
-              <div class="mt-5 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4">
-                <div class="flex items-center justify-between mb-3">
-                  <span class="text-xs font-semibold text-slate-700">Background</span>
-                  <span id="bgCurrent" class="text-[11px] font-mono text-slate-500">transparent</span>
-                </div>
-                <div class="bgPicker">
-                  <button id="bgTransparentBtn" type="button" class="bgTransparentBtn" aria-pressed="true" aria-label="Transparent background" title="Transparent">
-                    <span class="bgTransparentChip" aria-hidden="true"></span>
-                    Transparent
-                  </button>
-                  <label class="bgColorField" title="Pick a background colour">
-                    <input id="bgColorPicker" type="color" value="#ffffff" aria-label="Background colour" />
-                    <span id="bgColorSwatch" class="bgColorSwatch" aria-hidden="true"></span>
-                  </label>
-                  <button id="bgEyeDropper" type="button" class="bgEyeDropperBtn" aria-label="Pick a colour from the screen" title="Pick a colour from the screen">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z" />
-                      <path d="m5 2 5 5" /><path d="M2 13h15" /><path d="M22 22l-3-3" />
-                    </svg>
-                  </button>
-                  <label class="paletteAlpha">
-                    Alpha
-                    <input id="bgAlpha" type="range" min="0" max="100" step="1" value="100" aria-label="Background opacity" />
-                    <span id="bgAlphaValue" class="font-mono text-slate-500 w-9 text-right">100%</span>
-                  </label>
-                </div>
-              </div>
-
-              <!-- Export Controls & Download Button -->
-              <div class="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-5 border-t border-slate-100">
-                <fieldset class="formatPicker">
-                  <legend class="sr-only">Output Format</legend>
-                  <div id="formatOptions" class="formatOptions"></div>
-                </fieldset>
-
-                <div class="exportActions">
-                  <a
-                    id="downloadImage"
-                    class="btn primary w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-on-accent font-semibold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 text-center"
-                    download
-                    hidden
-                  >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                    </svg>
-                    <span>Download Image</span>
-                  </a>
-                </div>
-              </div>
-
-              <!-- Report a quality problem: an explicit, optional action in the
-                   result area. Diagnostics are opt-in and shown before sending. -->
-              <div class="qualityReport">
-                <button
-                  id="reportProblemBtn"
-                  type="button"
-                  class="reportProblemBtn"
-                  aria-expanded="false"
-                  aria-controls="qualityReportForm"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M12 9v4" /><path d="M12 17h.01" />
-                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-                  </svg>
-                  Report a quality problem
-                </button>
-
-                <form id="qualityReportForm" class="qualityReportForm" hidden novalidate>
-                  <div class="reportField">
-                    <label for="reportCategory" class="reportLabel">What went wrong?</label>
-                    <select id="reportCategory" class="reportSelect" required>
-                      <option value="" selected disabled>Choose a problem…</option>
-                    </select>
+                  <!-- Bulk Tab -->
+                  <div id="panelBulk" class="editorPanel" role="tabpanel" aria-labelledby="tabBulk" hidden>
+                    <div class="bulkPanel">
+                      <div class="bulkHead">
+                        <div class="bulkToolbar" role="group" aria-label="Bulk operations">
+                          <label class="bulkSelectAll" title="Select all">
+                            <input id="bulkSelectAll" type="checkbox" aria-label="Select all" />
+                          </label>
+                        </div>
+                        <div class="bulkActions">
+                          <span id="bulkCount" class="bulkCount">0 / 5</span>
+                          <button id="bulkPick" type="button" class="bulkToolBtn" aria-label="Add images" title="Add images">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M12 5v14M5 12h14" />
+                            </svg>
+                          </button>
+                          <button id="bulkBgButton" type="button" class="bulkToolBtn bulkColorBtn" aria-haspopup="dialog" aria-expanded="false" aria-label="Bulk background colour" title="Bulk background colour" disabled>
+                            <span id="bulkBgSwatch" class="colorButtonSwatch" aria-hidden="true"></span>
+                          </button>
+                          <button
+                            id="bulkDownloadBtn"
+                            type="button"
+                            class="bulkToolBtn"
+                            aria-haspopup="menu"
+                            aria-expanded="false"
+                            aria-controls="downloadMenu"
+                            aria-label="Download options"
+                            title="Download"
+                            hidden
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1" />
+                              <path d="m8 11 4 4 4-4" />
+                              <path d="M12 4v11" />
+                            </svg>
+                          </button>
+                          <button id="bulkDeleteSelected" type="button" class="bulkToolBtn" aria-label="Delete selected" title="Delete selected" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <p id="bulkStatus" class="bulkStatus" role="status" hidden></p>
+                      <div id="bulkGrid" class="bulkGrid"></div>
+                      <div id="bulkEmpty" class="emptyState">
+                        <button id="bulkEmptyPick" type="button" class="emptyStateFigure" aria-label="Add photos" title="Add photos">
+                          <svg class="emptyStateGlyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M18 22H4a2 2 0 0 1-2-2V6" />
+                            <path d="m22 13-1.296-1.296a2.41 2.41 0 0 0-3.408 0L11 18" />
+                            <circle cx="12" cy="8" r="2" />
+                            <rect width="16" height="16" x="6" y="2" rx="2" />
+                          </svg>
+                          <span class="emptyStatePlus" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                              <path d="M12 5v14M5 12h14" />
+                            </svg>
+                          </span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
-                  <div class="reportField">
-                    <label for="reportDescription" class="reportLabel">
-                      Describe it (optional)
-                    </label>
-                    <textarea
-                      id="reportDescription"
-                      class="reportTextarea"
-                      rows="3"
-                      maxlength="500"
-                      placeholder="What did you expect to happen?"
-                    ></textarea>
-                    <span id="reportDescCount" class="reportHint">0 / 500</span>
+                  <!-- Library Tab -->
+                  <div id="panelLibrary" class="editorPanel" role="tabpanel" aria-labelledby="tabLibrary" hidden>
+                    <div class="libraryPanel">
+                      <div class="libraryToolbar" role="group" aria-label="Library operations">
+                        <div class="libraryToolbarLeft">
+                          <label class="librarySelectAll" title="Select all items">
+                            <input id="librarySelectAll" type="checkbox" aria-label="Select all items" />
+                          </label>
+                          <div class="libraryFilterWrap" title="Filter by name">
+                            <svg class="libraryFilterIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+                            </svg>
+                            <input id="libraryFilter" type="search" placeholder="Filter by name..." autocomplete="off" aria-label="Filter by name" />
+                          </div>
+                        </div>
+                        <div class="libraryToolbarRight">
+                          <button id="libraryExportSelected" type="button" class="libraryIconBtn" aria-label="Export selected as ZIP" disabled title="Export selected as ZIP">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                          </button>
+                          <button id="libraryClear" type="button" class="libraryIconBtn" aria-label="Delete selected" title="Delete selected" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div id="libraryGrid" class="libraryGrid"></div>
+                      <div id="libraryEmpty" class="emptyState">
+                        <span class="emptyStateFigure" aria-hidden="true">
+                          <svg class="emptyStateGlyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                            <path d="M3 3v5h5" />
+                            <path d="M12 7v5l4 2" />
+                          </svg>
+                        </span>
+                        <p id="libraryEmptyText" class="emptyStateText" hidden></p>
+                      </div>
+                    </div>
                   </div>
 
-                  <label class="reportCheckbox">
-                    <input id="reportAttachDiagnostics" type="checkbox" />
-                    <span>
-                      Attach technical diagnostics
-                      <span class="reportHint">
-                        Off by default. Nothing technical is sent unless you tick this box.
-                      </span>
-                    </span>
-                  </label>
-
-                  <div id="reportDiagnosticsPreview" class="reportDiagnosticsPreview" hidden>
-                    <span class="reportHint">This exact information will be submitted:</span>
-                    <pre id="reportDiagnosticsJson" class="reportDiagnosticsJson"></pre>
+                  <!-- Manual Retouch Panel -->
+                  <div id="retouchPanel" class="bottomBar retouchPanel" hidden role="region" aria-label="Retouch">
+                    <div class="bottomBarHead">
+                      <div class="bottomBarHeadTitle">
+                        <svg class="w-3.5 h-3.5 text-slate-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                        <h4 class="bottomBarTitle">Retouch</h4>
+                      </div>
+                      <span class="retouchHint">Edits the mask only — photo colours are never changed.</span>
+                    </div>
+                    <div class="bottomBarBody retouchBody">
+                      <div class="bottomBarSection retouchTools">
+                        <div class="retouchToolGroup" role="group" aria-label="Brush tool">
+                          <button id="retouchRestore" type="button" class="retouchTool" aria-pressed="true">Restore</button>
+                          <button id="retouchErase" type="button" class="retouchTool" aria-pressed="false">Erase</button>
+                        </div>
+                        <label class="retouchSlider">
+                          <span>Brush size <span id="retouchSizeValue" class="retouchValue">48px</span></span>
+                          <input id="retouchSize" type="range" min="4" max="160" step="1" value="48" aria-label="Brush size" />
+                        </label>
+                        <label class="retouchSlider">
+                          <span>Stroke feather <span id="retouchFeatherValue" class="retouchValue">40%</span></span>
+                          <input id="retouchFeather" type="range" min="0" max="100" step="1" value="40" aria-label="Stroke feather" />
+                        </label>
+                      </div>
+                      <div class="bottomBarSection retouchActions">
+                        <button id="retouchAutoCleanup" type="button" class="retouchAction" title="Tighten the mask edge to the photo's real colour edges">Auto color contour cleanup</button>
+                        <div class="retouchHistory">
+                          <button id="retouchUndo" type="button" class="retouchAction" disabled>Undo</button>
+                          <button id="retouchRedo" type="button" class="retouchAction" disabled>Redo</button>
+                        </div>
+                        <div class="retouchCommit">
+                          <button id="retouchCancel" type="button" class="retouchAction">Cancel</button>
+                          <button id="retouchSave" type="button" class="retouchAction retouchSave">Save</button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-
-                  <p id="reportError" class="reportError" role="alert" hidden></p>
-
-                  <div class="reportActions">
-                    <button id="reportSubmit" type="submit" class="reportSubmitBtn">Send report</button>
-                    <button id="reportCancel" type="button" class="reportCancelBtn">Cancel</button>
-                    <span class="reportHint">No name or email is collected.</span>
-                  </div>
-                </form>
-              </div>
-              </div>
-              </div>
-            </section>
-            </div>
-
-            <!-- Compare tab: interactive original ↔ result slider -->
-            <div id="panelCompare" class="editorPanel" role="tabpanel" aria-labelledby="tabCompare" hidden>
-              <div class="rounded-3xl border border-slate-200/80 p-5 sm:p-6 bg-slate-50/60">
-                <figure id="studioCompare" class="compare group" data-compare data-pos="50">
-                  <div class="compareStage">
-                    <img id="compareBefore" class="compareImg compareBefore" alt="Original photo before background removal" />
-                    <img id="compareAfter" class="compareImg compareAfter" alt="The same photo with the background removed" />
-                    <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
-                  </div>
-                  <input
-                    class="compareRange mt-4"
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value="50"
-                    aria-label="Reveal the cut-out: left is the original, right is the background removed"
-                  />
-                </figure>
+                </div>
               </div>
             </div>
-
-              </div>
-            </div>
-
-            <!-- Recovery Fallback UI -->
-            <div id="recovery" class="recovery rounded-2xl p-4 bg-red-50 border border-red-200 text-red-900 text-sm" hidden></div>
           </div>
 
-          <!-- Right Column: Console (compact, categorised) -->
+          <!-- Console Column -->
           <div id="studioConsoleCol" class="studioConsoleCol">
             <div class="consoleCard">
-              <!-- Drag this handle to resize the console (20%–50%, default 35%) -->
               <div
                 id="consoleResize"
                 class="consoleResize"
@@ -1114,19 +1943,16 @@
               </div>
               <div class="consoleHead">
                 <div class="flex items-center gap-2 min-w-0">
-                  <svg class="w-4 h-4 text-slate-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <svg class="w-4 h-4 text-slate-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
                   </svg>
-                  <h3 class="text-sm font-bold text-slate-800">Console</h3>
+                  <h3 class="text-sm font-semibold text-slate-800">Console</h3>
                   <span class="privacyAnchor">
                     <button id="privacyToggle" type="button" class="privacyToggle" aria-expanded="false" aria-controls="privacyStatement" aria-label="Show privacy statement" title="Zero-upload privacy">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                       </svg>
                     </button>
-                    <!-- Zero-upload privacy statement: a popover anchored to the
-                         shield icon. .privacyAnchor is the relative parent and
-                         the block hangs just below the icon. -->
                     <div id="privacyStatement" class="privacyStatement" hidden>
                       <h5 class="text-xs font-bold text-slate-900">Zero-Upload Privacy Assurance</h5>
                       <p class="text-[11px] text-slate-600 mt-0.5 leading-normal">
@@ -1136,18 +1962,11 @@
                   </span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <!-- Copy report: always visible in the console header (not
-                       buried in a disclosure), so a tester can grab the local
-                       diagnostic report in one tap. Never uploads anything. -->
-                  <button
-                    id="copyReport"
-                    type="button"
-                    class="copyReportBtn"
-                    title="Copy a diagnostic report for support"
-                    aria-label="Copy diagnostic report"
-                  >Copy report</button>
+                  <button id="copyReport" type="button" class="copyReportBtn" title="Copy a diagnostic report for support" aria-label="Copy diagnostic report">
+                    Copy report
+                  </button>
                   <button id="consoleClose" type="button" class="consoleCloseBtn" aria-label="Hide console" title="Hide console">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
                       <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
                     </svg>
                   </button>
@@ -1155,13 +1974,8 @@
               </div>
 
               <div class="consoleScroll">
-                <!-- Flat terminal output: one line per event, newest at the
-                     bottom. No threads, chevrons, or collapsible groups. -->
                 <div id="consoleOutput" class="consoleOutput" role="log" aria-live="polite"></div>
               </div>
-              <!-- The live status is the terminal's last line: pinned to the foot
-                   of the console and updated in place, so the current step (e.g.
-                   download progress) is always visible without scrolling. -->
               <div id="consoleStatusLine" class="consoleLine consoleStatusLine">
                 <span class="consoleLinePrompt" aria-hidden="true">❯</span>
                 <span id="processingLabel" class="consoleLineText consoleStatusText" role="status" aria-live="polite">Engine ready</span>
@@ -1169,44 +1983,108 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Shared download menu, opened by the Photo and Bulk download buttons. -->
+      <div id="downloadMenu" class="downloadMenu" role="menu" aria-label="Download options" hidden>
+        <label class="downloadMenuField" for="exportFormatSelect">
+          <span class="downloadMenuFieldLabel">Image type</span>
+          <select id="exportFormatSelect" class="downloadMenuSelect" aria-label="Image type"></select>
+        </label>
+        <a id="downloadImage" class="downloadMenuAction" download hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1" />
+            <path d="m8 11 4 4 4-4" />
+            <path d="M12 4v11" />
+          </svg>
+          <span id="downloadImageLabel">Download</span>
+        </a>
+        <button id="bulkDownloadAll" type="button" class="downloadMenuAction downloadMenuZip" title="Download every cut-out as one ZIP archive" hidden>
+          Download all
+        </button>
+      </div>
+
+      <!-- Shared modern colour picker, opened by the Background and Bulk colour buttons. -->
+      <div id="colorPickerPopover" class="colorPickerPopover" role="dialog" aria-label="Choose a background colour" hidden>
+        <div class="colorPickerArea" data-picker="area">
+          <span class="colorPickerKnob" data-picker="knob" aria-hidden="true"></span>
         </div>
-      </section>
+        <div class="colorPickerSliders">
+          <input class="colorPickerRange colorPickerHue" data-picker="hue" type="range" min="0" max="360" step="1" value="0" aria-label="Hue" />
+          <input class="colorPickerRange colorPickerAlpha" data-picker="alpha" type="range" min="0" max="100" step="1" value="100" aria-label="Opacity" />
+        </div>
+        <div class="colorPickerMeta">
+          <span class="colorPickerPreview" data-picker="preview" aria-hidden="true"></span>
+          <label class="colorPickerHexWrap" title="Hex colour">
+            <span aria-hidden="true">#</span>
+            <input class="colorPickerHex" data-picker="hex" type="text" value="ffffff" maxlength="6" spellcheck="false" autocomplete="off" aria-label="Hex colour" />
+          </label>
+          <span class="colorPickerAlphaValue" data-picker="alphaValue">100%</span>
+        </div>
+        <div class="colorPickerSwatches" data-picker="swatches" role="group" aria-label="Preset colours"></div>
+        <button type="button" class="colorPickerTransparent" data-picker="transparent" aria-pressed="false">
+          <span class="colorPickerChecker" aria-hidden="true"></span>
+          <span>Transparent</span>
+        </button>
+      </div>
+    </section>
 
-    <!-- Footer -->
-    <footer class="border-t border-slate-200 bg-white py-12 px-4 sm:px-6 lg:px-8">
-      <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-        <div class="flex items-center gap-3">
-          <img
-            src="./assets/brand/smartcutai-vertical.png"
-            alt="SmartCutAI"
-            class="footerVertical footerVerticalDark object-contain"
-          />
-          <img
-            src="./assets/brand/smartcutai-vertical-light.png"
-            alt=""
-            aria-hidden="true"
-            class="footerVertical footerVerticalLight object-contain"
-          />
-          <span class="text-xs text-slate-400">· On-Device Image Studio</span>
+    <!-- Minimalist Multi-Column Clean Light SaaS Footer -->
+    <footer class="border-t border-slate-200/80 bg-slate-50 py-14 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-10 pb-10 border-b border-slate-200/80">
+        <div class="md:col-span-5 space-y-3">
+          <div class="flex items-center gap-3">
+            <img src="./assets/brand/smartcutai-vertical.png" alt="SmartCutAI" class="footerVertical footerVerticalDark object-contain" />
+            <img src="./assets/brand/smartcutai-vertical-light.png" alt="" aria-hidden="true" class="footerVertical footerVerticalLight object-contain" />
+          </div>
+          <p class="text-xs text-slate-500 max-w-sm leading-relaxed">
+            Background removal that runs entirely in your browser, powered by Background Model 512 (INT8/FP16). No
+            accounts. No uploads. No watermark.
+          </p>
         </div>
 
-        <p class="text-xs text-slate-500">
-          Your photos are processed entirely in local memory.
-          <a href="./PRIVACY.md" class="hover:text-blue-600 underline">Privacy</a> ·
-          <a href="./THIRD_PARTY_LEGAL_NOTICES.md" class="hover:text-blue-600 underline">Legal Notices</a> ·
-          <a href="./LICENSE_AUDIT.md" class="hover:text-blue-600 underline">Licence Audit</a> ·
-          <a href="./MODEL_CARD.md" class="hover:text-blue-600 underline">Model Card</a>
-        </p>
+        <div class="md:col-span-2 space-y-2.5 text-xs">
+          <h3 class="font-semibold text-slate-900">Workspace</h3>
+          <ul class="space-y-2 text-slate-500">
+            <li><a href="#showcase" class="hover:text-slate-900 transition-colors">Showcase</a></li>
+            <li><a href="#how" class="hover:text-slate-900 transition-colors">Architecture</a></li>
+            <li><a href="#benchmarks" class="hover:text-slate-900 transition-colors">Benchmarks</a></li>
+            <li><a href="#support" class="hover:text-slate-900 transition-colors">Capabilities</a></li>
+            <li><a href="#faq" class="hover:text-slate-900 transition-colors">FAQ</a></li>
+          </ul>
+        </div>
 
-        <p class="text-[11px] text-slate-400">
-          <button id="analyticsSettingsBtn" type="button" class="analyticsSettingsBtn">
-            Analytics settings
-          </button>
-        </p>
+        <div class="md:col-span-3 space-y-2.5 text-xs">
+          <h3 class="font-semibold text-slate-900">Trust &amp; Governance</h3>
+          <ul class="space-y-2 text-slate-500">
+            <li><a href="./PRIVACY.md" class="hover:text-slate-900 transition-colors">Privacy Policy</a></li>
+            <li><a href="./MODEL_CARD.md" class="hover:text-slate-900 transition-colors">Model Card</a></li>
+            <li><a href="./THIRD_PARTY_LEGAL_NOTICES.md" class="hover:text-slate-900 transition-colors">Third-Party Notices</a></li>
+            <li><a href="./LICENSE_AUDIT.md" class="hover:text-slate-900 transition-colors">Licence Audit</a></li>
+          </ul>
+        </div>
 
-        <p class="text-[11px] text-slate-400 font-mono">
-          Build <code id="buildStamp">__BUILD_ID__</code>
-        </p>
+        <div class="md:col-span-2 space-y-2.5 text-xs">
+          <h3 class="font-semibold text-slate-900">Shortcuts</h3>
+          <ul class="space-y-2 text-slate-500">
+            <li class="flex items-center justify-between gap-2">
+              <span>Command bar</span>
+              <kbd class="cmdKbd">⌘K</kbd>
+            </li>
+            <li class="flex items-center justify-between gap-2">
+              <span>Close overlay</span>
+              <kbd class="cmdKbd">Esc</kbd>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="max-w-7xl mx-auto pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+        <p>Photos remain strictly in local browser memory · Zero-upload architecture</p>
+        <div class="flex items-center gap-4">
+          <button id="analyticsSettingsBtn" type="button" class="analyticsSettingsBtn">Analytics settings</button>
+          <span class="font-mono text-[11px] text-slate-400">Build <code id="buildStamp">__BUILD_ID__</code></span>
+        </div>
       </div>
     </footer>
 

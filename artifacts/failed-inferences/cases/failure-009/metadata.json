@@ -1,0 +1,55 @@
+{
+  "caseId": "failure-009",
+  "title": "Adreno-6xx WebGPU washed-out ghost (illustrated with product-scent-bottle)",
+  "category": "washed-out-ghost",
+  "severity": "high",
+  "input": {
+    "source": "test-images/product-scent-bottle.jpg",
+    "title": null,
+    "license": null,
+    "page": null,
+    "width": 960,
+    "height": 1400,
+    "sha256_original": "7a88174a9c4b2489f664d67da06749535d99f3e8febd4baa3d1e3582a132757a",
+    "asset_scale": 0.5714,
+    "note": "STAND-IN input: the real Adreno-6xx phone capture is not in this repo. This photo is only a carrier for the documented alpha signature."
+  },
+  "inference": {
+    "model": "qmix-cut-512",
+    "modelFile": "models/model_512_int8_fp16.onnx",
+    "modelSha256": "10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26",
+    "provider": "webgpu",
+    "device": "Qualcomm Adreno-6xx (Android 10, Chrome 157)",
+    "inputSize": 512
+  },
+  "result": {
+    "foreground_frac": 0.0,
+    "alpha_max_255": 105,
+    "opaque_fraction": 0.0,
+    "any_fraction": 1.0,
+    "empty": false,
+    "verdict": "washed",
+    "rawMask": {
+      "min": 0.0082,
+      "mean": 0.2322,
+      "max": 0.6424,
+      "below_01_fraction": 0.0004,
+      "above_095_fraction": 0.0
+    },
+    "bimodalTail": 0.0004,
+    "documentedSource": "HARDWARE_TESTING.md \u00a78 (2026-11-15 clean-run capture)"
+  },
+  "reproduction": {
+    "status": "not-reproduced-locally (needs Adreno-6xx hardware)",
+    "method": "assets reconstructed from the device report's documented signature; the phone photo itself is unavailable",
+    "command": "python3 scripts/eval/build-failure-gallery.py --model <model.onnx>"
+  },
+  "assetsSynthetic": true,
+  "observedProblem": "The whole frame came out faint and translucent \u2014 a washed-out \"ghost\" \u2014 with no opaque foreground core (max alpha 0.41, mean 0.23), yet the photo visible everywhere at ~23% opacity.",
+  "suspectedCause": "On a Qualcomm Adreno-6xx phone the WebGPU kernel returned a flat, low-confidence mask with no confident foreground (the documented driver/precision hypothesis in HARDWARE_TESTING.md \u00a71/\u00a78). The same flat shape appears whether or not a fallback ran, so it is the GPU kernel output itself, not the repo's alpha path.",
+  "fix": {
+    "implemented": false,
+    "description": null,
+    "passesAfterFix": null
+  }
+}

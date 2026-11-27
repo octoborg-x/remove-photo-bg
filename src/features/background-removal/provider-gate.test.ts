@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { classifyGpuAdapter, detectWebGpu, isProviderChoice, PROVIDER_LABELS } from './provider-gate';
+import {
+  classifyGpuAdapter,
+  detectWebGpu,
+  isConfirmedGoodAdapter,
+  isProviderChoice,
+  PROVIDER_LABELS,
+  CONFIRMED_GOOD_ADAPTER_HINTS,
+} from './provider-gate';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -68,6 +75,57 @@ describe('classifyGpuAdapter', () => {
     // Browsers that do not expose `features`/`limits` yet must not be rejected.
     expect(classifyGpuAdapter({ info: { vendor: 'apple', architecture: 'm1', device: '' } }).usable).toBe(true);
   });
+
+  it('defaults an unverified mobile adapter to CPU with a distinct reason', () => {
+    const r = classifyGpuAdapter(
+      {
+        info: { vendor: 'arm', architecture: 'mali-g715', device: 'Mali-G715' },
+        features: ['shader-f16'],
+        limits: { maxStorageBufferBindingSize: 2 * 1024 * 1024 * 1024 },
+      },
+      { deviceClass: 'mobile' },
+    );
+    expect(r.usable).toBe(false);
+    expect(r.reason).toMatch(/unverified mobile GPU adapter/i);
+    expect(r.reason).toMatch(/defaulting to CPU for reliability/i);
+    expect(r.reason).not.toMatch(/slower or incorrect|software renderer/i);
+  });
+
+  it('keeps the same adapter usable on desktop (no mobile rule)', () => {
+    const adapter = {
+      info: { vendor: 'arm', architecture: 'mali-g715', device: 'Mali-G715' },
+      features: ['shader-f16'],
+      limits: { maxStorageBufferBindingSize: 2 * 1024 * 1024 * 1024 },
+    };
+    expect(classifyGpuAdapter(adapter, { deviceClass: 'desktop' }).usable).toBe(true);
+    expect(classifyGpuAdapter(adapter).usable).toBe(true);
+  });
+
+  it('keeps the known-bad reason ahead of the unverified-mobile reason', () => {
+    const r = classifyGpuAdapter(
+      {
+        info: { vendor: 'qualcomm', architecture: 'adreno-6xx', device: 'Qualcomm Adreno 640' },
+        features: ['shader-f16'],
+        limits: { maxStorageBufferBindingSize: 2 * 1024 * 1024 * 1024 },
+      },
+      { deviceClass: 'mobile' },
+    );
+    expect(r.usable).toBe(false);
+    expect(r.reason).toMatch(/slower or incorrect/i);
+  });
+});
+
+describe('isConfirmedGoodAdapter', () => {
+  it('ships an empty evidence-only list (no mobile adapter measured correct yet)', () => {
+    expect(CONFIRMED_GOOD_ADAPTER_HINTS).toEqual([]);
+  });
+
+  it('matches hints case-insensitively when a list is supplied', () => {
+    expect(isConfirmedGoodAdapter('ARM Mali-G715', ['mali-g715'])).toBe(true);
+    expect(isConfirmedGoodAdapter('ARM Mali-G715', ['adreno'])).toBe(false);
+    expect(isConfirmedGoodAdapter('anything', [])).toBe(false);
+    expect(isConfirmedGoodAdapter('anything', [''])).toBe(false);
+  });
 });
 
 describe('isProviderChoice', () => {
@@ -131,6 +189,22 @@ describe('detectWebGpu', () => {
     expect(r.available).toBe(false);
     expect(r.adapterPresent).toBe(true);
     expect(r.reason).toMatch(/slower|incorrect/i);
+  });
+
+  it('keeps an unverified mobile adapter selectable but not the default', async () => {
+    vi.stubGlobal('navigator', {
+      gpu: {
+        requestAdapter: async () => ({
+          info: { vendor: 'arm', architecture: 'mali-g715', device: 'Mali-G715' },
+          features: ['shader-f16'],
+          limits: { maxStorageBufferBindingSize: 2 * 1024 * 1024 * 1024 },
+        }),
+      },
+    });
+    const r = await detectWebGpu({ deviceClass: 'mobile' });
+    expect(r.available).toBe(false);
+    expect(r.adapterPresent).toBe(true);
+    expect(r.reason).toMatch(/unverified mobile GPU adapter/i);
   });
 
   it('never throws when adapter enumeration rejects', async () => {

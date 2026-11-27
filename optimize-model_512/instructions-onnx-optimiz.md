@@ -25,7 +25,7 @@ The application performs background removal locally in the browser. WASM is curr
 Relevant project documents:
 - Phase 1 report: https://github.com/octoborg-x/remove-photo-bg/blob/main/PHASE1_REPORT.md
 - Hardware testing: https://github.com/octoborg-x/remove-photo-bg/blob/main/HARDWARE_TESTING.md
-- T4 benchmark report: https://github.com/octoborg-x/remove-photo-bg/blob/main/COLAB_T4_REPORT.md
+- T4 benchmark record: https://github.com/octoborg-x/remove-photo-bg/blob/main/HARDWARE_TESTING.md (§4, "GPU results")
 - Model card: https://github.com/octoborg-x/remove-photo-bg/blob/main/MODEL_CARD.md
 - Third-party legal notices: https://github.com/octoborg-x/remove-photo-bg/blob/main/THIRD_PARTY_LEGAL_NOTICES.md
 

@@ -1,0 +1,2133 @@
+{
+  "generatedAt": "2026-11-27T12:18:24.549Z",
+  "pageUrl": "http://127.0.0.1:4188/?provider=wasm",
+  "provider": "wasm",
+  "model": "qmix-cut-512",
+  "runsPerImage": 1,
+  "peakBrowserRssMb": 577,
+  "baselineBrowserRssMb": 463,
+  "summary": {
+    "total": 64,
+    "succeeded": 64,
+    "failed": 0,
+    "dimensionsWrong": 0,
+    "successRate": 1,
+    "meanInferMs": 6388
+  },
+  "byCategory": {
+    "ordinary-product": {
+      "total": 8,
+      "succeeded": 8,
+      "successRate": 1,
+      "meanInferMs": 6300,
+      "meanOpaqueFrac": 0.211,
+      "meanPartialFrac": 0.0282
+    },
+    "clothing": {
+      "total": 8,
+      "succeeded": 8,
+      "successRate": 1,
+      "meanInferMs": 6382,
+      "meanOpaqueFrac": 0.3407,
+      "meanPartialFrac": 0.0312
+    },
+    "hair-fur": {
+      "total": 8,
+      "succeeded": 8,
+      "successRate": 1,
+      "meanInferMs": 6375,
+      "meanOpaqueFrac": 0.2208,
+      "meanPartialFrac": 0.0194
+    },
+    "glass-transparent": {
+      "total": 8,
+      "succeeded": 8,
+      "successRate": 1,
+      "meanInferMs": 6336,
+      "meanOpaqueFrac": 0.3144,
+      "meanPartialFrac": 0.0264
+    },
+    "accessory": {
+      "total": 8,
+      "succeeded": 8,
+      "successRate": 1,
+      "meanInferMs": 6411,
+      "meanOpaqueFrac": 0.4016,
+      "meanPartialFrac": 0.0294
+    },
+    "complex-bg": {
+      "total": 8,
+      "succeeded": 8,
+      "successRate": 1,
+      "meanInferMs": 6354,
+      "meanOpaqueFrac": 0.1677,
+      "meanPartialFrac": 0.0181
+    },
+    "large": {
+      "total": 8,
+      "succeeded": 8,
+      "successRate": 1,
+      "meanInferMs": 6322,
+      "meanOpaqueFrac": 0.3135,
+      "meanPartialFrac": 0.0749
+    },
+    "thin-structure": {
+      "total": 8,
+      "succeeded": 8,
+      "successRate": 1,
+      "meanInferMs": 6625,
+      "meanOpaqueFrac": 0.1087,
+      "meanPartialFrac": 0.0369
+    }
+  },
+  "rows": [
+    {
+      "id": "ordinary-product-01",
+      "category": "ordinary-product",
+      "title": "File:Affligem Blond Bottle.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Affligem_Blond_Bottle.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 2879
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6494.1
+      ],
+      "avgMs": 6494.1,
+      "output": {
+        "width": 1280,
+        "height": 2879,
+        "opaqueFrac": 0.34015500173671415,
+        "transparentFrac": 0.6341741924279264,
+        "partialFrac": 0.025670805835359498
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 3575723
+    },
+    {
+      "id": "ordinary-product-02",
+      "category": "ordinary-product",
+      "title": "File:Beer bottles 2018 G1.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Beer_bottles_2018_G1.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 960
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        5
+      ],
+      "wallMs": 5,
+      "timings": [
+        6089.9
+      ],
+      "avgMs": 6089.9,
+      "output": {
+        "width": 1280,
+        "height": 960,
+        "opaqueFrac": 0.4607698567708333,
+        "transparentFrac": 0.49292724609375,
+        "partialFrac": 0.04630289713541667
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1317148
+    },
+    {
+      "id": "ordinary-product-03",
+      "category": "ordinary-product",
+      "title": "File:Happy and sad pills in a glass bottle on blue background (51021862811).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Happy_and_sad_pills_in_a_glass_bottle_on_blue_background_(51021862811).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 822
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6205.3
+      ],
+      "avgMs": 6205.3,
+      "output": {
+        "width": 1280,
+        "height": 822,
+        "opaqueFrac": 0.21443981903892945,
+        "transparentFrac": 0.7538853406326034,
+        "partialFrac": 0.03167484032846715
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 486942
+    },
+    {
+      "id": "ordinary-product-04",
+      "category": "ordinary-product",
+      "title": "File:Oatmeal cookie shot and cookies on table and white plate with alcohol bottles in background (28414253693).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Oatmeal_cookie_shot_and_cookies_on_table_and_white_plate_with_alcohol_bottles_in_background_(28414253693).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 640
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6085
+      ],
+      "avgMs": 6085,
+      "output": {
+        "width": 1280,
+        "height": 640,
+        "opaqueFrac": 0.0944921875,
+        "transparentFrac": 0.875948486328125,
+        "partialFrac": 0.029559326171875
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 268654
+    },
+    {
+      "id": "ordinary-product-05",
+      "category": "ordinary-product",
+      "title": "File:Vase bleu vicomte1.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Vase_bleu_vicomte1.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1766
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6053.3
+      ],
+      "avgMs": 6053.3,
+      "output": {
+        "width": 1280,
+        "height": 1766,
+        "opaqueFrac": 0.27613869620611553,
+        "transparentFrac": 0.7056222572197055,
+        "partialFrac": 0.018239046574178935
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1807355
+    },
+    {
+      "id": "ordinary-product-06",
+      "category": "ordinary-product",
+      "title": "File:Skin care products displayed on a light pink background with a spoonful of powder near jars.jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Skin_care_products_displayed_on_a_light_pink_background_with_a_spoonful_of_powder_near_jars.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 854
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6444.9
+      ],
+      "avgMs": 6444.9,
+      "output": {
+        "width": 1280,
+        "height": 854,
+        "opaqueFrac": 0.15969518442622951,
+        "transparentFrac": 0.8123518003512881,
+        "partialFrac": 0.027953015222482436
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 397922
+    },
+    {
+      "id": "ordinary-product-07",
+      "category": "ordinary-product",
+      "title": "File:A bottle of Aqua mineral water.JPG",
+      "license": "CC BY 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:A_bottle_of_Aqua_mineral_water.JPG",
+      "expected": {
+        "width": 1280,
+        "height": 1523
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6375
+      ],
+      "avgMs": 6375,
+      "output": {
+        "width": 1280,
+        "height": 1523,
+        "opaqueFrac": 0.09660158814839133,
+        "transparentFrac": 0.8920741341103086,
+        "partialFrac": 0.011324277741300065
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 512963
+    },
+    {
+      "id": "ordinary-product-08",
+      "category": "ordinary-product",
+      "title": "File:Bottled water (6972595593).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Bottled_water_(6972595593).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 960
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6650.2
+      ],
+      "avgMs": 6650.2,
+      "output": {
+        "width": 1280,
+        "height": 960,
+        "opaqueFrac": 0.045874837239583334,
+        "transparentFrac": 0.9193880208333334,
+        "partialFrac": 0.03473714192708333
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 424444
+    },
+    {
+      "id": "clothing-01",
+      "category": "clothing",
+      "title": "File:Jumping woman with green shirt and black and white socks and sleeves.jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Jumping_woman_with_green_shirt_and_black_and_white_socks_and_sleeves.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1617
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6387.5
+      ],
+      "avgMs": 6387.5,
+      "output": {
+        "width": 1280,
+        "height": 1617,
+        "opaqueFrac": 0.13490308055040198,
+        "transparentFrac": 0.8316220238095238,
+        "partialFrac": 0.03347489564007421
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 818410
+    },
+    {
+      "id": "clothing-02",
+      "category": "clothing",
+      "title": "File:Just a shirt.jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Just_a_shirt.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1920
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6359.1
+      ],
+      "avgMs": 6359.1,
+      "output": {
+        "width": 1280,
+        "height": 1920,
+        "opaqueFrac": 0.19348714192708333,
+        "transparentFrac": 0.7785990397135417,
+        "partialFrac": 0.027913818359375
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1153305
+    },
+    {
+      "id": "clothing-03",
+      "category": "clothing",
+      "title": "File:Man in white shirt frankfurt (Unsplash).png",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Man_in_white_shirt_frankfurt_(Unsplash).png",
+      "expected": {
+        "width": 1280,
+        "height": 853
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        34
+      ],
+      "wallMs": 34,
+      "timings": [
+        6441.6
+      ],
+      "avgMs": 6441.6,
+      "output": {
+        "width": 1280,
+        "height": 853,
+        "opaqueFrac": 0.3530544768464244,
+        "transparentFrac": 0.6107479117819461,
+        "partialFrac": 0.036197611371629544
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 589277
+    },
+    {
+      "id": "clothing-04",
+      "category": "clothing",
+      "title": "File:Person holding a small white dog while wearing a floral shirt outdoors.jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Person_holding_a_small_white_dog_while_wearing_a_floral_shirt_outdoors.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 854
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        21
+      ],
+      "wallMs": 21,
+      "timings": [
+        6425.9
+      ],
+      "avgMs": 6425.9,
+      "output": {
+        "width": 1280,
+        "height": 854,
+        "opaqueFrac": 0.6004903395784543,
+        "transparentFrac": 0.3526575307377049,
+        "partialFrac": 0.04685212968384075
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1450571
+    },
+    {
+      "id": "clothing-05",
+      "category": "clothing",
+      "title": "File:Child walks through lavender field wearing white dress and sun hat.jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Child_walks_through_lavender_field_wearing_white_dress_and_sun_hat.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1920
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6172.5
+      ],
+      "avgMs": 6172.5,
+      "output": {
+        "width": 1280,
+        "height": 1920,
+        "opaqueFrac": 0.131585693359375,
+        "transparentFrac": 0.8516927083333333,
+        "partialFrac": 0.016721598307291665
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 742151
+    },
+    {
+      "id": "clothing-06",
+      "category": "clothing",
+      "title": "File:Dress up.jpg",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Dress_up.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 960
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        1
+      ],
+      "wallMs": 1,
+      "timings": [
+        6516.7
+      ],
+      "avgMs": 6516.7,
+      "output": {
+        "width": 1280,
+        "height": 960,
+        "opaqueFrac": 0.23089680989583333,
+        "transparentFrac": 0.7387044270833333,
+        "partialFrac": 0.030398763020833334
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 520942
+    },
+    {
+      "id": "clothing-07",
+      "category": "clothing",
+      "title": "File:Infant's white cotton dress with pink and gold vertical stripes - DPLA - d2b640fad9f8620e0b2cd1a6baa51329 (page 1).jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Infant%27s_white_cotton_dress_with_pink_and_gold_vertical_stripes_-_DPLA_-_d2b640fad9f8620e0b2cd1a6baa51329_(page_1).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1652
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        1
+      ],
+      "wallMs": 1,
+      "timings": [
+        6475.9
+      ],
+      "avgMs": 6475.9,
+      "output": {
+        "width": 1280,
+        "height": 1652,
+        "opaqueFrac": 0.542982464437046,
+        "transparentFrac": 0.4279949493038741,
+        "partialFrac": 0.029022586259079903
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 2391020
+    },
+    {
+      "id": "clothing-08",
+      "category": "clothing",
+      "title": "File:Infant's white cotton dress with pink and gold vertical stripes - DPLA - d2b640fad9f8620e0b2cd1a6baa51329 (page 2).jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Infant%27s_white_cotton_dress_with_pink_and_gold_vertical_stripes_-_DPLA_-_d2b640fad9f8620e0b2cd1a6baa51329_(page_2).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1652
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6280.4
+      ],
+      "avgMs": 6280.4,
+      "output": {
+        "width": 1280,
+        "height": 1652,
+        "opaqueFrac": 0.5381720074152543,
+        "transparentFrac": 0.43314732142857143,
+        "partialFrac": 0.028680671156174335
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 2388586
+    },
+    {
+      "id": "hair-fur-01",
+      "category": "hair-fur",
+      "title": "File:Beautiful girl in white sweater with a golden retriever dog. Christmas tree background.jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Beautiful_girl_in_white_sweater_with_a_golden_retriever_dog._Christmas_tree_background.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1917
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6486.3
+      ],
+      "avgMs": 6486.3,
+      "output": {
+        "width": 1280,
+        "height": 1917,
+        "opaqueFrac": 0.5128777875586854,
+        "transparentFrac": 0.4594935935054773,
+        "partialFrac": 0.027628618935837245
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 2691271
+    },
+    {
+      "id": "hair-fur-02",
+      "category": "hair-fur",
+      "title": "File:Black lab dog sephia.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Black_lab_dog_sephia.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1024
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6495.5
+      ],
+      "avgMs": 6495.5,
+      "output": {
+        "width": 1280,
+        "height": 1024,
+        "opaqueFrac": 0.4842079162597656,
+        "transparentFrac": 0.49203643798828123,
+        "partialFrac": 0.023755645751953124
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1342769
+    },
+    {
+      "id": "hair-fur-03",
+      "category": "hair-fur",
+      "title": "File:Boxer dog posing on the grass.jpg",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Boxer_dog_posing_on_the_grass.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 853
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6305.4
+      ],
+      "avgMs": 6305.4,
+      "output": {
+        "width": 1280,
+        "height": 853,
+        "opaqueFrac": 0.20677388628370458,
+        "transparentFrac": 0.7603559129542791,
+        "partialFrac": 0.03287020076201641
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 689283
+    },
+    {
+      "id": "hair-fur-04",
+      "category": "hair-fur",
+      "title": "File:Bush dog on a white background.png",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Bush_dog_on_a_white_background.png",
+      "expected": {
+        "width": 1280,
+        "height": 823
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6534.9
+      ],
+      "avgMs": 6534.9,
+      "output": {
+        "width": 1280,
+        "height": 823,
+        "opaqueFrac": 0.26207662515188335,
+        "transparentFrac": 0.6997085738153098,
+        "partialFrac": 0.038214801032806806
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 958312
+    },
+    {
+      "id": "hair-fur-05",
+      "category": "hair-fur",
+      "title": "File:White rabbit with blue eyes on a rock.jpg",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:White_rabbit_with_blue_eyes_on_a_rock.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 853
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        4
+      ],
+      "wallMs": 4,
+      "timings": [
+        6097.6
+      ],
+      "avgMs": 6097.6,
+      "output": {
+        "width": 1280,
+        "height": 853,
+        "opaqueFrac": 0.25257821658851115,
+        "transparentFrac": 0.724137236225088,
+        "partialFrac": 0.02328454718640094
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 556751
+    },
+    {
+      "id": "hair-fur-06",
+      "category": "hair-fur",
+      "title": "File:2020 Seaman and White River Herd Areas Wild Horse Gather (49057019778).jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:2020_Seaman_and_White_River_Herd_Areas_Wild_Horse_Gather_(49057019778).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 967
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        5
+      ],
+      "wallMs": 5,
+      "timings": [
+        6205.9
+      ],
+      "avgMs": 6205.9,
+      "output": {
+        "width": 1280,
+        "height": 967,
+        "opaqueFrac": 0.048255720010341265,
+        "transparentFrac": 0.9426560884177869,
+        "partialFrac": 0.009088191571871768
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 202489
+    },
+    {
+      "id": "hair-fur-07",
+      "category": "hair-fur",
+      "title": "File:Black and white picture of a horse on a river bank. Houses and vehicles in the background (51151104640).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Black_and_white_picture_of_a_horse_on_a_river_bank._Houses_and_vehicles_in_the_background_(51151104640).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 959
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6327.9
+      ],
+      "avgMs": 6327.9,
+      "output": {
+        "width": 1280,
+        "height": 959,
+        "opaqueFrac": 0,
+        "transparentFrac": 1,
+        "partialFrac": 0
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 27697
+    },
+    {
+      "id": "hair-fur-08",
+      "category": "hair-fur",
+      "title": "File:Le Horse White Eagle (i.e. White Horse Eagle, chef amérindien Sioux de 107 ans) au Soldat inconnu, 13-12-28 - btv1b532075002.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Le_Horse_White_Eagle_(i.e._White_Horse_Eagle,_chef_am%C3%A9rindien_Sioux_de_107_ans)_au_Soldat_inconnu,_13-12-28_-_btv1b532075002.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 917
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6543.2
+      ],
+      "avgMs": 6543.2,
+      "output": {
+        "width": 1280,
+        "height": 917,
+        "opaqueFrac": 0,
+        "transparentFrac": 1,
+        "partialFrac": 0
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 26492
+    },
+    {
+      "id": "glass-transparent-01",
+      "category": "glass-transparent",
+      "title": "File:Glass wine white background.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Glass_wine_white_background.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1707
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        1
+      ],
+      "wallMs": 1,
+      "timings": [
+        6110.1
+      ],
+      "avgMs": 6110.1,
+      "output": {
+        "width": 1280,
+        "height": 1707,
+        "opaqueFrac": 0.3781332381370826,
+        "transparentFrac": 0.5927838495899238,
+        "partialFrac": 0.029082912272993557
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1834221
+    },
+    {
+      "id": "glass-transparent-02",
+      "category": "glass-transparent",
+      "title": "File:Six wine glasses in red, orange, purple, green, yellow, and light green.jpg",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Six_wine_glasses_in_red,_orange,_purple,_green,_yellow,_and_light_green.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 960
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6244.7
+      ],
+      "avgMs": 6244.7,
+      "output": {
+        "width": 1280,
+        "height": 960,
+        "opaqueFrac": 0.5032731119791667,
+        "transparentFrac": 0.4359537760416667,
+        "partialFrac": 0.06077311197916667
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1220378
+    },
+    {
+      "id": "glass-transparent-03",
+      "category": "glass-transparent",
+      "title": "File:Six wine glasses in red, orange, purple, green, yellow, and light green (cropped).jpg",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Six_wine_glasses_in_red,_orange,_purple,_green,_yellow,_and_light_green_(cropped).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 745
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6208.1
+      ],
+      "avgMs": 6208.1,
+      "output": {
+        "width": 1280,
+        "height": 745,
+        "opaqueFrac": 0.8022839765100671,
+        "transparentFrac": 0.162534605704698,
+        "partialFrac": 0.0351814177852349
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1261319
+    },
+    {
+      "id": "glass-transparent-04",
+      "category": "glass-transparent",
+      "title": "File:Yellow Glass (6449532733).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Yellow_Glass_(6449532733).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1737
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6366.3
+      ],
+      "avgMs": 6366.3,
+      "output": {
+        "width": 1280,
+        "height": 1737,
+        "opaqueFrac": 0.09979445523891767,
+        "transparentFrac": 0.8887364169545193,
+        "partialFrac": 0.01146912780656304
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 514571
+    },
+    {
+      "id": "glass-transparent-05",
+      "category": "glass-transparent",
+      "title": "File:Bottle, perfume (51360897639).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Bottle,_perfume_(51360897639).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1920
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6258.5
+      ],
+      "avgMs": 6258.5,
+      "output": {
+        "width": 1280,
+        "height": 1920,
+        "opaqueFrac": 0.33245524088541667,
+        "transparentFrac": 0.6395894368489583,
+        "partialFrac": 0.027955322265625
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1375724
+    },
+    {
+      "id": "glass-transparent-06",
+      "category": "glass-transparent",
+      "title": "File:Bottle, scent (51359099367).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Bottle,_scent_(51359099367).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 853
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6598.2
+      ],
+      "avgMs": 6598.2,
+      "output": {
+        "width": 1280,
+        "height": 853,
+        "opaqueFrac": 0.04283411488862837,
+        "transparentFrac": 0.942576751172333,
+        "partialFrac": 0.014589133939038688
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 202709
+    },
+    {
+      "id": "glass-transparent-07",
+      "category": "glass-transparent",
+      "title": "File:Bottle, scent (51360593019).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Bottle,_scent_(51360593019).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 853
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6402.2
+      ],
+      "avgMs": 6402.2,
+      "output": {
+        "width": 1280,
+        "height": 853,
+        "opaqueFrac": 0.06620841881594373,
+        "transparentFrac": 0.9193279235052755,
+        "partialFrac": 0.014463657678780774
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 284966
+    },
+    {
+      "id": "glass-transparent-08",
+      "category": "glass-transparent",
+      "title": "File:Bottle with flowers of the four seasons (IA mma bottle with flowers of the four seasons 208279).jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Bottle_with_flowers_of_the_four_seasons_(IA_mma_bottle_with_flowers_of_the_four_seasons_208279).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1600
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        11
+      ],
+      "wallMs": 11,
+      "timings": [
+        6496.3
+      ],
+      "avgMs": 6496.3,
+      "output": {
+        "width": 1280,
+        "height": 1600,
+        "opaqueFrac": 0.29053662109375,
+        "transparentFrac": 0.6919990234375,
+        "partialFrac": 0.01746435546875
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1474226
+    },
+    {
+      "id": "accessory-01",
+      "category": "accessory",
+      "title": "File:Flying shoe in the air.JPG",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Flying_shoe_in_the_air.JPG",
+      "expected": {
+        "width": 1280,
+        "height": 866
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6740.7
+      ],
+      "avgMs": 6740.7,
+      "output": {
+        "width": 1280,
+        "height": 866,
+        "opaqueFrac": 0.4920043663394919,
+        "transparentFrac": 0.46469219110854504,
+        "partialFrac": 0.04330344255196305
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 716826
+    },
+    {
+      "id": "accessory-02",
+      "category": "accessory",
+      "title": "File:Ladies' ballroom shoes, Tango Shoes 1.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Ladies%27_ballroom_shoes,_Tango_Shoes_1.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 853
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6284.6
+      ],
+      "avgMs": 6284.6,
+      "output": {
+        "width": 1280,
+        "height": 853,
+        "opaqueFrac": 0.25315247655334117,
+        "transparentFrac": 0.7089939917936694,
+        "partialFrac": 0.03785353165298945
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 691855
+    },
+    {
+      "id": "accessory-03",
+      "category": "accessory",
+      "title": "File:Mens' ballroom shoes, Eurodance CZ.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Mens%27_ballroom_shoes,_Eurodance_CZ.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 853
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        9
+      ],
+      "wallMs": 9,
+      "timings": [
+        6418.9
+      ],
+      "avgMs": 6418.9,
+      "output": {
+        "width": 1280,
+        "height": 853,
+        "opaqueFrac": 0.3207997508792497,
+        "transparentFrac": 0.63989046014068,
+        "partialFrac": 0.03930978898007034
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 774741
+    },
+    {
+      "id": "accessory-04",
+      "category": "accessory",
+      "title": "File:Roberts, Johnson, and Rand Shoe Company Children's Bobbie Style High-Top Lace-up Boots.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Roberts,_Johnson,_and_Rand_Shoe_Company_Children%27s_Bobbie_Style_High-Top_Lace-up_Boots.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 853
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6408.8
+      ],
+      "avgMs": 6408.8,
+      "output": {
+        "width": 1280,
+        "height": 853,
+        "opaqueFrac": 0.36291214830011725,
+        "transparentFrac": 0.5983706403868698,
+        "partialFrac": 0.038717211313012895
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1187620
+    },
+    {
+      "id": "accessory-05",
+      "category": "accessory",
+      "title": "File:Generic analog watch.jpg",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Generic_analog_watch.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1707
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6343.8
+      ],
+      "avgMs": 6343.8,
+      "output": {
+        "width": 1280,
+        "height": 1707,
+        "opaqueFrac": 0.34266256590509664,
+        "transparentFrac": 0.6366684058289397,
+        "partialFrac": 0.02066902826596368
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1780207
+    },
+    {
+      "id": "accessory-06",
+      "category": "accessory",
+      "title": "File:Tissot chronograph watch on white background.jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Tissot_chronograph_watch_on_white_background.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1332
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        8
+      ],
+      "wallMs": 8,
+      "timings": [
+        6490.5
+      ],
+      "avgMs": 6490.5,
+      "output": {
+        "width": 1280,
+        "height": 1332,
+        "opaqueFrac": 0.5518258492867868,
+        "transparentFrac": 0.4280387809684685,
+        "partialFrac": 0.020135369744744745
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 2447082
+    },
+    {
+      "id": "accessory-07",
+      "category": "accessory",
+      "title": "File:Ad pillar, street view, portrait, lady, handbag Fortepan 52840.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Ad_pillar,_street_view,_portrait,_lady,_handbag_Fortepan_52840.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 940
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6490
+      ],
+      "avgMs": 6490,
+      "output": {
+        "width": 1280,
+        "height": 940,
+        "opaqueFrac": 0.03277260638297872,
+        "transparentFrac": 0.9574409906914894,
+        "partialFrac": 0.009786402925531915
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 139812
+    },
+    {
+      "id": "accessory-08",
+      "category": "accessory",
+      "title": "File:Handbag, Women's (48708258183).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Handbag,_Women%27s_(48708258183).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 853
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        1
+      ],
+      "wallMs": 1,
+      "timings": [
+        6112.5
+      ],
+      "avgMs": 6112.5,
+      "output": {
+        "width": 1280,
+        "height": 853,
+        "opaqueFrac": 0.8563058689917936,
+        "transparentFrac": 0.11791104923798358,
+        "partialFrac": 0.025783081770222743
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 2686048
+    },
+    {
+      "id": "complex-bg-01",
+      "category": "complex-bg",
+      "title": "File:Barefoot Woman Hiking at Alberta Falls, Rocky Mountain National Park.jpg",
+      "license": "CC BY 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Barefoot_Woman_Hiking_at_Alberta_Falls,_Rocky_Mountain_National_Park.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1707
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        46
+      ],
+      "wallMs": 46,
+      "timings": [
+        6555.1
+      ],
+      "avgMs": 6555.1,
+      "output": {
+        "width": 1280,
+        "height": 1707,
+        "opaqueFrac": 0.0573021931751611,
+        "transparentFrac": 0.9262869800820153,
+        "partialFrac": 0.016410826742823667
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 453431
+    },
+    {
+      "id": "complex-bg-02",
+      "category": "complex-bg",
+      "title": "File:Woman enjoying warm drink in a cozy sweater while standing outdoors in a serene forest atmosphere.jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Woman_enjoying_warm_drink_in_a_cozy_sweater_while_standing_outdoors_in_a_serene_forest_atmosphere.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1917
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6283.9
+      ],
+      "avgMs": 6283.9,
+      "output": {
+        "width": 1280,
+        "height": 1917,
+        "opaqueFrac": 0.09334776017214398,
+        "transparentFrac": 0.8945365479916536,
+        "partialFrac": 0.0121156918362024
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 569615
+    },
+    {
+      "id": "complex-bg-03",
+      "category": "complex-bg",
+      "title": "File:Woman enjoys the outdoors while standing beside a camper.jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Woman_enjoys_the_outdoors_while_standing_beside_a_camper.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 852
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6401.4
+      ],
+      "avgMs": 6401.4,
+      "output": {
+        "width": 1280,
+        "height": 852,
+        "opaqueFrac": 0.10766670334507042,
+        "transparentFrac": 0.8720455545774648,
+        "partialFrac": 0.02028774207746479
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 382526
+    },
+    {
+      "id": "complex-bg-04",
+      "category": "complex-bg",
+      "title": "File:Woman giving Vulcan salute.jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Woman_giving_Vulcan_salute.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1912
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        16
+      ],
+      "wallMs": 16,
+      "timings": [
+        6291
+      ],
+      "avgMs": 6291,
+      "output": {
+        "width": 1280,
+        "height": 1912,
+        "opaqueFrac": 0.317508253791841,
+        "transparentFrac": 0.642786921417364,
+        "partialFrac": 0.03970482479079498
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 2079436
+    },
+    {
+      "id": "complex-bg-05",
+      "category": "complex-bg",
+      "title": "File:Burning Man 2013 Dance Party in Deep Playa (10226923844).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Burning_Man_2013_Dance_Party_in_Deep_Playa_(10226923844).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 960
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        1
+      ],
+      "wallMs": 1,
+      "timings": [
+        6166
+      ],
+      "avgMs": 6166,
+      "output": {
+        "width": 1280,
+        "height": 960,
+        "opaqueFrac": 0,
+        "transparentFrac": 1,
+        "partialFrac": 0
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 27727
+    },
+    {
+      "id": "complex-bg-06",
+      "category": "complex-bg",
+      "title": "File:Man playing saxophone.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Man_playing_saxophone.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1997
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6425.4
+      ],
+      "avgMs": 6425.4,
+      "output": {
+        "width": 1280,
+        "height": 1997,
+        "opaqueFrac": 0.36368302453680523,
+        "transparentFrac": 0.6111526664997496,
+        "partialFrac": 0.025164308963445167
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 2095632
+    },
+    {
+      "id": "complex-bg-07",
+      "category": "complex-bg",
+      "title": "File:Man standing in a tall tree forest (49488603843).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Man_standing_in_a_tall_tree_forest_(49488603843).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1707
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        1
+      ],
+      "wallMs": 1,
+      "timings": [
+        6421.9
+      ],
+      "avgMs": 6421.9,
+      "output": {
+        "width": 1280,
+        "height": 1707,
+        "opaqueFrac": 0.005776307117750439,
+        "transparentFrac": 0.9903426149677798,
+        "partialFrac": 0.0038810779144698303
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 120347
+    },
+    {
+      "id": "complex-bg-08",
+      "category": "complex-bg",
+      "title": "File:Man vanguard glasses outdoors (Unsplash).jpg",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Man_vanguard_glasses_outdoors_(Unsplash).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1250
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        41
+      ],
+      "wallMs": 41,
+      "timings": [
+        6285
+      ],
+      "avgMs": 6285,
+      "output": {
+        "width": 1280,
+        "height": 1250,
+        "opaqueFrac": 0.396523125,
+        "transparentFrac": 0.57661,
+        "partialFrac": 0.026866875
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1852221
+    },
+    {
+      "id": "large-01",
+      "category": "large",
+      "title": "File:White prairie clover flower dalea candida stem with the bottom flowering white and the top green.jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:White_prairie_clover_flower_dalea_candida_stem_with_the_bottom_flowering_white_and_the_top_green.jpg",
+      "expected": {
+        "width": 1920,
+        "height": 2939
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        87
+      ],
+      "wallMs": 87,
+      "timings": [
+        6386
+      ],
+      "avgMs": 6386,
+      "output": {
+        "width": 1920,
+        "height": 2939,
+        "opaqueFrac": 0.09111517522966996,
+        "transparentFrac": 0.8327869811160259,
+        "partialFrac": 0.07609784365430418
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 2186198
+    },
+    {
+      "id": "large-02",
+      "category": "large",
+      "title": "File:Birthday flower bouquet - 2021-08-26 - Sarah Stierch.jpg",
+      "license": "CC BY 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Birthday_flower_bouquet_-_2021-08-26_-_Sarah_Stierch.jpg",
+      "expected": {
+        "width": 1920,
+        "height": 2560
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        25
+      ],
+      "wallMs": 25,
+      "timings": [
+        6145.7
+      ],
+      "avgMs": 6145.7,
+      "output": {
+        "width": 1920,
+        "height": 2560,
+        "opaqueFrac": 0.4642669677734375,
+        "transparentFrac": 0.5045194498697917,
+        "partialFrac": 0.031213582356770832
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 6183400
+    },
+    {
+      "id": "large-03",
+      "category": "large",
+      "title": "File:Bouquet 2026 G1.jpg",
+      "license": "CC BY 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Bouquet_2026_G1.jpg",
+      "expected": {
+        "width": 1920,
+        "height": 2583
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        45
+      ],
+      "wallMs": 45,
+      "timings": [
+        6332.5
+      ],
+      "avgMs": 6332.5,
+      "output": {
+        "width": 1920,
+        "height": 2583,
+        "opaqueFrac": 0.290162037037037,
+        "transparentFrac": 0.6714114321202735,
+        "partialFrac": 0.03842653084268938
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 3582921
+    },
+    {
+      "id": "large-04",
+      "category": "large",
+      "title": "File:Bouquet of flowers - Jan van Huijsum.jpg",
+      "license": "CC BY 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Bouquet_of_flowers_-_Jan_van_Huijsum.jpg",
+      "expected": {
+        "width": 1920,
+        "height": 2080
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6309.3
+      ],
+      "avgMs": 6309.3,
+      "output": {
+        "width": 1920,
+        "height": 2080,
+        "opaqueFrac": 0.10035231370192307,
+        "transparentFrac": 0.8798700420673077,
+        "partialFrac": 0.01977764423076923
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1634261
+    },
+    {
+      "id": "large-05",
+      "category": "large",
+      "title": "File:Flower arrangement.jpg",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Flower_arrangement.jpg",
+      "expected": {
+        "width": 1920,
+        "height": 2560
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        5
+      ],
+      "wallMs": 5,
+      "timings": [
+        6137.1
+      ],
+      "avgMs": 6137.1,
+      "output": {
+        "width": 1920,
+        "height": 2560,
+        "opaqueFrac": 0.4879787190755208,
+        "transparentFrac": 0.4519547526041667,
+        "partialFrac": 0.0600665283203125
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 6079192
+    },
+    {
+      "id": "large-06",
+      "category": "large",
+      "title": "File:Cactus flower extracted.png",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Cactus_flower_extracted.png",
+      "expected": {
+        "width": 1920,
+        "height": 1920
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        39
+      ],
+      "wallMs": 39,
+      "timings": [
+        6382.5
+      ],
+      "avgMs": 6382.5,
+      "output": {
+        "width": 1920,
+        "height": 1920,
+        "opaqueFrac": 0.5858270941840278,
+        "transparentFrac": 0.38888861762152777,
+        "partialFrac": 0.025284288194444445
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 3544057
+    },
+    {
+      "id": "large-07",
+      "category": "large",
+      "title": "File:Close-up of a specimen of Old man cactus (Opuntia Polyacantha Trichoplora), ca.1920 (CHS-1912).jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Close-up_of_a_specimen_of_Old_man_cactus_(Opuntia_Polyacantha_Trichoplora),_ca.1920_(CHS-1912).jpg",
+      "expected": {
+        "width": 1920,
+        "height": 2516
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        91
+      ],
+      "wallMs": 91,
+      "timings": [
+        6532.5
+      ],
+      "avgMs": 6532.5,
+      "output": {
+        "width": 1920,
+        "height": 2516,
+        "opaqueFrac": 0.11819459625066242,
+        "transparentFrac": 0.564699051073132,
+        "partialFrac": 0.3171063526762056
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 4395572
+    },
+    {
+      "id": "large-08",
+      "category": "large",
+      "title": "File:Close-up of a specimen of a cactus in blossom, ca.1920 (CHS-1558).jpg",
+      "license": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Close-up_of_a_specimen_of_a_cactus_in_blossom,_ca.1920_(CHS-1558).jpg",
+      "expected": {
+        "width": 1920,
+        "height": 2550
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        36
+      ],
+      "wallMs": 36,
+      "timings": [
+        6348.7
+      ],
+      "avgMs": 6348.7,
+      "output": {
+        "width": 1920,
+        "height": 2550,
+        "opaqueFrac": 0.37019424019607844,
+        "transparentFrac": 0.5982473447712419,
+        "partialFrac": 0.03155841503267974
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 2732702
+    },
+    {
+      "id": "thin-structure-01",
+      "category": "thin-structure",
+      "title": "File:Black Titanium Frame Eyeglasses, JINS MTF-16S-151B, 1.jpg",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Black_Titanium_Frame_Eyeglasses,_JINS_MTF-16S-151B,_1.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 853
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6791.3
+      ],
+      "avgMs": 6791.3,
+      "output": {
+        "width": 1280,
+        "height": 853,
+        "opaqueFrac": 0.06126447098475967,
+        "transparentFrac": 0.8978568288393904,
+        "partialFrac": 0.04087870017584994
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 368679
+    },
+    {
+      "id": "thin-structure-02",
+      "category": "thin-structure",
+      "title": "File:Black Titanium Frame Eyeglasses, JINS MTF-16S-151B, 2.jpg",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Black_Titanium_Frame_Eyeglasses,_JINS_MTF-16S-151B,_2.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 853
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6495.8
+      ],
+      "avgMs": 6495.8,
+      "output": {
+        "width": 1280,
+        "height": 853,
+        "opaqueFrac": 0.13333913393903868,
+        "transparentFrac": 0.8386906506447831,
+        "partialFrac": 0.027970215416178196
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 343994
+    },
+    {
+      "id": "thin-structure-03",
+      "category": "thin-structure",
+      "title": "File:CPLA Cutlery.jpg",
+      "license": "CC BY 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:CPLA_Cutlery.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1280
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        1
+      ],
+      "wallMs": 1,
+      "timings": [
+        6534
+      ],
+      "avgMs": 6534,
+      "output": {
+        "width": 1280,
+        "height": 1280,
+        "opaqueFrac": 0.1617327880859375,
+        "transparentFrac": 0.7918206787109375,
+        "partialFrac": 0.046446533203125
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 597646
+    },
+    {
+      "id": "thin-structure-04",
+      "category": "thin-structure",
+      "title": "File:Close-up of a wooden cutlery tray. Forks, spoons and knives.jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Close-up_of_a_wooden_cutlery_tray._Forks,_spoons_and_knives.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 854
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        1
+      ],
+      "wallMs": 1,
+      "timings": [
+        6811.8
+      ],
+      "avgMs": 6811.8,
+      "output": {
+        "width": 1280,
+        "height": 854,
+        "opaqueFrac": 0,
+        "transparentFrac": 1,
+        "partialFrac": 0
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 24653
+    },
+    {
+      "id": "thin-structure-05",
+      "category": "thin-structure",
+      "title": "File:Cutlery, knife & fork (51368794896).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Cutlery,_knife_%26_fork_(51368794896).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1920
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        20
+      ],
+      "wallMs": 20,
+      "timings": [
+        6478.4
+      ],
+      "avgMs": 6478.4,
+      "output": {
+        "width": 1280,
+        "height": 1920,
+        "opaqueFrac": 0.10258829752604166,
+        "transparentFrac": 0.86211669921875,
+        "partialFrac": 0.03529500325520833
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 878506
+    },
+    {
+      "id": "thin-structure-06",
+      "category": "thin-structure",
+      "title": "File:Cutlery (51359407562).jpg",
+      "license": "CC BY 2.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Cutlery_(51359407562).jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1920
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        28
+      ],
+      "wallMs": 28,
+      "timings": [
+        6466.2
+      ],
+      "avgMs": 6466.2,
+      "output": {
+        "width": 1280,
+        "height": 1920,
+        "opaqueFrac": 0.112855224609375,
+        "transparentFrac": 0.8471891276041666,
+        "partialFrac": 0.03995564778645833
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 1007329
+    },
+    {
+      "id": "thin-structure-07",
+      "category": "thin-structure",
+      "title": "File:An old type scissors at Kakinada.jpg",
+      "license": "CC BY 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:An_old_type_scissors_at_Kakinada.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 1707
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        2
+      ],
+      "wallMs": 2,
+      "timings": [
+        6705.3
+      ],
+      "avgMs": 6705.3,
+      "output": {
+        "width": 1280,
+        "height": 1707,
+        "opaqueFrac": 0.11098097905682484,
+        "transparentFrac": 0.8555026178968952,
+        "partialFrac": 0.03351640304628002
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 779068
+    },
+    {
+      "id": "thin-structure-08",
+      "category": "thin-structure",
+      "title": "File:Crossed scissors.jpg",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Crossed_scissors.jpg",
+      "expected": {
+        "width": 1280,
+        "height": 724
+      },
+      "provider": "wasm",
+      "model": "qmix-cut-512",
+      "ok": true,
+      "runs": 1,
+      "perRunMs": [
+        6
+      ],
+      "wallMs": 6,
+      "timings": [
+        6720.8
+      ],
+      "avgMs": 6720.8,
+      "output": {
+        "width": 1280,
+        "height": 724,
+        "opaqueFrac": 0.18686658321823205,
+        "transparentFrac": 0.7416954419889503,
+        "partialFrac": 0.07143797479281767
+      },
+      "dimensionsCorrect": true,
+      "outputBytes": 665957
+    }
+  ]
+}

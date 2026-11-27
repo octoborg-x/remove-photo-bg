@@ -4,6 +4,7 @@ import {
   isFastRefinementConfig,
   resolveRefinementConfig,
   refinementConfigFromParams,
+  type FastRefinementConfig,
 } from './refinement-config';
 
 describe('isFastRefinementConfig', () => {
@@ -25,6 +26,7 @@ describe('isFastRefinementConfig', () => {
       { ...base(), edgeRefinement: { ...base().edgeRefinement, epsilon: 0 } },
       { ...base(), cleanup: { ...base().cleanup, preserveSoftAlpha: false } },
       { ...base(), cleanup: { ...base().cleanup, minAlpha: 0.8, maxAlpha: 0.2 } },
+      { ...base(), cleanup: { ...base().cleanup, islandCleanup: 'aggressive' } },
       { ...base(), performance: { ...base().performance, chunkRows: 0 } },
     ];
     for (const b of bad) expect(isFastRefinementConfig(b), JSON.stringify(b)).toBe(false);
@@ -52,6 +54,7 @@ describe('resolveRefinementConfig', () => {
         minAlpha: 0.9,
         maxAlpha: 0.1,
         removeTinyIsolatedNoise: true,
+        islandCleanup: 'strict',
       },
       performance: { useWorker: true, chunkRows: 0, maxProcessingPixels: 0 },
     });
@@ -61,6 +64,16 @@ describe('resolveRefinementConfig', () => {
     expect(cfg.edgeRefinement.epsilon).toBeGreaterThanOrEqual(1e-8);
     expect(cfg.cleanup.minAlpha).toBeLessThanOrEqual(cfg.cleanup.maxAlpha);
     expect(cfg.performance.chunkRows).toBeGreaterThanOrEqual(1);
+    expect(cfg.cleanup.islandCleanup).toBe('strict');
+  });
+
+  it('defaults the island cleanup to the fine variant', () => {
+    expect(resolveRefinementConfig().cleanup.islandCleanup).toBe('fine');
+    expect(
+      resolveRefinementConfig({
+        cleanup: { islandCleanup: 'aggressive' } as unknown as FastRefinementConfig['cleanup'],
+      }).cleanup.islandCleanup,
+    ).toBe('fine');
   });
 });
 
@@ -71,6 +84,16 @@ describe('refinementConfigFromParams', () => {
 
   it('keeps refinement on by default', () => {
     expect(refinementConfigFromParams(new URLSearchParams('')).enabled).toBe(true);
+  });
+
+  it('selects the island cleanup variant with ?islands=', () => {
+    expect(refinementConfigFromParams(new URLSearchParams('')).cleanup.islandCleanup).toBe('fine');
+    expect(refinementConfigFromParams(new URLSearchParams('islands=strict')).cleanup.islandCleanup).toBe(
+      'strict',
+    );
+    expect(refinementConfigFromParams(new URLSearchParams('islands=junk')).cleanup.islandCleanup).toBe(
+      'fine',
+    );
   });
 
   it('reads numeric knobs and ignores junk', () => {

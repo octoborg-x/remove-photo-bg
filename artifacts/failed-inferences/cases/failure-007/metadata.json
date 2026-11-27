@@ -1,0 +1,52 @@
+{
+  "caseId": "failure-007",
+  "title": "File:2020 Seaman and White River Herd Areas Wild Horse Gather (49057019778).jpg",
+  "category": "partial-subject-removal",
+  "severity": "medium",
+  "input": {
+    "source": "eval/images/hair-fur-06.jpg",
+    "title": "File:2020 Seaman and White River Herd Areas Wild Horse Gather (49057019778).jpg",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:2020_Seaman_and_White_River_Herd_Areas_Wild_Horse_Gather_(49057019778).jpg",
+    "width": 1280,
+    "height": 967,
+    "sha256_original": "80d9f7a66bd90610aff496a739d488b34ba37d39a49d854bfee1699ac18b5fbb",
+    "asset_scale": 0.625
+  },
+  "inference": {
+    "model": "qmix-cut-512",
+    "modelFile": "models/model_512_int8_fp16.onnx",
+    "modelSha256": "10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26",
+    "provider": "wasm",
+    "inputSize": 512
+  },
+  "result": {
+    "foreground_frac": 0.05337,
+    "alpha_max_255": 254,
+    "opaque_fraction": 0.05145,
+    "any_fraction": 0.05726,
+    "empty": false,
+    "verdict": "ok",
+    "rawMask": {
+      "min": 0.0,
+      "mean": 0.05279,
+      "max": 1.0,
+      "below_01_fraction": 0.94479,
+      "above_095_fraction": 0.04881
+    },
+    "bimodalTail": 0.9936
+  },
+  "reproduction": {
+    "status": "reproduced",
+    "method": "shipped model over the eval set, offline CPU (ONNX Runtime)",
+    "command": "python3 scripts/eval/build-failure-gallery.py --model <model.onnx>"
+  },
+  "observedProblem": "Borderline: 5.3% of pixels kept. The main subject is largely removed, leaving only fragments.",
+  "suspectedCause": "A herd of wild horses in a dusty, low-contrast setting; the animals blend into the background.",
+  "investigation": [],
+  "fix": {
+    "implemented": false,
+    "description": null,
+    "passesAfterFix": null
+  }
+}

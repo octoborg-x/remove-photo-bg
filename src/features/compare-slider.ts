@@ -30,11 +30,21 @@ export function initCompareSliders(root: ParentNode = document): void {
 
     range.addEventListener('input', () => apply(Number(range.value)));
 
-    // Pointer drag on the stage moves the same divider. `pointerdown` captures
-    // the pointer so a drag that leaves the image still tracks.
+    // Pointer drag on the stage moves the same divider. `dragging` carries the
+    // gesture as well as pointer capture: dragging an `<img>` starts a native
+    // drag-and-drop, which fires `pointercancel` and drops the capture, so
+    // capture alone silently stops the drag after the first move.
     const stage = figure.querySelector<HTMLElement>('.compareStage');
     if (!stage) return;
+    stage.querySelectorAll('img').forEach((img) => {
+      img.draggable = false;
+    });
+    let dragging = false;
+    const stop = (): void => {
+      dragging = false;
+    };
     const setFromPointer = (clientX: number): void => {
+      if (figure.dataset.compareOn === 'false') return;
       const rect = stage.getBoundingClientRect();
       if (rect.width === 0) return;
       const pct = ((clientX - rect.left) / rect.width) * 100;
@@ -42,14 +52,19 @@ export function initCompareSliders(root: ParentNode = document): void {
       apply(pct);
     };
     stage.addEventListener('pointerdown', (e) => {
-      stage.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      dragging = true;
+      try {
+        stage.setPointerCapture(e.pointerId);
+      } catch {
+        // Capture is an optimisation; `dragging` alone keeps the drag working.
+      }
       setFromPointer(e.clientX);
     });
     stage.addEventListener('pointermove', (e) => {
-      if (stage.hasPointerCapture(e.pointerId)) setFromPointer(e.clientX);
+      if (dragging || stage.hasPointerCapture?.(e.pointerId)) setFromPointer(e.clientX);
     });
-    stage.addEventListener('pointerup', (e) => {
-      if (stage.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId);
-    });
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
   });
 }

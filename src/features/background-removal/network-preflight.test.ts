@@ -136,6 +136,12 @@ describe('confirmation copy', () => {
     expect(text).toMatch(/never uploaded/i);
   });
 
+  it('does not claim the download only ever happens once', () => {
+    const text = downloadConfirmationText(68 * 1024 * 1024);
+    expect(text).not.toMatch(/only happens once/i);
+    expect(text).not.toMatch(/kept on this device/i);
+  });
+
   it('handles an unknown size without printing "0 B"', () => {
     expect(downloadConfirmationText(0)).toContain('large file');
   });
@@ -186,7 +192,7 @@ describe('connectionChangeAction', () => {
 
 describe('meteredSwitchNotice', () => {
   it('states the size, that it paused, and how to resume', () => {
-    const text = meteredSwitchNotice(60 * 1024 * 1024, 'QMix Cut-512');
+    const text = meteredSwitchNotice(60 * 1024 * 1024, 'Background Model 512 (INT8/FP16)');
     expect(text).toContain('mobile data');
     expect(text).toMatch(/paused/i);
     expect(text).toContain('60.0 MB');

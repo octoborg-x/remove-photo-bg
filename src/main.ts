@@ -20,8 +20,22 @@ import {
   isMaskAdjust,
   type MaskAdjust,
 } from './features/background-removal/mask-postprocess';
-import { composeResult } from './features/background-removal/composite';
-import { recoverForegroundMask } from './features/background-removal/mask-recovery';
+import { composeResult, previewSize } from './features/background-removal/composite';
+import {
+  initialBrushHistory,
+  pushBrushStroke,
+  redoBrushStroke,
+  replayBrushStrokes,
+  undoBrushStroke,
+  canRedoBrush,
+  canUndoBrush,
+  type BrushHistory,
+  type BrushStroke,
+  type BrushTool,
+} from './features/background-removal/brush-edit';
+import { autoContourCleanup } from './features/background-removal/contour-cleanup';
+import { recoverForegroundMask, despeckleRecoveredMask } from './features/background-removal/mask-recovery';
+import { isIslandCleanup, islandFraction } from './features/background-removal/island-cleanup';
 import {
   rawMaskStats,
   formatRawMaskStats,
@@ -33,16 +47,34 @@ import {
   outputAlphaStats,
   classifyOutputAlpha,
   outputAlphaWarning,
+  transitionBandFraction,
   formatOutputAlphaStats,
 } from './features/diagnostics/output-alpha';
 import {
   buildDiagnosticReport,
   formatDiagnosticReport,
 } from './features/diagnostics/diagnostic-report';
-import { cropMaskFloat, alphaToBytes, lumaFromRgba } from './features/background-removal/mask-resize';
+import { cropMaskFloat, alphaToBytes, bytesToAlpha, lumaFromRgba, resizeMaskFloat } from './features/background-removal/mask-resize';
+import {
+  planTiles,
+  TileStitcher,
+  recommendTiling,
+  TILING_MIN_LONG_SIDE,
+  type TileGrid,
+} from './features/background-removal/tiling';
+import {
+  initialSession,
+  reduceSession,
+  activeEntry,
+  summarizeLibrary,
+  formatBytes,
+  type SessionEntry,
+  type SessionState,
+} from './features/background-removal/session-library';
 import { RefinementRunner } from './features/background-removal/refinement-client';
 import {
   refinementConfigFromParams,
+  resolveRefinementConfig,
   type FastRefinementConfig,
 } from './features/background-removal/refinement-config';
 import {
@@ -54,11 +86,16 @@ import {
   DEFAULT_EXPORT_FORMAT,
   type ExportFormat,
 } from './features/background-removal/export-image';
+import { createZipBlob, dataUrlToBytes } from './features/background-removal/zip';
 import {
   validateFileTypeAndSize,
   validateDimensions,
   DEFAULT_UPLOAD_LIMITS,
 } from './features/background-removal/image-validation';
+import {
+  recommendSourceScale,
+  type SourceScaleDecision,
+} from './features/background-removal/adaptive-downscale';
 import {
   ensureAssetCache,
   cachedAssetCount,
@@ -81,6 +118,7 @@ import {
   currentConnectionClass,
   connectionChangeAction,
   meteredSwitchNotice,
+  readDeviceMobile,
   type ConnectionClass,
 } from './features/background-removal/network-preflight';
 import {
@@ -97,6 +135,8 @@ import {
 import { initCompareSliders } from './features/compare-slider';
 import { initShowcaseGallery } from './features/showcase-gallery';
 import { initSupportCarousel } from './features/support-carousel';
+import { initCommandPalette } from './features/command-palette';
+import { initLandingWorkspace } from './features/workspace-preview';
 import {
   isThemePreference,
   nextTheme,
@@ -111,21 +151,42 @@ import {
   isTransparent,
   describeChoice,
   formatForChoice,
+  toRgba,
   type BackgroundChoice,
 } from './features/background-removal/background-color';
+import { createColorPicker } from './features/background-removal/color-picker';
 import {
   initialStudioView,
   reduceStudio,
   scrubConsoleLine,
+  shouldInertSibling,
+  stepPhase,
+  stepTitle,
   STUDIO_TABS,
   tabEnabled,
+  tabHasEngineControls,
   type StudioTab,
 } from './features/background-removal/studio-view';
-import { classifyLogLine } from './features/background-removal/console-log';
 import {
-  pickColorFromScreen,
-  supportsScreenPicker,
-} from './features/background-removal/screen-picker';
+  BULK_LIMIT,
+  addBulkItem,
+  bulkActiveCount,
+  bulkCapacity,
+  bulkCheckedCount,
+  bulkDoneCount,
+  initialBulkState,
+  removeBulkItem,
+  removeBulkItems,
+  selectBulkItem,
+  selectedBulkItem,
+  setBulkBackground,
+  setBulkChecked,
+  setBulkCheckedAll,
+  updateBulkItem,
+  type BulkItem,
+  type BulkState,
+} from './features/background-removal/bulk-batch';
+import { classifyLogLine } from './features/background-removal/console-log';
 import { initAnalyticsUi, type AnalyticsUi } from './features/analytics/ui';
 import type { FailureReason } from './features/analytics/events';
 import type {
@@ -144,7 +205,11 @@ const outputSection = document.getElementById('outputSection')!;
 const refineNoticeEl = document.getElementById('refineNotice')!;
 const providerToggle = document.getElementById('providerToggle')! as HTMLSelectElement;
 const downloadImageBtn = document.getElementById('downloadImage')! as HTMLAnchorElement;
-const formatOptionsEl = document.getElementById('formatOptions')!;
+const downloadImageLabelEl = document.getElementById('downloadImageLabel')!;
+const formatSelectEl = document.getElementById('exportFormatSelect')! as HTMLSelectElement;
+const downloadMenuEl = document.getElementById('downloadMenu')! as HTMLElement;
+const downloadMenuBtn = document.getElementById('downloadMenuBtn') as HTMLButtonElement | null;
+const bulkDownloadBtn = document.getElementById('bulkDownloadBtn') as HTMLButtonElement | null;
 const providerHint = document.getElementById('providerHint')!;
 const maskThresholdInput = document.getElementById('maskThreshold')! as HTMLInputElement;
 const maskThresholdValue = document.getElementById('maskThresholdValue')!;
@@ -165,32 +230,28 @@ const toastHost = document.getElementById('toastHost')!;
 const studioEl = document.getElementById('studio')!;
 const studioLaunchBtn = document.getElementById('studioLaunch')! as HTMLButtonElement;
 const studioCloseBtn = document.getElementById('studioClose')! as HTMLButtonElement;
+const studioSplashEl = document.getElementById('studioSplash');
 const procPctEl = document.getElementById('procPct')!;
 const procStageLabelEl = document.getElementById('procStageLabel')!;
 const tabButtons: Record<StudioTab, HTMLButtonElement> = {
-  input: document.getElementById('tabInput')! as HTMLButtonElement,
-  processing: document.getElementById('tabProcessing')! as HTMLButtonElement,
-  result: document.getElementById('tabResult')! as HTMLButtonElement,
-  compare: document.getElementById('tabCompare')! as HTMLButtonElement,
+  step: document.getElementById('tabStep')! as HTMLButtonElement,
+  bulk: document.getElementById('tabBulk')! as HTMLButtonElement,
+  library: document.getElementById('tabLibrary')! as HTMLButtonElement,
 };
 const tabPanels: Record<StudioTab, HTMLElement> = {
-  input: document.getElementById('panelInput')!,
-  processing: document.getElementById('panelProcessing')!,
-  result: document.getElementById('panelResult')!,
-  compare: document.getElementById('panelCompare')!,
+  step: document.getElementById('panelStep')!,
+  bulk: document.getElementById('panelBulk')!,
+  library: document.getElementById('panelLibrary')!,
 };
-const compareBeforeEl = document.getElementById('compareBefore')! as HTMLImageElement;
-const compareAfterEl = document.getElementById('compareAfter')! as HTMLImageElement;
+const resultCompareToggleBtn = document.getElementById('resultCompareToggle') as HTMLButtonElement | null;
+const stepInputEl = document.getElementById('stepInput')!;
+const stepProcessingEl = document.getElementById('stepProcessing')!;
+const stepResultEl = document.getElementById('stepResult')!;
+const newPhotoBtn = document.getElementById('newPhotoBtn') as HTMLButtonElement | null;
 const inputPreviewEl = document.getElementById('inputPreview')!;
 const inputPreviewImg = document.getElementById('inputPreviewImg')! as HTMLImageElement;
-const panelInputEl = document.getElementById('panelInput')!;
-const bgTransparentBtn = document.getElementById('bgTransparentBtn')! as HTMLButtonElement;
-const bgColorPicker = document.getElementById('bgColorPicker')! as HTMLInputElement;
+const bgColorButton = document.getElementById('bgColorButton')! as HTMLButtonElement;
 const bgColorSwatch = document.getElementById('bgColorSwatch')!;
-const bgEyeDropperBtn = document.getElementById('bgEyeDropper')! as HTMLButtonElement;
-const bgAlphaInput = document.getElementById('bgAlpha')! as HTMLInputElement;
-const bgAlphaValue = document.getElementById('bgAlphaValue')!;
-const bgCurrentEl = document.getElementById('bgCurrent')!;
 const privacyToggle = document.getElementById('privacyToggle')! as HTMLButtonElement;
 const privacyStatement = document.getElementById('privacyStatement')!;
 const siteHeaderEl = document.getElementById('siteHeader')!;
@@ -206,8 +267,124 @@ const settingsSidebarEl = document.getElementById('settingsSidebar') as HTMLElem
 const sidebarToggleBtn = document.getElementById('sidebarToggle') as HTMLButtonElement | null;
 const sidebarCollapseBtn = document.getElementById('sidebarCollapse') as HTMLButtonElement | null;
 const sidebarResizeEl = document.getElementById('sidebarResize');
-const resultWorkspaceEl = document.getElementById('resultWorkspace');
+// Manual retouch layer (Result tab only): an overlay edit button on the image
+// and a compact panel below the result.
+const resultEditToggleBtn = document.getElementById('resultEditToggle') as HTMLButtonElement | null;
+const retouchPanelEl = document.getElementById('retouchPanel') as HTMLElement | null;
+const retouchToolButtons: Record<BrushTool, HTMLButtonElement | null> = {
+  restore: document.getElementById('retouchRestore') as HTMLButtonElement | null,
+  erase: document.getElementById('retouchErase') as HTMLButtonElement | null,
+};
+const retouchSizeInput = document.getElementById('retouchSize') as HTMLInputElement | null;
+const retouchSizeValueEl = document.getElementById('retouchSizeValue');
+const retouchFeatherInput = document.getElementById('retouchFeather') as HTMLInputElement | null;
+const retouchFeatherValueEl = document.getElementById('retouchFeatherValue');
+const retouchAutoCleanupBtn = document.getElementById('retouchAutoCleanup') as HTMLButtonElement | null;
+const retouchUndoBtn = document.getElementById('retouchUndo') as HTMLButtonElement | null;
+const retouchRedoBtn = document.getElementById('retouchRedo') as HTMLButtonElement | null;
+const retouchSaveBtn = document.getElementById('retouchSave') as HTMLButtonElement | null;
+const retouchCancelBtn = document.getElementById('retouchCancel') as HTMLButtonElement | null;
+// Bulk queue: up to five photos processed one after another.
+const bulkPickBtn = document.getElementById('bulkPick') as HTMLButtonElement | null;
+const bulkEmptyPickBtn = document.getElementById('bulkEmptyPick') as HTMLButtonElement | null;
+const bulkGridEl = document.getElementById('bulkGrid');
+const bulkEmptyEl = document.getElementById('bulkEmpty');
+const bulkCountEl = document.getElementById('bulkCount');
+const bulkStatusEl = document.getElementById('bulkStatus');
+const bulkDownloadAllBtn = document.getElementById('bulkDownloadAll') as HTMLButtonElement | null;
+const bulkSelectAllEl = document.getElementById('bulkSelectAll') as HTMLInputElement | null;
+const bulkDeleteSelectedBtn = document.getElementById('bulkDeleteSelected') as HTMLButtonElement | null;
+const bulkBgButton = document.getElementById('bulkBgButton') as HTMLButtonElement | null;
+const bulkBgSwatch = document.getElementById('bulkBgSwatch');
+// Session library controls.
+const libraryGridEl = document.getElementById('libraryGrid');
+const libraryEmptyEl = document.getElementById('libraryEmpty');
+const libraryEmptyTextEl = document.getElementById('libraryEmptyText');
+const libraryClearBtn = document.getElementById('libraryClear') as HTMLButtonElement | null;
+const libraryMenuWrapEl = document.getElementById('libraryMenuWrap');
+const libraryMenuBtn = document.getElementById('libraryMenuBtn') as HTMLButtonElement | null;
+const libraryMenuEl = document.getElementById('libraryMenu');
+const librarySaveToggleEl = document.getElementById('librarySaveToggle') as HTMLButtonElement | null;
+const librarySaveStateEl = document.getElementById('librarySaveState');
+const libraryStatUsedEl = document.getElementById('libraryStatUsed');
+const libraryStatLeftEl = document.getElementById('libraryStatLeft');
+const libraryStatTotalEl = document.getElementById('libraryStatTotal');
+const libraryFilterInput = document.getElementById('libraryFilter') as HTMLInputElement | null;
+const librarySelectAllEl = document.getElementById('librarySelectAll') as HTMLInputElement | null;
+const libraryExportSelectedBtn = document.getElementById('libraryExportSelected') as HTMLButtonElement | null;
+// The workspace whose width bounds the sidebar drag (it is shared by all tabs).
+const resultWorkspaceEl = document.getElementById('studioWorkspace');
+// Tiled-inference + edge-refinement engine controls (shared sidebar).
+const tilingSelect = document.getElementById('tilingSelect') as HTMLSelectElement | null;
+const tilingValueEl = document.getElementById('tilingValue');
+const tilingHintEl = document.getElementById('tilingHint');
+const tilingAdviceEl = document.getElementById('tilingAdvice');
+const tilingApplyBtn = document.getElementById('tilingApply') as HTMLButtonElement | null;
+const refineToggle = document.getElementById('refineToggle') as HTMLSelectElement | null;
+const refineValueEl = document.getElementById('refineValue');
+const refineFieldEl = document.getElementById('refineField');
+const refineStrengthInput = document.getElementById('refineStrength') as HTMLInputElement | null;
+const refineStrengthValueEl = document.getElementById('refineStrengthValue');
+const refineEdgeSensitivityInput = document.getElementById('refineEdgeSensitivity') as HTMLInputElement | null;
+const refineEdgeSensitivityValueEl = document.getElementById('refineEdgeSensitivityValue');
+const islandCleanupSelect = document.getElementById('islandCleanupSelect') as HTMLSelectElement | null;
+const islandCleanupValueEl = document.getElementById('islandCleanupValue');
 let studioView = initialStudioView();
+
+// ——— Manual retouch state (declared before the first render) ———
+// The session is a working copy of the mask at preview and full resolution. The
+// committed result canvases are never touched until Save, so Cancel is exactly
+// pixel-for-pixel. Strokes are recorded in the preview canvas's coordinate
+// space and replayed onto the full-resolution grid on Save.
+let lastResultAlpha: Uint8ClampedArray | null = null;
+let retouchSession: RetouchSession | null = null;
+let retouchModeOpen = false;
+let retouchOverlay: HTMLCanvasElement | null = null;
+const RETOUCH_DEFAULT_SIZE = 48;
+const RETOUCH_DEFAULT_FEATHER = 40; // percent
+// Read by updateRetouchUi() during the first render, so declared here too.
+let resultCompareFigure: HTMLElement | null = null;
+let resultCompareOn = false;
+// The button whose download menu is open (declared before the first render).
+let downloadMenuTrigger: HTMLButtonElement | null = null;
+
+// ——— Bulk queue ———
+// The source blobs and full-resolution cut-outs are kept here, keyed by the ids
+// the pure bulk state assigns. Object URLs live on the state entries.
+let bulkState: BulkState = initialBulkState();
+const bulkBlobs = new Map<number, Blob>();
+const bulkResults = new Map<number, HTMLCanvasElement>();
+let bulkBatchRunning = false;
+// While a batch owns the engine its progress stays visible; clicking another tab
+// releases this pin so the user is never yanked back.
+let bulkTabPinned = false;
+
+// ——— Session library ———
+// The images processed during this browser session. Pure state lives in
+// session-library.ts; the blobs (for re-opening an entry) and the display name
+// are kept here, on the main thread. Nothing is persisted.
+let session: SessionState = initialSession();
+const libraryBlobs = new Map<number, Blob>();
+// The full-resolution PNG cut-out for every completed library version, kept so
+// a version can be re-opened, re-composited on another background and
+// downloaded without running inference again.
+const libraryResultBlobs = new Map<number, Blob>();
+// The library entry the current run's result belongs to. A preview and its
+// refined final update the same entry; a fresh re-process adds a new version.
+let currentRunStoredEntryId: number | null = null;
+// Guards against a slow PNG encode from an older run landing after a newer run
+// has started (the queue is serial, the token is the run identity).
+let libraryRunToken = 0;
+// When off, new cut-outs are neither added to the library nor written into it.
+// The preference is kept so a user who turned saving off is not re-enrolled by a
+// reload (the library itself is still session-only and cleared on reload).
+const LS_LIBRARY_SAVE = 'remove-bg:library-save';
+let librarySavingEnabled =
+  loadPref<boolean>(LS_LIBRARY_SAVE, (v): v is boolean => typeof v === 'boolean') ?? true;
+let currentImageName = 'Photo';
+// Library view state: the name filter and the entries ticked for export.
+let libraryFilterQuery = '';
+const libraryChecked = new Set<number>();
 
 // Disclose the real limits in the UI (MVP §6) rather than hardcoding them in the
 // markup, so a changed limit never leaves stale copy on the page.
@@ -216,8 +393,8 @@ limitSideEl.textContent = String(DEFAULT_UPLOAD_LIMITS.maxLongestSide);
 
 // ——— Studio layer + editor tabs ———
 // The studio opens as a full-page layer (its own top bar + workspace) launched
-// from the header. The editor shows exactly one tab: input by default, the
-// animated processing wallpaper while running, and the result when finished.
+// from the header. The editor has one step tab whose label follows the current
+// step (Photo → Processing → Result), plus the Bulk queue and the Library.
 function renderStudioView(): void {
   for (const tab of STUDIO_TABS) {
     const selected = studioView.tab === tab;
@@ -225,6 +402,15 @@ function renderStudioView(): void {
     tabButtons[tab].disabled = !tabEnabled(studioView, tab) && !selected;
     tabPanels[tab].hidden = !selected;
   }
+  const phase = stepPhase(studioView);
+  tabButtons.step.textContent = stepTitle(studioView);
+  // Library saving and storage details live in the Library tab's kebab menu,
+  // which shares the tab row and only shows while that tab is open.
+  if (libraryMenuWrapEl) libraryMenuWrapEl.hidden = studioView.tab !== 'library';
+  if (studioView.tab !== 'library') closeLibraryMenu();
+  stepInputEl.hidden = phase !== 'input';
+  stepProcessingEl.hidden = phase !== 'processing';
+  stepResultEl.hidden = phase !== 'result';
   if (studioView.percent === null) {
     procPctEl.textContent = '—';
   } else {
@@ -236,21 +422,38 @@ function renderStudioView(): void {
   // The refinement banner sits over the already-usable preview while the edge
   // stage runs, and disappears the instant the refined result is swapped in.
   refineNoticeEl.hidden = !studioView.refining;
-  // The settings sidebar only exists in the Result tab, so its top-bar show/hide
-  // button appears exactly when that tab is selected.
-  if (sidebarToggleBtn) sidebarToggleBtn.hidden = studioView.tab !== 'result';
+  // The console and engine controls belong to the step editor. Leaving that tab
+  // closes them and disables their top-bar toggles so a queue tab cannot turn
+  // them back on.
+  const engineTab = tabHasEngineControls(studioView.tab);
+  if (!engineTab) {
+    setConsoleVisible(false);
+    setSidebarCollapsed(true);
+  }
+  consoleToggleBtn.disabled = !engineTab;
+  if (sidebarToggleBtn) sidebarToggleBtn.disabled = !engineTab;
+  updateDownloadUi();
+  updateRetouchUi();
+  updateBulkStatus();
 }
 
 function setStudioTab(tab: StudioTab, force = false): void {
   if (!force && !tabEnabled(studioView, tab)) return;
+  closeDownloadMenu();
+  // Retouch belongs to the step result; leaving the step tab discards an open
+  // session exactly like Cancel.
+  if (retouchModeOpen && tab !== 'step') cancelRetouchMode(true);
+  if (bulkBatchRunning && tab !== 'bulk') bulkTabPinned = false;
   studioView = { ...studioView, tab };
   renderStudioView();
+  if (tab === 'bulk') renderBulk();
 }
 
 // The re-process button's visibility depends on the studio's running/result
 // state, so it is refreshed alongside every view transition (the helper itself
 // is declared below, with the mask controls it also depends on).
 function applyStudioView(): void {
+  if (bulkBatchRunning && bulkTabPinned) studioView = { ...studioView, tab: 'bulk' };
   renderStudioView();
   updateReprocessButton();
 }
@@ -293,10 +496,46 @@ function setBackgroundInert(on: boolean): void {
   let node: HTMLElement = studioEl;
   while (node.parentElement) {
     for (const sibling of Array.from(node.parentElement.children)) {
-      if (sibling !== node) (sibling as HTMLElement).inert = on;
+      const el = sibling as HTMLElement;
+      if (shouldInertSibling(el.id, el === node)) el.inert = on;
     }
     node = node.parentElement;
   }
+}
+
+const STUDIO_SPLASH_MS = 1000;
+const STUDIO_SPLASH_FADE_MS = 400;
+let studioSplashTimer: number | null = null;
+let studioSplashFadeTimer: number | null = null;
+
+function playStudioSplash(): void {
+  const splash = studioSplashEl;
+  if (!splash) return;
+  if (studioSplashTimer != null) window.clearTimeout(studioSplashTimer);
+  if (studioSplashFadeTimer != null) window.clearTimeout(studioSplashFadeTimer);
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  splash.hidden = false;
+  splash.classList.remove('is-hidden');
+  // Restart the sheen and spin animations on every open.
+  splash.getBoundingClientRect();
+  studioSplashTimer = window.setTimeout(() => {
+    splash.classList.add('is-hidden');
+    studioSplashFadeTimer = window.setTimeout(() => {
+      splash.hidden = true;
+      studioSplashFadeTimer = null;
+    }, reduced ? 0 : STUDIO_SPLASH_FADE_MS);
+    studioSplashTimer = null;
+  }, reduced ? 0 : STUDIO_SPLASH_MS);
+}
+
+function hideStudioSplash(): void {
+  if (studioSplashTimer != null) window.clearTimeout(studioSplashTimer);
+  if (studioSplashFadeTimer != null) window.clearTimeout(studioSplashFadeTimer);
+  studioSplashTimer = null;
+  studioSplashFadeTimer = null;
+  if (!studioSplashEl) return;
+  studioSplashEl.classList.add('is-hidden');
+  studioSplashEl.hidden = true;
 }
 
 function openStudio(): void {
@@ -307,6 +546,7 @@ function openStudio(): void {
   setBackgroundInert(true);
   studioEl.scrollTop = 0;
   renderStudioView();
+  playStudioSplash();
   // The workspace has a size again, so a dragged console height can be re-clamped.
   if (consoleHeightPx != null) applyConsoleHeight(consoleHeightPx);
   // A terminal opens on its newest line.
@@ -320,6 +560,7 @@ function closeStudio(): void {
   studioEl.setAttribute('aria-hidden', 'true');
   document.body.classList.remove('studio-open');
   setBackgroundInert(false);
+  hideStudioSplash();
   studioLaunchBtn.focus();
 }
 
@@ -334,7 +575,7 @@ for (const tab of STUDIO_TABS) {
 
 // ——— Console column: show/hide, close, and drag-resize ———
 // The console drags between 20% and 50% of the workspace height; its resting
-// default is the 35% track in CSS. `null` means "use that default"; a number is
+// default is the 20% track in CSS. `null` means "use that default"; a number is
 // an explicit, clamped pixel height.
 const CONSOLE_MAX_FRACTION = 0.5;
 const CONSOLE_MIN_FRACTION = 0.2;
@@ -342,14 +583,20 @@ const CONSOLE_MIN_PX = 96;
 let consoleHeightPx: number | null = null;
 
 function setConsoleVisible(visible: boolean): void {
+  if (visible && !tabHasEngineControls(studioView.tab)) return;
   studioGridEl.dataset.console = visible ? 'shown' : 'hidden';
   consoleToggleBtn.setAttribute('aria-pressed', String(visible));
   consoleToggleBtn.setAttribute('aria-label', visible ? 'Hide console' : 'Show console');
-  if (visible) applyConsoleHeight(consoleHeightPx);
+  if (visible) {
+    applyConsoleHeight(consoleHeightPx);
+    // Lines printed while the console was hidden left it at the top; a terminal
+    // opens on its newest line.
+    scrollConsoleToBottom();
+  }
 }
 
 // Pins the console to an explicit pixel height (or back to the default) so a
-// drag can shrink it. The value is always clamped to the 35% cap.
+// drag can resize it. The value is clamped to the 20%–50% range.
 function applyConsoleHeight(px: number | null): void {
   const gridH = studioGridEl.getBoundingClientRect().height;
   if (!gridH) return;
@@ -449,6 +696,11 @@ menuPanelEl.querySelectorAll('a[href^="#"]').forEach((link) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  const cmdDialog = document.getElementById('cmdPalette');
+  if (cmdDialog && !cmdDialog.hidden) return;
+  // The download menu owns Escape while it is open; its handler closes only the
+  // menu, not the whole studio.
+  if (!downloadMenuEl.hidden) return;
   if (menuPanelEl.classList.contains('is-open')) closeMenu();
   else if (studioEl.classList.contains('is-open')) closeStudio();
 });
@@ -532,14 +784,20 @@ window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',
 requestAnimationFrame(() => document.documentElement.classList.add('ui-ready'));
 
 // ——— Floating notifications ———
-// Top-left, fixed, stacked vertically. Each dismisses itself after 10 s and has a
-// close button; several at once stack downward in the order they arrived.
-type ToastKind = 'info' | 'warn' | 'error';
+// Top-right, fixed over the page, stacked vertically. Each dismisses itself after
+// 10 s and has a close button; several at once stack downward in the order they
+// arrived. The host is a direct child of <body>, so a notification never reflows
+// the page and is never clipped by a scrolling column.
+type ToastKind = 'info' | 'warn' | 'error' | 'success';
 const TOAST_DEFAULT_MS = 10000;
 
 function showToast(
   message: string,
-  opts: { kind?: ToastKind; title?: string; durationMs?: number } = {},
+  opts: {
+    kind?: ToastKind;
+    title?: string;
+    durationMs?: number;
+  } = {},
 ): void {
   const kind = opts.kind ?? 'info';
   const toast = document.createElement('div');
@@ -602,6 +860,9 @@ function savePref(key: string, value: unknown): void {
 let currentImage: HTMLImageElement | null = null;
 let currentImageData: ImageData | null = null;
 let currentObjectUrl: string | null = null;
+// The step photo's object URL while a bulk batch swaps images through the same
+// loader; the batch restores it when it finishes.
+let protectedObjectUrl: string | null = null;
 let worker: Worker | null = null;
 let modelReady = false;
 let modelError: string | null = null;
@@ -670,6 +931,32 @@ const urlParams = new URLSearchParams(location.search);
 // with a saved pref.
 const forcedProvider = urlParams.get('provider');
 const forcedModel = urlParams.get('model');
+// ?maxSourceSide= caps the decoded source for scripted runs and A/B checks. It
+// is clamped by recommendSourceScale, so it can never exceed the upload cap.
+const forcedMaxSourceSide = (() => {
+  const raw = urlParams.get('maxSourceSide');
+  if (raw == null) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+})();
+
+function readDeviceMemoryGb(): number | null {
+  if (typeof navigator === 'undefined') return null;
+  const value = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** The one place the page decides how large a decoded source may be. */
+function sourceScaleDecision(width: number, height: number): SourceScaleDecision {
+  return recommendSourceScale({
+    width,
+    height,
+    deviceClass: readDeviceMobile() ? 'mobile' : 'desktop',
+    deviceMemoryGb: readDeviceMemoryGb(),
+    hardwareConcurrency: typeof navigator !== 'undefined' ? navigator.hardwareConcurrency ?? null : null,
+    maxSourceSide: forcedMaxSourceSide,
+  });
+}
 
 // Mask adjust prefs: read once, persisted on change. The URL params
 // ?maskThreshold= and ?maskFeather= override for automated/headless runs.
@@ -702,25 +989,74 @@ function applyMaskUi(): void {
 // Clears a previous result so a newly chosen photo never sits above a stale
 // export, and hides the download section until a fresh mask is rendered.
 function clearOutput(): void {
+  // A new photo or a re-process discards any in-progress retouch session. The
+  // edit was never committed, so dropping it is exactly a Cancel.
+  if (retouchSession || retouchModeOpen) discardRetouchSession();
+  // Cancel any queued library write from the result being replaced.
+  libraryRunToken += 1;
   outputBox.innerHTML = '';
+  outputBox.classList.remove('hasResultCompare');
+  resultCompareFigure = null;
   downloadImageBtn.hidden = true;
   downloadImageBtn.removeAttribute('href');
   lastResultCanvas = null;
   lastPreviewCanvas = null;
-  compareBeforeEl.removeAttribute('src');
-  compareAfterEl.removeAttribute('src');
+  lastResultAlpha = null;
+  setResultCompare(false);
+  if (resultCompareToggleBtn) resultCompareToggleBtn.hidden = true;
   outputSection.hidden = true;
+  updateDownloadUi();
 }
 
 // ——— Export format ———
 // The composited cut-out is kept so changing the format (or the background)
 // re-encodes without re-running inference.
 let lastResultCanvas: HTMLCanvasElement | null = null;
+// Bumped whenever a new cut-out is painted, so the export cache can never serve
+// an encoding of a canvas that was repainted in place.
+let resultRevision = 0;
 // The on-screen preview, at most ≤450 px on its longest side, so switching the
 // background or format never re-encodes a full-resolution PNG just to repaint
 // the display. Rebuilt whenever a new result is composited.
 let lastPreviewCanvas: HTMLCanvasElement | null = null;
+// The before/after slider in the Result editor, reused across background changes.
+// (`resultCompareFigure`/`resultCompareOn` are declared before the first render.)
 let exportFormat: ExportFormat = initExportFormat();
+
+// ——— Manual retouch session ———
+interface RetouchSession {
+  fullImage: ImageData;
+  fullWidth: number;
+  fullHeight: number;
+  fullBaseAlpha: Float32Array;
+  previewImage: ImageData;
+  previewWidth: number;
+  previewHeight: number;
+  previewBaseAlpha: Float32Array;
+  previewCleanupAlpha: Float32Array | null;
+  history: BrushHistory;
+  tool: BrushTool;
+  /** Brush diameter in preview-canvas pixels. */
+  size: number;
+  /** Soft-edge fraction of the brush radius, 0..1. */
+  feather: number;
+  cleanupApplied: boolean;
+  drawing: BrushStroke | null;
+  saving: boolean;
+}
+
+function setResultCompare(on: boolean): void {
+  resultCompareOn = on;
+  if (resultCompareFigure) resultCompareFigure.dataset.compareOn = on ? 'true' : 'false';
+  if (resultCompareToggleBtn) {
+    resultCompareToggleBtn.setAttribute('aria-pressed', String(on));
+    const label = on ? 'Hide comparison with the original' : 'Compare with the original photo';
+    resultCompareToggleBtn.setAttribute('aria-label', label);
+    resultCompareToggleBtn.setAttribute('title', label);
+  }
+}
+
+resultCompareToggleBtn?.addEventListener('click', () => setResultCompare(!resultCompareOn));
 
 function initExportFormat(): ExportFormat {
   const fromUrl = urlParams.get('format');
@@ -740,29 +1076,22 @@ function isFormatAvailable(format: ExportFormat): boolean {
 }
 
 function renderFormatOptions(): void {
-  formatOptionsEl.innerHTML = '';
+  formatSelectEl.innerHTML = '';
   for (const format of EXPORT_FORMATS) {
     const available = isFormatAvailable(format.id);
-    const label = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 'exportFormat';
-    input.value = format.id;
-    input.checked = format.id === exportFormat;
-    input.disabled = !available;
-    input.addEventListener('change', () => {
-      if (!input.checked) return;
-      setExportFormat(format.id);
-    });
-    label.appendChild(input);
-    label.appendChild(document.createTextNode(format.label));
-    const hint = document.createElement('span');
-    hint.className = 'formatHint';
-    hint.textContent = `— ${available ? format.description : 'not supported by this browser'}`;
-    label.appendChild(hint);
-    formatOptionsEl.appendChild(label);
+    const option = document.createElement('option');
+    option.value = format.id;
+    option.textContent = available ? format.label : `${format.label} (not supported)`;
+    option.disabled = !available;
+    option.selected = format.id === exportFormat;
+    formatSelectEl.appendChild(option);
   }
+  formatSelectEl.value = exportFormat;
 }
+
+formatSelectEl.addEventListener('change', () => {
+  if (isExportFormat(formatSelectEl.value)) chooseExportFormat(formatSelectEl.value);
+});
 
 function setExportFormat(format: ExportFormat): void {
   if (format === exportFormat || !isFormatAvailable(format)) return;
@@ -772,20 +1101,144 @@ function setExportFormat(format: ExportFormat): void {
   log(`Export format: ${exportFormatInfo(format).label}`);
 }
 
-// Repoint the single download link at the current format, re-encoding the stored
-// result when one exists.
-function applyFormatUi(): void {
-  const info = exportFormatInfo(exportFormat);
-  downloadImageBtn.textContent = `Download ${info.label} (${info.description})`;
-  if (lastResultCanvas) {
-    const { width, height } = lastResultCanvas;
-    const href = canvasToDataUrl(lastResultCanvas, exportFormat, background);
-    downloadImageBtn.href = href;
-    downloadImageBtn.download = `background-removed-${width}x${height}.${info.extension}`;
-    downloadImageBtn.hidden = false;
-  }
-  renderFormatOptions();
+/**
+ * Drops a fully opaque background when an alpha-capable format is chosen.
+ *
+ * PNG/WebP exist to carry transparency, so selecting one is a request for a
+ * transparent cut-out. A solid colour paints over that alpha and the file is
+ * opaque even though the format supports alpha — the "PNG/WebP have no alpha"
+ * report. A see-through colour (alpha < 100) already carries alpha, so it is
+ * kept. Returns true when the background changed.
+ */
+function dropOpaqueBackgroundForAlpha(format: ExportFormat): boolean {
+  if (!exportFormatInfo(format).supportsAlpha) return false;
+  if (background.kind !== 'color' || background.alpha < 100) return false;
+  background = { ...DEFAULT_BACKGROUND };
+  saveBackground();
+  return true;
 }
+
+/** The format radio is the user's explicit choice, so it may clear a colour. */
+function chooseExportFormat(format: ExportFormat): void {
+  if (dropOpaqueBackgroundForAlpha(format)) {
+    updateBackgroundUi();
+    renderResultPreview();
+  }
+  setExportFormat(format);
+}
+
+// Repoint the download action at the current context: the step result on the
+// step tab, or the selected bulk cut-out on the Bulk tab.
+function applyFormatUi(): void {
+  renderFormatOptions();
+  refreshExportActions();
+}
+
+function bulkDownloadName(item: BulkItem, extension: string): string {
+  const base = item.name.replace(/\.[^.]+$/, '') || `photo-${item.id}`;
+  return `${base}-background-removed-${item.width}x${item.height}.${extension}`;
+}
+
+// Encoding a full-resolution canvas is expensive, and the progress ticks repaint
+// the view many times. Cache the encoded data URL per canvas + format + background.
+let exportCache: { canvas: HTMLCanvasElement; revision: number; format: ExportFormat; bg: string; href: string } | null = null;
+
+function refreshExportActions(): void {
+  const info = exportFormatInfo(exportFormat);
+  const onBulk = studioView.tab === 'bulk';
+  const bulkItem = onBulk ? selectedBulkItem(bulkState) : null;
+  const canvas = onBulk ? (bulkItem ? bulkResults.get(bulkItem.id) ?? null : null) : lastResultCanvas;
+  if (canvas) {
+    const bg = onBulk ? bulkItem?.background ?? background : background;
+    const bgKey = `${bg.kind}|${bg.hex}|${bg.alpha}`;
+    const cached =
+      exportCache &&
+      exportCache.canvas === canvas &&
+      exportCache.revision === resultRevision &&
+      exportCache.format === exportFormat &&
+      exportCache.bg === bgKey
+        ? exportCache.href
+        : null;
+    const href = cached ?? canvasToDataUrl(canvas, exportFormat, bg);
+    exportCache = { canvas, revision: resultRevision, format: exportFormat, bg: bgKey, href };
+    downloadImageLabelEl.textContent = `Download ${info.label}`;
+    downloadImageBtn.href = href;
+    downloadImageBtn.download = bulkItem
+      ? bulkDownloadName(bulkItem, info.extension)
+      : `background-removed-${canvas.width}x${canvas.height}.${info.extension}`;
+    downloadImageBtn.hidden = false;
+  } else {
+    downloadImageBtn.hidden = true;
+    downloadImageBtn.removeAttribute('href');
+  }
+  if (bulkDownloadAllBtn) {
+    const done = bulkDoneCount(bulkState);
+    const targets = bulkExportTargets();
+    bulkDownloadAllBtn.hidden = !onBulk || done === 0;
+    bulkDownloadAllBtn.textContent =
+      targets.length < done ? `Download selected ZIP (${targets.length})` : `Download ZIP (${done})`;
+    bulkDownloadAllBtn.disabled = targets.length === 0;
+  }
+}
+
+// The download menu is meaningful only where there is something to export: the
+// step result, or a Bulk batch with at least one cut-out.
+function updateDownloadUi(): void {
+  const hasPhoto = studioView.tab === 'step' && studioView.hasResult && !retouchModeOpen;
+  const hasBulk = studioView.tab === 'bulk' && bulkDoneCount(bulkState) > 0;
+  if (downloadMenuBtn) downloadMenuBtn.hidden = !hasPhoto;
+  if (bgColorButton) bgColorButton.hidden = !hasPhoto;
+  if (bulkDownloadBtn) bulkDownloadBtn.hidden = !hasBulk;
+  if (!hasPhoto && !hasBulk) closeDownloadMenu();
+  if (hasPhoto || hasBulk) refreshExportActions();
+}
+
+function positionDownloadMenu(trigger: HTMLButtonElement): void {
+  const rect = trigger.getBoundingClientRect();
+  downloadMenuEl.hidden = false;
+  const menuRect = downloadMenuEl.getBoundingClientRect();
+  const top = Math.max(8, Math.min(window.innerHeight - menuRect.height - 8, rect.bottom + 6));
+  const left = Math.max(8, Math.min(window.innerWidth - menuRect.width - 8, rect.right - menuRect.width));
+  downloadMenuEl.style.top = `${top}px`;
+  downloadMenuEl.style.left = `${left}px`;
+}
+
+function openDownloadMenu(trigger: HTMLButtonElement): void {
+  downloadMenuTrigger = trigger;
+  refreshExportActions();
+  positionDownloadMenu(trigger);
+  trigger.setAttribute('aria-expanded', 'true');
+}
+
+function closeDownloadMenu(): void {
+  downloadMenuEl.hidden = true;
+  downloadMenuTrigger?.setAttribute('aria-expanded', 'false');
+  downloadMenuTrigger = null;
+}
+
+function toggleDownloadMenu(trigger: HTMLButtonElement): void {
+  if (downloadMenuTrigger === trigger && !downloadMenuEl.hidden) closeDownloadMenu();
+  else openDownloadMenu(trigger);
+}
+
+downloadMenuBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (downloadMenuBtn) toggleDownloadMenu(downloadMenuBtn);
+});
+bulkDownloadBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (bulkDownloadBtn) toggleDownloadMenu(bulkDownloadBtn);
+});
+document.addEventListener('pointerdown', (e) => {
+  if (downloadMenuEl.hidden) return;
+  if (downloadMenuEl.contains(e.target as Node)) return;
+  if (downloadMenuTrigger?.contains(e.target as Node)) return;
+  closeDownloadMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !downloadMenuEl.hidden) closeDownloadMenu();
+});
+window.addEventListener('resize', closeDownloadMenu);
 
 renderFormatOptions();
 
@@ -795,6 +1248,7 @@ renderFormatOptions();
 downloadImageBtn.addEventListener('click', () => {
   if (downloadImageBtn.hidden || !downloadImageBtn.getAttribute('href')) return;
   trackDownloadInitiated();
+  closeDownloadMenu();
 });
 
 // ——— Background colour ———
@@ -832,25 +1286,59 @@ function saveBackground(): void {
 function renderResultPreview(): void {
   const display = lastPreviewCanvas ?? lastResultCanvas;
   if (!display) return;
-  outputBox.innerHTML = '';
-  const img = document.createElement('img');
-  img.src = canvasToDataUrl(display, 'png', background);
-  img.alt = 'Background removed';
-  outputBox.appendChild(img);
-  // The compare view's right-hand side shows the same composite.
-  compareAfterEl.src = img.src;
+
+  const afterSrc = canvasToDataUrl(display, 'png', background);
+  // Build the slider once per result. Rebuilding it on every background change
+  // would re-register its window listeners on each alpha-slider tick.
+  let figure = resultCompareFigure;
+  if (!figure || !figure.isConnected) {
+    figure = document.createElement('figure');
+    figure.className = 'compare resultCompare';
+    figure.dataset.compare = '';
+    figure.dataset.pos = '50';
+    figure.setAttribute('aria-label', 'Before and after comparison');
+    // The composite is first so the smoke harness (`#outputBox img`) still reads
+    // the cut-out; the original sits on top, clipped to the left of the divider.
+    figure.innerHTML = `
+      <div class="compareStage">
+        <img class="compareImg compareAfter" alt="Background removed" />
+        <img class="compareImg compareBefore" alt="Original photo" />
+        <div class="compareDivider" aria-hidden="true"><span class="compareGrip">↔</span></div>
+      </div>
+      <input class="compareRange" type="range" min="0" max="100" step="1" value="50"
+        aria-label="Reveal the original photo: left is before, right is after" />
+    `;
+    outputBox.appendChild(figure);
+    outputBox.classList.add('hasResultCompare');
+    initCompareSliders(outputBox);
+    resultCompareFigure = figure;
+    setResultCompare(resultCompareOn);
+    if (resultCompareToggleBtn) resultCompareToggleBtn.hidden = false;
+  }
+  // Size the stage to the photo instead of the full panel, so the checkerboard
+  // is only behind the image and the cut-out uses the available height.
+  figure.style.aspectRatio = `${display.width} / ${display.height}`;
+  const after = figure.querySelector<HTMLImageElement>('.compareAfter');
+  const before = figure.querySelector<HTMLImageElement>('.compareBefore');
+  if (after) after.src = afterSrc;
+  if (before) before.src = currentObjectUrl ?? '';
+}
+
+// One colour button per place that picks a colour. The button's swatch shows the
+// current choice (a checkerboard when transparent); the shared popover edits it.
+const colorPicker = createColorPicker(document.getElementById('colorPickerPopover')!);
+
+function paintColorSwatch(swatch: HTMLElement | null, choice: BackgroundChoice): void {
+  if (!swatch) return;
+  swatch.style.setProperty('--swatch', isTransparent(choice) ? 'transparent' : toRgba(choice));
 }
 
 function updateBackgroundUi(): void {
-  const color = background.kind === 'color';
-  bgTransparentBtn.setAttribute('aria-pressed', String(isTransparent(background)));
-  bgCurrentEl.textContent = describeChoice(background);
-  if (color) {
-    bgColorPicker.value = background.hex;
-    bgColorSwatch.style.background = background.hex;
-    bgAlphaInput.value = String(background.alpha);
-    bgAlphaValue.textContent = `${background.alpha}%`;
-  }
+  paintColorSwatch(bgColorSwatch, background);
+  const label = `Background colour: ${describeChoice(background)}`;
+  bgColorButton.setAttribute('aria-label', label);
+  bgColorButton.title = label;
+  colorPicker.syncFor(bgColorButton, background);
 }
 
 // Apply a background choice: repaint the preview + compare, re-encode the export,
@@ -869,31 +1357,416 @@ function setBackground(choice: BackgroundChoice): void {
   log(`Background: ${describeChoice(background)}`);
 }
 
-bgTransparentBtn.addEventListener('click', () =>
-  setBackground({ kind: 'transparent', hex: background.hex, alpha: 100 }),
-);
-bgColorPicker.addEventListener('input', () =>
-  setBackground({ kind: 'color', hex: bgColorPicker.value, alpha: Number(bgAlphaInput.value) }),
-);
-bgAlphaInput.addEventListener('input', () => {
-  // The alpha slider only refines the current colour (it has no meaning for a
-  // fully transparent background).
-  const hex = background.kind === 'color' ? background.hex : bgColorPicker.value;
-  setBackground({ kind: 'color', hex, alpha: Number(bgAlphaInput.value) });
-});
-// Screen eyedropper: sample any pixel on the display. The button is disabled
-// when the browser has no EyeDropper API, so it never looks broken.
-if (!supportsScreenPicker()) {
-  bgEyeDropperBtn.disabled = true;
-  bgEyeDropperBtn.title = 'Screen colour picking is not supported by this browser';
-}
-bgEyeDropperBtn.addEventListener('click', async () => {
-  const picked = await pickColorFromScreen();
-  if (!picked) return;
-  setBackground({ kind: 'color', hex: picked, alpha: Number(bgAlphaInput.value) });
+bgColorButton.addEventListener('click', () => {
+  colorPicker.toggle(bgColorButton, background, (choice) => setBackground(choice));
 });
 
+// Restore consistency after a reload: an alpha-capable persisted format means
+// the cut-out should load transparent, so a persisted opaque colour must not
+// flatten it. This is the same rule the format radio applies in-session. An
+// explicit ?bg= is the user's ask, so it is left alone.
+if (!urlParams.has('bg')) dropOpaqueBackgroundForAlpha(exportFormat);
+
 updateBackgroundUi();
+
+// ——— Manual retouch (Result tab only) ———
+// Edits the alpha mask already produced by inference. It never runs the worker,
+// never modifies the photo's RGB pixels, and never leaves the device. The
+// background & export block is replaced in place by a compact brush panel while
+// the session is open; closing it restores the block exactly.
+
+function canvasAlphaFloat(canvas: HTMLCanvasElement): Float32Array {
+  const { width, height } = canvas;
+  const data = canvas
+    .getContext('2d', { willReadFrequently: true })!
+    .getImageData(0, 0, width, height).data;
+  const out = new Float32Array(width * height);
+  for (let i = 0; i < out.length; i++) out[i] = data[i * 4 + 3] / 255;
+  return out;
+}
+
+function canvasAlphaBytes(canvas: HTMLCanvasElement): Uint8ClampedArray {
+  const { width, height } = canvas;
+  const data = canvas
+    .getContext('2d', { willReadFrequently: true })!
+    .getImageData(0, 0, width, height).data;
+  const out = new Uint8ClampedArray(width * height);
+  for (let i = 0; i < out.length; i++) out[i] = data[i * 4 + 3];
+  return out;
+}
+
+/** The original RGB at the preview resolution, used for the live brush canvas. */
+function scaledImageData(source: ImageData, width: number, height: number): ImageData {
+  if (source.width === width && source.height === height) return source;
+  const src = document.createElement('canvas');
+  src.width = source.width;
+  src.height = source.height;
+  src.getContext('2d')!.putImageData(source, 0, 0);
+  const dst = document.createElement('canvas');
+  dst.width = width;
+  dst.height = height;
+  const ctx = dst.getContext('2d', { willReadFrequently: true })!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, 0, 0, width, height);
+  return ctx.getImageData(0, 0, width, height);
+}
+
+function updateRetouchHistoryUi(): void {
+  if (retouchUndoBtn) {
+    retouchUndoBtn.disabled = !retouchSession || !canUndoBrush(retouchSession.history);
+  }
+  if (retouchRedoBtn) {
+    retouchRedoBtn.disabled = !retouchSession || !canRedoBrush(retouchSession.history);
+  }
+}
+
+/** Shows the edit icon only on the Result tab, and the panel only while open. */
+function updateRetouchUi(): void {
+  // The interim Stage-1 preview is replaced by the refined final moments later;
+  // editing it would leave the session on a stale base, so wait for the settle.
+  const canEdit =
+    studioView.tab === 'step' && studioView.hasResult && !studioView.refining && !!lastResultAlpha;
+  if (resultEditToggleBtn) resultEditToggleBtn.hidden = !canEdit || retouchModeOpen;
+  if (retouchPanelEl) retouchPanelEl.hidden = !retouchModeOpen;
+  // The before/after slider cannot be used while the brush canvas covers the
+  // stage, so its toggle is hidden for the duration of the session.
+  if (resultCompareToggleBtn) {
+    resultCompareToggleBtn.hidden = retouchModeOpen || !resultCompareFigure;
+  }
+  updateRetouchHistoryUi();
+}
+
+function setRetouchMode(open: boolean): void {
+  retouchModeOpen = open;
+  if (!open) {
+    retouchOverlay?.remove();
+    retouchOverlay = null;
+    resultCompareFigure?.classList.remove('retouchOn');
+  }
+  updateDownloadUi();
+  updateRetouchUi();
+}
+
+/** Drops the session without a log; used when a new photo replaces the result. */
+function discardRetouchSession(): void {
+  retouchSession = null;
+  retouchModeOpen = false;
+  retouchOverlay?.remove();
+  retouchOverlay = null;
+  resultCompareFigure?.classList.remove('retouchOn');
+  if (retouchPanelEl) retouchPanelEl.hidden = true;
+}
+
+function cancelRetouchMode(silent = false): void {
+  if (!retouchSession) {
+    setRetouchMode(false);
+    return;
+  }
+  retouchSession = null;
+  setRetouchMode(false);
+  if (!silent) log('Retouch cancelled — the cut-out is unchanged.');
+}
+
+function applyRetouchControls(): void {
+  const s = retouchSession;
+  if (!s) return;
+  for (const tool of ['restore', 'erase'] as const) {
+    retouchToolButtons[tool]?.setAttribute('aria-pressed', String(s.tool === tool));
+  }
+  if (retouchSizeInput) retouchSizeInput.value = String(Math.round(s.size));
+  if (retouchSizeValueEl) retouchSizeValueEl.textContent = `${Math.round(s.size)}px`;
+  if (retouchFeatherInput) retouchFeatherInput.value = String(Math.round(s.feather * 100));
+  if (retouchFeatherValueEl) {
+    retouchFeatherValueEl.textContent = `${Math.round(s.feather * 100)}%`;
+  }
+  if (retouchAutoCleanupBtn) {
+    retouchAutoCleanupBtn.disabled = false;
+    retouchAutoCleanupBtn.textContent = 'Auto color contour cleanup';
+  }
+  updateRetouchHistoryUi();
+}
+
+function setRetouchBusy(busy: boolean): void {
+  if (retouchSaveBtn) {
+    retouchSaveBtn.disabled = busy;
+    retouchSaveBtn.textContent = busy ? 'Saving…' : 'Save';
+  }
+  if (retouchCancelBtn) retouchCancelBtn.disabled = busy;
+  if (retouchAutoCleanupBtn) retouchAutoCleanupBtn.disabled = busy;
+  if (busy) {
+    if (retouchUndoBtn) retouchUndoBtn.disabled = true;
+    if (retouchRedoBtn) retouchRedoBtn.disabled = true;
+  } else {
+    updateRetouchHistoryUi();
+  }
+}
+
+function retouchPointerPoint(
+  e: PointerEvent,
+  canvas: HTMLCanvasElement,
+): { x: number; y: number } {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (canvas.width / Math.max(1, rect.width)),
+    y: (e.clientY - rect.top) * (canvas.height / Math.max(1, rect.height)),
+  };
+}
+
+function onRetouchPointerDown(e: PointerEvent): void {
+  const s = retouchSession;
+  if (!s || !retouchOverlay) return;
+  e.preventDefault();
+  // Synthetic pointer events (tests) have no active pointer to capture.
+  try {
+    retouchOverlay.setPointerCapture(e.pointerId);
+  } catch {
+    /* no active pointer */
+  }
+  s.drawing = {
+    tool: s.tool,
+    points: [retouchPointerPoint(e, retouchOverlay)],
+    size: s.size,
+    feather: s.feather,
+  };
+  renderRetouchPreview();
+}
+
+function onRetouchPointerMove(e: PointerEvent): void {
+  const s = retouchSession;
+  if (!s || !s.drawing || !retouchOverlay) return;
+  const p = retouchPointerPoint(e, retouchOverlay);
+  const points = s.drawing.points;
+  const last = points[points.length - 1];
+  if (Math.hypot(p.x - last.x, p.y - last.y) < 1.5) return;
+  points.push(p);
+  renderRetouchPreview();
+}
+
+function onRetouchPointerUp(e: PointerEvent): void {
+  const s = retouchSession;
+  if (!s || !s.drawing) return;
+  const stroke = s.drawing;
+  s.drawing = null;
+  try {
+    retouchOverlay?.releasePointerCapture(e.pointerId);
+  } catch {
+    /* no capture */
+  }
+  s.history = pushBrushStroke(s.history, stroke);
+  renderRetouchPreview();
+  updateRetouchHistoryUi();
+}
+
+/** Paints the current working alpha over the stage's checkerboard. */
+function paintRetouchOverlay(s: RetouchSession, alpha: Float32Array): void {
+  const canvas = retouchOverlay;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const out = ctx.createImageData(s.previewWidth, s.previewHeight);
+  const rgb = s.previewImage.data;
+  for (let i = 0; i < alpha.length; i++) {
+    const o = i * 4;
+    out.data[o] = rgb[o];
+    out.data[o + 1] = rgb[o + 1];
+    out.data[o + 2] = rgb[o + 2];
+    const a = alpha[i];
+    out.data[o + 3] = Math.round((a < 0 ? 0 : a > 1 ? 1 : a) * 255);
+  }
+  ctx.putImageData(out, 0, 0);
+}
+
+function renderRetouchPreview(): void {
+  const s = retouchSession;
+  if (!s) return;
+  const base = s.cleanupApplied && s.previewCleanupAlpha ? s.previewCleanupAlpha : s.previewBaseAlpha;
+  const strokes = s.drawing ? [...s.history.strokes, s.drawing] : s.history.strokes;
+  const alpha = replayBrushStrokes(
+    base,
+    s.previewWidth,
+    s.previewHeight,
+    strokes,
+    s.previewWidth,
+    s.previewHeight,
+  );
+  paintRetouchOverlay(s, alpha);
+}
+
+function buildRetouchOverlay(s: RetouchSession): void {
+  retouchOverlay?.remove();
+  const stage = resultCompareFigure?.querySelector<HTMLElement>('.compareStage');
+  if (!stage) return;
+  const canvas = document.createElement('canvas');
+  canvas.id = 'retouchCanvas';
+  canvas.className = 'retouchCanvas';
+  canvas.width = s.previewWidth;
+  canvas.height = s.previewHeight;
+  canvas.setAttribute('aria-label', 'Retouch canvas: paint to restore or erase the cut-out');
+  stage.appendChild(canvas);
+  retouchOverlay = canvas;
+  resultCompareFigure?.classList.add('retouchOn');
+  canvas.addEventListener('pointerdown', onRetouchPointerDown);
+  canvas.addEventListener('pointermove', onRetouchPointerMove);
+  canvas.addEventListener('pointerup', onRetouchPointerUp);
+  canvas.addEventListener('pointercancel', onRetouchPointerUp);
+}
+
+function enterRetouchMode(): void {
+  if (retouchModeOpen) return;
+  if (studioView.tab !== 'step' || !studioView.hasResult || studioView.refining) return;
+  if (!lastResultAlpha || !lastPreviewCanvas || !currentImageData) return;
+  // Make sure the compare figure exists before we attach the overlay to it.
+  renderResultPreview();
+  const previewWidth = lastPreviewCanvas.width;
+  const previewHeight = lastPreviewCanvas.height;
+  const session: RetouchSession = {
+    fullImage: currentImageData,
+    fullWidth: currentImageData.width,
+    fullHeight: currentImageData.height,
+    fullBaseAlpha: bytesToAlpha(lastResultAlpha),
+    previewImage: scaledImageData(currentImageData, previewWidth, previewHeight),
+    previewWidth,
+    previewHeight,
+    previewBaseAlpha: canvasAlphaFloat(lastPreviewCanvas),
+    previewCleanupAlpha: null,
+    history: initialBrushHistory(),
+    tool: 'restore',
+    size: RETOUCH_DEFAULT_SIZE,
+    feather: RETOUCH_DEFAULT_FEATHER / 100,
+    cleanupApplied: false,
+    drawing: null,
+    saving: false,
+  };
+  retouchSession = session;
+  applyRetouchControls();
+  buildRetouchOverlay(session);
+  setRetouchMode(true);
+  renderRetouchPreview();
+  log('Retouch: paint to restore or erase the mask, then Save or Cancel.');
+}
+
+async function runRetouchCleanup(): Promise<void> {
+  const s = retouchSession;
+  if (!s || s.saving) return;
+  if (retouchAutoCleanupBtn) {
+    retouchAutoCleanupBtn.disabled = true;
+    retouchAutoCleanupBtn.textContent = 'Cleaning…';
+  }
+  try {
+    const cleaned = await autoContourCleanup(s.previewImage, s.previewBaseAlpha);
+    if (retouchSession !== s) return;
+    s.previewCleanupAlpha = cleaned;
+    s.cleanupApplied = true;
+    renderRetouchPreview();
+    log('Retouch: automatic colour contour cleanup applied.');
+  } catch (e) {
+    if (retouchSession === s) {
+      log(
+        `WARNING: contour cleanup failed (${e instanceof Error ? e.message : String(e)}).`,
+      );
+    }
+  } finally {
+    if (retouchSession === s && retouchAutoCleanupBtn) {
+      retouchAutoCleanupBtn.disabled = false;
+      retouchAutoCleanupBtn.textContent = 'Auto color contour cleanup';
+    }
+  }
+}
+
+async function saveRetouch(): Promise<void> {
+  const s = retouchSession;
+  if (!s || s.saving) return;
+  const jobId = activeJobId;
+  s.saving = true;
+  setRetouchBusy(true);
+  try {
+    let base = s.fullBaseAlpha;
+    if (s.cleanupApplied) {
+      base = await autoContourCleanup(s.fullImage, s.fullBaseAlpha);
+    }
+    // A new upload/re-process while the cleanup ran discards the session.
+    if (retouchSession !== s || jobId !== activeJobId) return;
+    const alpha = replayBrushStrokes(
+      base,
+      s.fullWidth,
+      s.fullHeight,
+      s.history.strokes,
+      s.previewWidth,
+      s.previewHeight,
+    );
+    const bytes = alphaToBytes(alpha);
+    const { canvas, preview } = await composeResult(s.fullImage, bytes);
+    if (retouchSession !== s || jobId !== activeJobId) return;
+
+    lastResultCanvas = canvas;
+    lastPreviewCanvas = preview;
+    lastResultAlpha = bytes;
+    resultRevision += 1;
+    outputSection.hidden = false;
+    renderResultPreview();
+    applyFormatUi();
+    updateDownloadUi();
+    updateReprocessButton();
+    storeLibraryResult(canvas);
+    log(
+      `Manual retouch saved: ${s.history.strokes.length} stroke${s.history.strokes.length === 1 ? '' : 's'}, ` +
+        `cleanup ${s.cleanupApplied ? 'applied' : 'not applied'}.`,
+    );
+  } catch (e) {
+    if (retouchSession === s) {
+      log(
+        `WARNING: could not save the retouch (${e instanceof Error ? e.message : String(e)}).`,
+      );
+      return;
+    }
+  } finally {
+    s.saving = false;
+    if (retouchSession === s) setRetouchBusy(false);
+  }
+  retouchSession = null;
+  setRetouchMode(false);
+}
+
+resultEditToggleBtn?.addEventListener('click', () => enterRetouchMode());
+retouchCancelBtn?.addEventListener('click', () => cancelRetouchMode());
+retouchSaveBtn?.addEventListener('click', () => void saveRetouch());
+retouchAutoCleanupBtn?.addEventListener('click', () => void runRetouchCleanup());
+retouchUndoBtn?.addEventListener('click', () => {
+  const s = retouchSession;
+  if (!s) return;
+  s.history = undoBrushStroke(s.history);
+  renderRetouchPreview();
+  updateRetouchHistoryUi();
+});
+retouchRedoBtn?.addEventListener('click', () => {
+  const s = retouchSession;
+  if (!s) return;
+  s.history = redoBrushStroke(s.history);
+  renderRetouchPreview();
+  updateRetouchHistoryUi();
+});
+for (const tool of ['restore', 'erase'] as const) {
+  retouchToolButtons[tool]?.addEventListener('click', () => {
+    const s = retouchSession;
+    if (!s) return;
+    s.tool = tool;
+    applyRetouchControls();
+  });
+}
+retouchSizeInput?.addEventListener('input', () => {
+  const s = retouchSession;
+  if (!s) return;
+  s.size = Math.max(2, Number(retouchSizeInput.value));
+  if (retouchSizeValueEl) retouchSizeValueEl.textContent = `${Math.round(s.size)}px`;
+});
+retouchFeatherInput?.addEventListener('input', () => {
+  const s = retouchSession;
+  if (!s) return;
+  const percent = Math.max(0, Math.min(100, Number(retouchFeatherInput.value)));
+  s.feather = percent / 100;
+  if (retouchFeatherValueEl) retouchFeatherValueEl.textContent = `${Math.round(percent)}%`;
+});
 
 function log(msg: string): void {
   // The log is rendered in the user-facing Console, so scrub internal commands
@@ -1126,7 +1999,7 @@ type ErrorKind = 'upload' | 'download' | 'memory' | 'worker' | 'generic';
 
 function retryModelOrRun(): void {
   hideRecovery();
-  if (!modelReady) loadSelectedModel();
+  if (!modelReady) void ensureModelLoaded();
   else if (currentImageData) void runSmoke();
 }
 
@@ -1144,11 +2017,11 @@ function showRecovery(kind: ErrorKind, message: string): void {
     case 'download':
       text =
         'The model download did not finish. Check your connection and try again — ' +
-        'the model is kept on this device once it succeeds, so you only download it once.';
+        'the model is kept on this device once it succeeds.';
       primaryLabel = 'Retry download';
       primaryRun = () => {
         hideRecovery();
-        loadSelectedModel();
+        void ensureModelLoaded();
       };
       break;
     case 'memory':
@@ -1158,7 +2031,7 @@ function showRecovery(kind: ErrorKind, message: string): void {
       primaryLabel = 'Try again';
       primaryRun = () => {
         hideRecovery();
-        if (!modelReady) loadSelectedModel();
+        if (!modelReady) void ensureModelLoaded();
         else if (currentImageData) void runSmoke();
       };
       break;
@@ -1260,10 +2133,447 @@ function showInputImage(img: HTMLImageElement): void {
   // The object URL keeps the decoded image available for inference too.
   inputPreviewImg.src = img.src;
   inputPreviewEl.hidden = false;
-  panelInputEl.classList.add('has-preview');
+  stepInputEl.classList.add('has-preview');
 }
 
-async function loadImageFromFile(file: File): Promise<void> {
+// ——— Session library (render + entry points) ———
+// `applySession` runs a reducer event, revokes the URLs it reports as dropped,
+// and repaints the grid. A blob is kept per entry so an entry can be re-opened
+// (the current photo's object URL is revoked when the next one is chosen).
+function applySession(ev: Parameters<typeof reduceSession>[1]): void {
+  const { state, revoked } = reduceSession(session, ev);
+  session = state;
+  for (const url of revoked) URL.revokeObjectURL(url);
+  if (ev.type === 'remove') {
+    libraryBlobs.delete(ev.id);
+    libraryResultBlobs.delete(ev.id);
+  }
+  // Eviction drops entries without naming them; reconcile the blob maps.
+  const live = new Set(session.entries.map((e) => e.id));
+  for (const id of [...libraryBlobs.keys()]) if (!live.has(id)) libraryBlobs.delete(id);
+  for (const id of [...libraryResultBlobs.keys()]) if (!live.has(id)) libraryResultBlobs.delete(id);
+  for (const id of [...libraryChecked]) if (!live.has(id)) libraryChecked.delete(id);
+  renderLibrary();
+}
+
+function formatDims(w: number, h: number): string {
+  return `${w}×${h}`;
+}
+
+function libraryUsageItems(): { bytes: number; type: string }[] {
+  return session.entries.map((entry) => {
+    const original = libraryBlobs.get(entry.id);
+    const result = libraryResultBlobs.get(entry.id);
+    return {
+      bytes: (original?.size ?? 0) + (result?.size ?? 0),
+      type: original?.type || result?.type || '',
+    };
+  });
+}
+
+function updateLibraryStats(): void {
+  const usage = summarizeLibrary(libraryUsageItems());
+  if (libraryStatUsedEl) libraryStatUsedEl.textContent = formatBytes(usage.usedBytes);
+  if (libraryStatLeftEl) libraryStatLeftEl.textContent = formatBytes(usage.leftBytes);
+  if (libraryStatTotalEl) libraryStatTotalEl.textContent = formatBytes(usage.budgetBytes);
+}
+
+function visibleLibraryEntries(): SessionEntry[] {
+  const query = libraryFilterQuery.trim().toLowerCase();
+  return query
+    ? session.entries.filter((entry) => entry.name.toLowerCase().includes(query))
+    : session.entries;
+}
+
+function updateLibrarySelectionUi(visible: SessionEntry[]): void {
+  const checkedVisible = visible.filter((entry) => libraryChecked.has(entry.id)).length;
+  if (librarySelectAllEl) {
+    librarySelectAllEl.disabled = visible.length === 0;
+    librarySelectAllEl.checked = visible.length > 0 && checkedVisible === visible.length;
+    librarySelectAllEl.indeterminate = checkedVisible > 0 && checkedVisible < visible.length;
+  }
+  const exportable = session.entries.filter(
+    (entry) => libraryChecked.has(entry.id) && entry.resultUrl && libraryResultBlobs.has(entry.id),
+  ).length;
+  if (libraryExportSelectedBtn) {
+    libraryExportSelectedBtn.disabled = exportable === 0;
+    const label = exportable > 0 ? `Export ${exportable} selected as ZIP` : 'Export selected as ZIP';
+    libraryExportSelectedBtn.setAttribute('aria-label', label);
+    libraryExportSelectedBtn.title = label;
+  }
+  const checkedCount = session.entries.filter((entry) => libraryChecked.has(entry.id)).length;
+  if (libraryClearBtn) {
+    libraryClearBtn.disabled = checkedCount === 0;
+    const label = checkedCount > 0 ? `Delete ${checkedCount} selected` : 'Delete selected';
+    libraryClearBtn.setAttribute('aria-label', label);
+    libraryClearBtn.title = label;
+  }
+}
+
+function renderLibrary(): void {
+  if (!libraryGridEl) return;
+  const visible = visibleLibraryEntries();
+  libraryGridEl.innerHTML = '';
+  if (libraryEmptyEl) {
+    libraryEmptyEl.hidden = visible.length > 0;
+    if (libraryEmptyTextEl) {
+      const noMatches = session.entries.length > 0 && visible.length === 0;
+      libraryEmptyTextEl.hidden = !noMatches;
+      libraryEmptyTextEl.textContent = noMatches ? 'No images match that name.' : '';
+    }
+  }
+  for (const entry of visible) {
+    const checked = libraryChecked.has(entry.id);
+    const card = document.createElement('div');
+    card.className = 'libraryCard';
+    card.dataset.active = String(entry.id === session.activeId);
+    card.dataset.checked = String(checked);
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', `Open ${entry.name}`);
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'libraryCheck';
+    check.checked = checked;
+    check.setAttribute('aria-label', `Select ${entry.name} for export`);
+    check.addEventListener('click', (e) => e.stopPropagation());
+    check.addEventListener('change', () => {
+      if (check.checked) libraryChecked.add(entry.id);
+      else libraryChecked.delete(entry.id);
+      renderLibrary();
+    });
+    card.appendChild(check);
+
+    const thumb = document.createElement('img');
+    thumb.className = 'libraryThumb';
+    thumb.alt = '';
+    thumb.src = entry.resultUrl ?? entry.originalUrl;
+    card.appendChild(thumb);
+
+    const meta = document.createElement('div');
+    meta.className = 'libraryMeta';
+    const name = document.createElement('span');
+    name.className = 'libraryName';
+    name.textContent = entry.name;
+    const dims = document.createElement('span');
+    dims.className = 'libraryDims';
+    dims.textContent = formatDims(entry.width, entry.height);
+    meta.appendChild(name);
+    meta.appendChild(dims);
+    card.appendChild(meta);
+
+    // A completed cut-out is a re-openable, downloadable version. Mark it so
+    // several versions of the same photo are distinguishable.
+    if (entry.resultUrl) {
+      const badge = document.createElement('span');
+      badge.className = 'libraryBadge';
+      badge.textContent = 'Cut-out';
+      card.appendChild(badge);
+    }
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'libraryRemove';
+    remove.setAttribute('aria-label', `Remove ${entry.name}`);
+    remove.textContent = '×';
+    remove.addEventListener('click', (e) => {
+      e.stopPropagation();
+      applySession({ type: 'remove', id: entry.id });
+    });
+    card.appendChild(remove);
+
+    const open = (): void => void reopenEntry(entry.id);
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open();
+      }
+    });
+    libraryGridEl.appendChild(card);
+  }
+  updateLibraryStats();
+  updateLibrarySelectionUi(visible);
+}
+
+function libraryDownloadName(entry: SessionEntry, extension: string): string {
+  const base = entry.name.replace(/\.[^.]+$/, '') || `photo-${entry.id}`;
+  return `${base}-background-removed-${entry.width}x${entry.height}.${extension}`;
+}
+
+async function exportSelectedLibrary(): Promise<void> {
+  const selected = session.entries.filter((entry) => libraryChecked.has(entry.id));
+  const exportable = selected.filter((entry) => entry.resultUrl && libraryResultBlobs.has(entry.id));
+  if (!exportable.length) {
+    showToast('Select at least one finished cut-out to export.', { kind: 'warn' });
+    return;
+  }
+  const used = new Set<string>();
+  const entries: { name: string; data: Uint8Array }[] = [];
+  for (const entry of exportable) {
+    if (!entry.resultUrl) continue;
+    const img = await loadImageElement(entry.resultUrl);
+    const canvas = canvasFromImage(img);
+    const dataUrl = canvasToDataUrl(canvas, exportFormat, background);
+    const extension = dataUrlExtension(dataUrl, exportFormatInfo(exportFormat).extension);
+    entries.push({
+      name: uniqueZipName(libraryDownloadName(entry, extension), used),
+      data: dataUrlToBytes(dataUrl),
+    });
+  }
+  if (!entries.length) return;
+  log(`Downloading ${entries.length} library cut-out(s) as a ZIP archive.`);
+  const url = URL.createObjectURL(createZipBlob(entries));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `library-${entries.length}-photos.zip`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  trackDownloadInitiated();
+}
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to decode image'));
+    img.src = src;
+  });
+}
+
+function canvasFromImage(img: HTMLImageElement): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.getContext('2d', { willReadFrequently: true })!.drawImage(img, 0, 0);
+  return canvas;
+}
+
+function previewFromCanvas(source: HTMLCanvasElement): HTMLCanvasElement {
+  const { width, height } = previewSize(source.width, source.height);
+  if (width === source.width && height === source.height) return source;
+  const preview = document.createElement('canvas');
+  preview.width = width;
+  preview.height = height;
+  const ctx = preview.getContext('2d')!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, width, height);
+  return preview;
+}
+
+function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+}
+
+// Re-open a stored cut-out exactly as it was produced: the full-resolution PNG
+// becomes the editable/exportable result, and the original photo is restored so
+// the background can be changed and a re-process can still run. No inference is
+// performed, so a version is always the pixels the user saw.
+async function openLibraryResult(entry: SessionEntry): Promise<void> {
+  const resultBlob = libraryResultBlobs.get(entry.id);
+  if (!resultBlob || !entry.resultUrl) return;
+
+  // Restore the source photo (needed by the before/after slider and re-process).
+  const originalBlob = libraryBlobs.get(entry.id);
+  if (originalBlob) {
+    const url = URL.createObjectURL(originalBlob);
+    try {
+      const img = await loadImageElement(url);
+      currentImage = img;
+      currentImageData = canvasFromImage(img).getContext('2d', { willReadFrequently: true })!
+        .getImageData(0, 0, img.naturalWidth, img.naturalHeight);
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = url;
+      showInputImage(img);
+    } catch {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  const resultImg = await loadImageElement(entry.resultUrl);
+  const canvas = canvasFromImage(resultImg);
+  const preview = previewFromCanvas(canvas);
+
+  invalidateActiveJob();
+  hideRecovery();
+  clearOutput();
+  currentImageName = entry.name;
+  lastResultCanvas = canvas;
+  lastPreviewCanvas = preview;
+  lastResultAlpha = canvasAlphaBytes(canvas);
+  resultRevision += 1;
+  resultSettingsKey = engineSettingsKey();
+  applySession({ type: 'activate', id: entry.id });
+  outputSection.hidden = false;
+  renderResultPreview();
+  applyFormatUi();
+  studioResult();
+  log(`Reopened library cut-out (${entry.width}x${entry.height}).`);
+}
+
+// Re-open an earlier entry. A completed cut-out opens its stored result; an
+// unprocessed photo is re-run from its original blob.
+async function reopenEntry(id: number): Promise<void> {
+  const entry = session.entries.find((e) => e.id === id);
+  if (!entry) return;
+  if (entry.resultUrl && libraryResultBlobs.has(id)) {
+    await openLibraryResult(entry);
+    return;
+  }
+  const blob = libraryBlobs.get(id);
+  if (!blob) return;
+  applySession({ type: 'activate', id });
+  const file = new File([blob], entry.name, { type: blob.type });
+  await loadImageFromFile(file, false);
+}
+
+// Mark the start of a new run: its preview and refined final update one entry,
+// while a later re-process adds a new library version.
+function beginLibraryRun(): void {
+  currentRunStoredEntryId = null;
+  libraryRunToken += 1;
+}
+
+// PNG encodes are serialised so the preview's result cannot land after the
+// refined final's and overwrite it.
+let libraryWriteQueue: Promise<void> = Promise.resolve();
+
+function storeLibraryResult(canvas: HTMLCanvasElement): void {
+  const token = libraryRunToken;
+  libraryWriteQueue = libraryWriteQueue
+    .then(() => storeLibraryResultNow(canvas, token))
+    .catch((e) =>
+      log(`WARNING: could not add the cut-out to the library (${e instanceof Error ? e.message : String(e)}).`),
+    );
+}
+
+async function storeLibraryResultNow(canvas: HTMLCanvasElement, token: number): Promise<void> {
+  if (!librarySavingEnabled || token !== libraryRunToken) return;
+  const blob = await canvasToPngBlob(canvas);
+  if (!blob || !librarySavingEnabled || token !== libraryRunToken) return;
+  const url = URL.createObjectURL(blob);
+
+  // The refined final replaces this run's interim preview in the same entry.
+  if (currentRunStoredEntryId != null) {
+    libraryResultBlobs.set(currentRunStoredEntryId, blob);
+    applySession({ type: 'set-result', id: currentRunStoredEntryId, resultUrl: url });
+    return;
+  }
+
+  const active = activeEntry(session);
+  if (!active) {
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  // First result for this photo: fill in its placeholder entry.
+  if (!active.resultUrl) {
+    currentRunStoredEntryId = active.id;
+    libraryResultBlobs.set(active.id, blob);
+    applySession({ type: 'set-result', id: active.id, resultUrl: url });
+    return;
+  }
+
+  // A re-process: keep the previous cut-out and add this one as a new version.
+  const originalBlob = libraryBlobs.get(active.id);
+  if (!originalBlob) {
+    currentRunStoredEntryId = active.id;
+    libraryResultBlobs.set(active.id, blob);
+    applySession({ type: 'set-result', id: active.id, resultUrl: url });
+    return;
+  }
+  const newOriginalUrl = URL.createObjectURL(originalBlob);
+  const newId = session.nextId;
+  libraryBlobs.set(newId, originalBlob);
+  libraryResultBlobs.set(newId, blob);
+  currentRunStoredEntryId = newId;
+  applySession({
+    type: 'add-version',
+    name: active.name,
+    width: active.width,
+    height: active.height,
+    originalUrl: newOriginalUrl,
+    resultUrl: url,
+    createdAt: Date.now(),
+  });
+}
+
+function applyLibrarySaveUi(): void {
+  tabButtons.library.dataset.saving = librarySavingEnabled ? 'on' : 'off';
+  if (librarySaveStateEl) librarySaveStateEl.textContent = librarySavingEnabled ? 'On' : 'Off';
+  if (librarySaveToggleEl) {
+    librarySaveToggleEl.setAttribute('aria-checked', String(librarySavingEnabled));
+    librarySaveToggleEl.dataset.off = String(!librarySavingEnabled);
+    librarySaveToggleEl.setAttribute(
+      'aria-label',
+      `Save new cut-outs to the Library — ${librarySavingEnabled ? 'on' : 'off'}`,
+    );
+  }
+}
+
+function closeLibraryMenu(): void {
+  if (!libraryMenuEl || !libraryMenuBtn) return;
+  libraryMenuEl.hidden = true;
+  libraryMenuBtn.setAttribute('aria-expanded', 'false');
+}
+
+function deleteSelectedLibrary(): void {
+  const ids = [...libraryChecked];
+  if (!ids.length) return;
+  if (currentRunStoredEntryId !== null && ids.includes(currentRunStoredEntryId)) {
+    // The run in flight must not write back into an entry the user just deleted.
+    libraryRunToken += 1;
+    currentRunStoredEntryId = null;
+  }
+  for (const id of ids) applySession({ type: 'remove', id });
+  libraryChecked.clear();
+  renderLibrary();
+  log(`Deleted ${ids.length} library image(s).`);
+}
+
+libraryClearBtn?.addEventListener('click', deleteSelectedLibrary);
+libraryMenuBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!libraryMenuEl || !libraryMenuBtn) return;
+  const open = libraryMenuEl.hidden;
+  libraryMenuEl.hidden = !open;
+  libraryMenuBtn.setAttribute('aria-expanded', String(open));
+});
+libraryMenuEl?.addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => closeLibraryMenu());
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && libraryMenuEl && !libraryMenuEl.hidden) {
+    closeLibraryMenu();
+    libraryMenuBtn?.focus();
+  }
+});
+
+librarySaveToggleEl?.addEventListener('click', () => {
+  librarySavingEnabled = !librarySavingEnabled;
+  savePref(LS_LIBRARY_SAVE, librarySavingEnabled);
+  applyLibrarySaveUi();
+  log(librarySavingEnabled ? 'Library saving enabled.' : 'Library saving disabled.');
+});
+libraryFilterInput?.addEventListener('input', () => {
+  libraryFilterQuery = libraryFilterInput.value;
+  renderLibrary();
+});
+librarySelectAllEl?.addEventListener('change', () => {
+  const visible = visibleLibraryEntries();
+  if (librarySelectAllEl.checked) {
+    for (const entry of visible) libraryChecked.add(entry.id);
+  } else {
+    for (const entry of visible) libraryChecked.delete(entry.id);
+  }
+  renderLibrary();
+});
+libraryExportSelectedBtn?.addEventListener('click', () => void exportSelectedLibrary());
+applyLibrarySaveUi();
+renderLibrary();
+
+async function loadImageFromFile(file: File, addToLibrary = librarySavingEnabled): Promise<void> {
   // Validate the declared type/size before decoding (never trust the extension),
   // then the decoded dimensions after. Reject with a message the user can act on.
   const typeCheck = validateFileTypeAndSize(file);
@@ -1284,23 +2594,51 @@ async function loadImageFromFile(file: File): Promise<void> {
     error(e instanceof Error ? e.message : String(e), 'upload');
     return;
   }
-  const dimCheck = validateDimensions(img.naturalWidth, img.naturalHeight);
+  // Decide the largest source this device should hold, then draw ONCE at that
+  // size. The full-resolution pixels are never read into an ImageData buffer, so
+  // a 48 MP phone photo cannot exhaust the renderer's memory before inference.
+  const sourceScale = sourceScaleDecision(img.naturalWidth, img.naturalHeight);
+  if (sourceScale.downscaled) log(sourceScale.reason);
+  const dimCheck = validateDimensions(sourceScale.width, sourceScale.height);
   if (!dimCheck.ok) {
     URL.revokeObjectURL(url);
     error(dimCheck.reason, 'upload');
     return;
   }
   const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
+  canvas.width = sourceScale.width;
+  canvas.height = sourceScale.height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-  ctx.drawImage(img, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   currentImage = img;
+
+  // A reduced source is also the geometry the preview, tiled runs and the
+  // before/after slider must use. Re-encode the reduced canvas once and drop the
+  // full-resolution decode instead of keeping both.
+  let displayUrl = url;
+  let librarySource: Blob = file;
+  if (sourceScale.downscaled) {
+    const scaledBlob = await canvasToPngBlob(canvas);
+    if (scaledBlob) {
+      displayUrl = URL.createObjectURL(scaledBlob);
+      librarySource = scaledBlob;
+      URL.revokeObjectURL(url);
+      currentImage = await loadImageElement(displayUrl);
+    } else {
+      currentImage = await loadImageElement(canvas.toDataURL('image/png'));
+    }
+  }
+
   // Keep the URL alive while the preview is on screen; release the previous one.
-  if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
-  currentObjectUrl = url;
-  showInputImage(img);
+  // A bulk batch protects the step photo's URL until it restores it afterwards.
+  if (currentObjectUrl && currentObjectUrl !== protectedObjectUrl) {
+    URL.revokeObjectURL(currentObjectUrl);
+  }
+  currentObjectUrl = displayUrl;
+  showInputImage(currentImage);
   // A new photo invalidates the previous job: bump the job id and cancel any
   // refinement still running for the old one, so its late result cannot paint
   // over this new job's preview.
@@ -1309,6 +2647,22 @@ async function loadImageFromFile(file: File): Promise<void> {
   clearOutput();
   studioSelectImage();
   hideRecovery();
+  currentImageName = file.name || 'Photo';
+  // Add the photo to the session library (a re-open of an existing entry passes
+  // addToLibrary=false so it is not duplicated). The library owns its own blob
+  // URL — separate from the preview URL, which is revoked on the next load.
+  if (addToLibrary) {
+    const libUrl = URL.createObjectURL(librarySource);
+    libraryBlobs.set(session.nextId, librarySource);
+    applySession({
+      type: 'add',
+      name: currentImageName,
+      width: canvas.width,
+      height: canvas.height,
+      originalUrl: libUrl,
+      createdAt: Date.now(),
+    });
+  }
   // Clear any previous error text so a successful load after a rejected one does
   // not leave a stale error on the stage line.
   setStage(modelReady ? 'Removing the background…' : 'Photo ready — waiting for the model…');
@@ -1333,6 +2687,9 @@ async function loadImageFromUrl(url: string): Promise<void> {
   ctx.drawImage(img, 0, 0);
   currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   currentImage = img;
+  // The result editor's before/after slider needs the source pixels too.
+  if (currentObjectUrl && currentObjectUrl !== url) URL.revokeObjectURL(currentObjectUrl);
+  currentObjectUrl = url;
   // A new photo invalidates the previous job (same guard as loadImageFromFile).
   invalidateActiveJob();
   showInputImage(img);
@@ -1352,6 +2709,11 @@ function settleModel(error: string | null): void {
   } else {
     modelReady = true;
     window.smokeModelReady = true;
+    // Photos added while the model was failing are still queued; the retry that
+    // just succeeded is their trigger to run.
+    if (studioView.tab === 'bulk' && bulkState.items.some((item) => item.status === 'queued')) {
+      void processBulkBatch();
+    }
   }
   for (const w of modelWaiters.splice(0)) {
     if (error) w.reject(new Error(error));
@@ -1388,12 +2750,21 @@ function pauseModelForMetered(reason: string): void {
   worker?.postMessage({ kind: 'cancel-model', reason });
 }
 
+// The inference run started by the last photo load. A bulk batch awaits it so
+// each photo is fully settled before the next one is loaded.
+let activeRunPromise: Promise<unknown> | null = null;
+
 // The primary action is the upload itself: choosing a photo starts the run
 // automatically, so there is no second button to press. A fatal model error is
 // the one case where a photo must not silently start a run — the recovery panel
 // offers the retry.
 function autoStartIfReady(): void {
-  if (currentImage && modelError === null) void runSmoke();
+  if (currentImage && modelError === null) {
+    // Remember the run so a bulk batch can await the photo it just loaded.
+    activeRunPromise = runSmoke().finally(() => {
+      activeRunPromise = null;
+    });
+  }
 }
 
 async function initWorker(): Promise<void> {
@@ -1494,7 +2865,9 @@ function handleWorkerMessage(msg: WorkerProgressMessage): void {
     log(`Inference ${timings.length}: ${msg.ms.toFixed(1)} ms`);
     pending.resolve(msg.ms);
   } else if (msg.kind === 'result-ready') {
-    handleResultReady(msg);
+    const tiled = msg.runId !== undefined ? tiledRuns.get(msg.runId) : undefined;
+    if (tiled) handleTiledResultReady(msg, tiled.state, tiled.tileIndex);
+    else handleResultReady(msg);
   } else if (msg.kind === 'error') {
     if (msg.cancelled) {
       // A deliberate stop (the connection became metered). Not a failure: the
@@ -1527,6 +2900,36 @@ let activeJobId = 0;
 let currentRunId = -1;
 const refineConfig: FastRefinementConfig = refinementConfigFromParams(urlParams);
 const refinementRunner = new RefinementRunner();
+
+// ——— Tiled inference ———
+// The tile grid the *next* run uses: 1 = off (a single full-image pass). Read
+// from the sidebar select (and the ?tiles= override). The plan and the stitcher
+// are created fresh per run so a grid change never mixes two runs' tiles.
+let tileGrid: TileGrid = initTileGrid();
+function initTileGrid(): TileGrid {
+  const fromUrl = urlParams.get('tiles');
+  if (fromUrl !== null && /^[1-4]$/.test(fromUrl)) return Number(fromUrl) as TileGrid;
+  const pref = loadPref<number>('remove-bg:tiles', (v): v is number => v === 1 || v === 2 || v === 3 || v === 4);
+  return (pref as TileGrid | null) ?? 1;
+}
+// The tiles of the run in flight, keyed by runId, so a `result-ready` message
+// can be routed to the stitcher rather than the single-image path. One shared
+// state object covers all tiles of a tiled run; `tileIndex` is the tile this
+// particular run id carries.
+interface TiledRunState {
+  plan: ReturnType<typeof planTiles>;
+  stitcher: TileStitcher;
+  /** The tile's own pixels, kept so a GPU-abort retry can re-post the same tile. */
+  tiles: ImageData[];
+  /** Tiles whose result has landed. */
+  done: number;
+  total: number;
+  jobId: number;
+  image: ImageData;
+  size: string;
+  postprocessStart: number;
+}
+const tiledRuns = new Map<number, { state: TiledRunState; tileIndex: number }>();
 // Per-run stage timings, captured for the smoke harness (window.smokeRefineStages).
 let smokeRefineStages: Record<string, unknown> | null = null;
 
@@ -1607,7 +3010,31 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   // background before compositing. See mask-recovery.ts. This runs on the raw
   // model mask so the user's threshold/feather below still applies to the
   // recovered result.
-  const { mask: recoveredMask, recovered } = recoverForegroundMask(image, upscaled);
+  // Keep the cropped float mask: it is the input to refinement (Stages 2-4).
+  const croppedFloat = cropMaskFloat(msg.mask, inputSize, rect);
+  const size = `${image.width}x${image.height}`;
+  compositeAndRefine(jobId, image, upscaled, croppedFloat, rect, size, postprocessStart);
+}
+
+/**
+ * Shared Stage-1 → refinement → composite path, used by both the single-image
+ * run and the tiled run. `fullResMask` is the soft mask at the *original* image
+ * resolution (already upscaled for a single run, stitched for a tiled run);
+ * `croppedFloat` is the same mask in the geometry the refinement stage expects
+ * (the model-input crop for a single run, the whole image for a tiled run).
+ */
+function compositeAndRefine(
+  jobId: number,
+  image: ImageData,
+  fullResMask: Uint8ClampedArray,
+  croppedFloat: Float32Array,
+  rect: { width: number; height: number },
+  size: string,
+  postprocessStart: number,
+): void {
+  const { mask: recoveredMask, recovered } = recoverForegroundMask(image, fullResMask, {
+    minIslandFraction: islandFraction(refineConfig.cleanup.islandCleanup),
+  });
   if (recovered) {
     log('Model kept the whole frame; recovered the subject from the background edges.');
   }
@@ -1615,15 +3042,16 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
   // Apply the user's mask threshold/feather at full destination resolution (the
   // values are percentages/pixels of the *output* mask).
   const stage1Mask = applyMaskAdjust(recoveredMask, image.width, image.height, maskAdjust);
-  const size = `${image.width}x${image.height}`;
-
-  // Keep the cropped float mask + the recovered 8-bit mask: the float mask is
-  // the input to refinement (Stages 2-4), the 8-bit mask is the fallback when
-  // refinement is disabled or fails.
-  const croppedFloat = cropMaskFloat(msg.mask, inputSize, rect);
   const guide = lumaFromRgba(image.data);
-
   const refineEnabled = refineConfig.enabled;
+  // Refinement must operate on the same mask Stage 1 painted, so a flood-fill
+  // recovery is not silently discarded when the final result is rebuilt. The
+  // recovered mask is at the *original* resolution (whole-image geometry), so
+  // feed it as the refine input directly; otherwise keep the letterbox-cropped
+  // float mask, which the refinement stage resizes up to the original size.
+  const refineInput = recovered
+    ? { mask: bytesToAlpha(recoveredMask), width: image.width, height: image.height }
+    : { mask: croppedFloat, width: rect.width, height: rect.height };
   composeResult(image, stage1Mask)
     .then(({ canvas, preview }) => {
       if (jobId !== activeJobId) return;
@@ -1633,9 +3061,9 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
       // Paint the Stage-1 preview immediately (finishResult shows the Result tab
       // and enables export). With refinement enabled this is the interim beat;
       // disabled, it is the settled result.
-      finishResult(canvas, preview, size, refineEnabled ? 'preview' : 'final');
+      finishResult(canvas, preview, size, refineEnabled ? 'preview' : 'final', stage1Mask);
       if (!refineEnabled) return;
-      return refineAndFinalize(jobId, image, croppedFloat, rect, guide, size, postprocessStart);
+      return refineAndFinalize(jobId, image, refineInput.mask, refineInput.width, refineInput.height, guide, size, postprocessStart, recovered);
     })
     .catch((err) => {
       if (jobId !== activeJobId) return;
@@ -1645,16 +3073,130 @@ function handleResultReady(msg: Extract<WorkerProgressMessage, { kind: 'result-r
     });
 }
 
+// ——— Tiled inference ———
+// The grid is a property of the *image*, not the model, so the plan and stitcher
+// are rebuilt for every tiled run. The tiles are run one after another (a single
+// 512px run at a time, so peak memory stays flat) and each result is stitched in
+// as it lands. When every tile is in, the stitched soft mask flows through the
+// exact same Stage-1 → refinement → composite path as a single run.
+
+/** The mask at the original image size, for one tile, from the worker's mask. */
+function tileMaskToFullRes(
+  plan: ReturnType<typeof planTiles>,
+  tileIndex: number,
+  mask: Float32Array,
+  inputSize: number,
+): Float32Array {
+  const tile = plan.tiles[tileIndex];
+  const rect = letterboxRect(tile.width, tile.height, inputSize);
+  const cropped = cropMaskFloat(mask, inputSize, rect);
+  return resizeMaskFloat(cropped, rect.width, rect.height, tile.width, tile.height, 'bilinear');
+}
+
+function handleTiledResultReady(
+  msg: Extract<WorkerProgressMessage, { kind: 'result-ready' }>,
+  tiled: TiledRunState,
+  tileIndex: number,
+): void {
+  if (msg.runId === undefined) return;
+  if (tiled.jobId !== activeJobId) {
+    tiledRuns.delete(msg.runId);
+    return;
+  }
+  const inputSize = msg.inputSize ?? MODEL_SIZE;
+  const full = tileMaskToFullRes(tiled.plan, tileIndex, msg.mask, inputSize);
+  tiled.stitcher.add(tileIndex, full);
+  tiled.done += 1;
+  tiledRuns.delete(msg.runId);
+  if (tiled.done < tiled.total) return;
+
+  // Every tile is in: stitch to the full-resolution soft mask and hand off.
+  const stitched = tiled.stitcher.result();
+  // The inference is done; the remaining work is mask reconstruction/refinement
+  // and compositing, which have no measurable percentage of their own (mirrors
+  // the single-run path in handleResultReady).
+  beginProcPhase('finalize', phaseExpectedMs('finalize', 0));
+  refreshProcPercent();
+  setConsoleStatus('Building your preview…', true);
+  // There is no single raw model mask for a tiled run, so the report's raw-mask
+  // section reflects the stitched soft mask (which is what the model produced,
+  // combined). Recorded before recovery/threshold/refinement, like the single run.
+  lastRawMaskStats = rawMaskStats(stitched, tiled.image.width, tiled.image.height);
+  log(`Stitched mask: ${formatRawMaskStats(lastRawMaskStats)}.`);
+  // The refinement stage expects the mask in the guide's geometry. For a tiled
+  // run the whole image is the guide, so the stitched mask is already in the
+  // right shape (and no letterbox crop applies).
+  const rect = { width: tiled.image.width, height: tiled.image.height };
+  const stitchedBytes = alphaToBytes(stitched);
+  log(`Tiled mask stitched from ${tiled.total} tiles (${tiled.plan.grid}x${tiled.plan.grid}).`);
+  compositeAndRefine(
+    tiled.jobId,
+    tiled.image,
+    stitchedBytes,
+    stitched,
+    rect,
+    tiled.size,
+    tiled.postprocessStart,
+  );
+}
+
+// Runs a whole tiled inference: one worker run per tile, awaited in order so the
+// worker never holds more than one tile's tensors. The composite happens in
+// handleTiledResultReady once the last tile lands.
+async function runTiledInference(image: ImageData): Promise<void> {
+  const plan = planTiles(image.width, image.height, tileGrid);
+  const stitcher = new TileStitcher(image.width, image.height, plan);
+  const jobId = activeJobId;
+  const postprocessStart = performance.now();
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  const tiles: ImageData[] = [];
+  for (const tile of plan.tiles) {
+    canvas.width = tile.width;
+    canvas.height = tile.height;
+    ctx.drawImage(
+      currentImage!,
+      tile.x, tile.y, tile.width, tile.height,
+      0, 0, tile.width, tile.height,
+    );
+    tiles.push(ctx.getImageData(0, 0, tile.width, tile.height));
+  }
+  const state: TiledRunState = {
+    plan,
+    stitcher,
+    tiles,
+    done: 0,
+    total: plan.tiles.length,
+    jobId,
+    image,
+    size: `${image.width}x${image.height}`,
+    postprocessStart,
+  };
+  log(`Tiled inference: ${plan.grid}x${plan.grid} = ${plan.tiles.length} tiles.`);
+  for (let i = 0; i < plan.tiles.length; i++) {
+    if (jobId !== activeJobId) return;
+    const runId = nextRunId++;
+    currentRunId = runId;
+    tiledRuns.set(runId, { state, tileIndex: i });
+    await new Promise<number>((resolve, reject) => {
+      pendingRuns.set(runId, { resolve, reject });
+      postRunMessage(runId, state.tiles[i]);
+    });
+  }
+}
+
 // Stages 2-4: refine the soft mask and, on success, swap in the sharper result
 // atomically. Any failure or cancellation keeps the initial preview.
 async function refineAndFinalize(
   jobId: number,
   image: ImageData,
-  croppedFloat: Float32Array,
-  rect: { width: number; height: number },
+  refineMaskFloat: Float32Array,
+  refineMaskWidth: number,
+  refineMaskHeight: number,
   guide: Float32Array,
   size: string,
   postprocessStart: number,
+  despeckleAfterRefine: boolean,
 ): Promise<void> {
   setConsoleStatus('Refining edges…', true);
   const t0 = performance.now();
@@ -1662,9 +3204,9 @@ async function refineAndFinalize(
     const outcome = await refinementRunner.refine({
       jobId,
       guide,
-      mask: croppedFloat,
-      maskWidth: rect.width,
-      maskHeight: rect.height,
+      mask: refineMaskFloat,
+      maskWidth: refineMaskWidth,
+      maskHeight: refineMaskHeight,
       width: image.width,
       height: image.height,
       config: refineConfig,
@@ -1673,15 +3215,26 @@ async function refineAndFinalize(
     if ('cancelled' in outcome) return; // a newer job owns the UI now
     // The refinement returns a soft float alpha; apply the user's
     // threshold/feather, then composite. The flood-fill recovery guard was
-    // already applied to the Stage-1 mask and the refined alpha is derived from
-    // the same soft mask, so it is not re-run here.
-    const refinedMask = applyMaskAdjust(alphaToBytes(outcome.alpha), image.width, image.height, maskAdjust);
+    // already applied to the input mask (see compositeAndRefine), so the refined
+    // alpha is derived from the recovered mask and is not re-run here.
+    let refinedMask = applyMaskAdjust(alphaToBytes(outcome.alpha), image.width, image.height, maskAdjust);
+    // Refinement re-grows small islands from the soft alpha, so the recovery's
+    // despeckle has to run again on its output — and only for a recovery, so a
+    // model mask is never altered.
+    if (despeckleAfterRefine) {
+      refinedMask = despeckleRecoveredMask(
+        refinedMask,
+        image.width,
+        image.height,
+        islandFraction(refineConfig.cleanup.islandCleanup),
+      );
+    }
     const { canvas, preview } = await composeResult(image, refinedMask);
     if (jobId !== activeJobId) return;
     refinementSucceeded = true;
     // Full post-processing time: mask reconstruction + Stage-1 composite + refine.
     postprocessingMs = performance.now() - postprocessStart;
-    finishResult(canvas, preview, size, 'final');
+    finishResult(canvas, preview, size, 'final', refinedMask);
     const { timings } = outcome;
     smokeRefineStages = { ...timings, finalizeMs: performance.now() - t0 };
     log(
@@ -1714,9 +3267,12 @@ function finishResult(
   preview: HTMLCanvasElement,
   size: string,
   phase: 'preview' | 'final' = 'final',
+  mask: Uint8ClampedArray | null = null,
 ): void {
   lastResultCanvas = canvas;
   lastPreviewCanvas = preview;
+  lastResultAlpha = mask ? new Uint8ClampedArray(mask) : null;
+  resultRevision += 1;
 
   const ctx = canvas.getContext('2d')!;
   const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -1724,13 +3280,13 @@ function finishResult(
   const verdict = classifyOutputAlpha(alpha);
 
   // The compare view pairs the original photo with the current composite.
-  compareBeforeEl.src = currentObjectUrl ?? '';
   // Preview + compare "after" are painted from the stored cut-out onto the chosen
   // background; the download link follows the chosen format.
   renderResultPreview();
   applyFormatUi();
 
   outputSection.hidden = false;
+  updateDownloadUi();
   // The export dimensions are the original dimensions; refinement never
   // downscales the export.
   if (phase === 'final') {
@@ -1747,6 +3303,8 @@ function finishResult(
   // reveals the re-process button.
   resultSettingsKey = engineSettingsKey();
   updateReprocessButton();
+  // Show the transparent cut-out as the entry's library thumbnail.
+  storeLibraryResult(canvas);
 
   const pct = (alpha.opaqueFraction * 100).toFixed(1);
   // A valid, displayable result exists now. The client de-duplicates, so the
@@ -1759,6 +3317,41 @@ function finishResult(
   // silently — and the ghost is no longer mislabelled "fully transparent".
   const warning = outputAlphaWarning(verdict);
   if (warning) log(`WARNING: ${warning}`);
+  // Advise tiling when it would sharpen THIS image (a wide, soft edge on a photo
+  // the model must upscale a lot) and the user has not already enabled it. The
+  // advice is shown in the sidebar, never as a toast.
+  if (phase === 'final') maybeRecommendTiling(transitionBandFraction(data, 4, 3));
+}
+
+// The tiling recommendation for the photo on screen, kept so the sidebar hint can
+// show it. Recomputed on every final result; null when tiling is not advised (or
+// already on), which is what hides the hint.
+let tilingAdvice: { reason: string; grid: TileGrid } | null = null;
+// The photo the advice belongs to. A new photo clears the advice, so a stale
+// recommendation from the previous image never lingers in the panel.
+let tilingAdviceFor: string | null = null;
+
+// Decide whether tiling would sharpen the current photo, and record it for the
+// sidebar hint. Deliberately NOT a toast: an interruption on every large photo
+// would nag, so the advice lives in the tiling field's own info panel, where a
+// user who wants it will look. `softEdgeShare` is the measured soft-edge fraction
+// of the first mask — the one signal that separates "this edge is blurry" from
+// "this edge is already crisp", so it is what keeps the advice from firing on
+// every image.
+function maybeRecommendTiling(softEdgeShare: number): void {
+  if (!currentImageData || tileGrid > 1) {
+    tilingAdvice = null;
+    return;
+  }
+  const rec = recommendTiling({
+    imageWidth: currentImageData.width,
+    imageHeight: currentImageData.height,
+    softEdgeShare,
+  });
+  tilingAdviceFor = `${currentImageData.width}x${currentImageData.height}`;
+  tilingAdvice = rec.recommended ? { reason: rec.reason, grid: rec.suggestedGrid } : null;
+  applyTilingUi();
+  if (rec.recommended) log(`Tiling suggestion: ${rec.reason}`);
 }
 
 function setSelectorsDisabled(disabled: boolean): void {
@@ -1823,6 +3416,9 @@ function loadSelectedModel(): void {
     outputIsProbability: selectedModel.outputIsProbability,
     forceProvider: force,
     modelId: selectedModel.id,
+    // Lets the worker use a shorter warm-run watchdog on a phone (see
+    // MOBILE_WEBGPU_TIMEOUT_MS in public/inference-worker.js).
+    mobile: readDeviceMobile(),
   });
 
   // The worker answers a set-model with a 'queued' progress message immediately,
@@ -1948,7 +3544,7 @@ providerToggle.addEventListener('change', () => {
   if (selectedProvider === 'webgpu') warnOnGpuChoice();
   applyProviderUi();
   updateReprocessButton();
-  loadSelectedModel();
+  void ensureModelLoaded(true);
 });
 
 // ——— Mask adjust controls ———
@@ -1957,9 +3553,19 @@ providerToggle.addEventListener('change', () => {
 // stale. `null` means "no result rendered yet".
 let resultSettingsKey: string | null = null;
 const reprocessBtn = document.getElementById('reprocessBtn') as HTMLButtonElement | null;
+const resetEngineBtn = document.getElementById('resetEngineBtn') as HTMLButtonElement | null;
 
 function engineSettingsKey(): string {
-  return `${selectedProvider}|${maskAdjust.threshold}|${maskAdjust.feather}`;
+  return [
+    selectedProvider,
+    maskAdjust.threshold,
+    maskAdjust.feather,
+    tileGrid,
+    refineConfig.enabled ? 1 : 0,
+    refineConfig.edgeRefinement.strength,
+    refineConfig.edgeRefinement.edgeSensitivity,
+    refineConfig.cleanup.islandCleanup,
+  ].join('|');
 }
 
 function updateReprocessButton(): void {
@@ -1994,9 +3600,9 @@ function bindMaskControl(input: HTMLInputElement, valueEl: Element, kind: 'thres
 bindMaskControl(maskThresholdInput, maskThresholdValue, 'threshold');
 bindMaskControl(maskFeatherInput, maskFeatherValue, 'feather');
 
-// ——— Result tab: engine settings sidebar ———
-// The advanced engine controls live in a sidebar in the result workspace. It
-// collapses via the chevron in its header (or the top-bar show/hide button) and
+// ——— Step editor: engine settings sidebar ———
+// The advanced engine controls live in a sidebar beside the step editor. It
+// hides completely via the header button (or the top-bar show/hide button) and
 // drag-resizes up to 50% of the workspace width (the clamp mirrors the
 // console's). `null` means the CSS default track width.
 const SIDEBAR_MAX_FRACTION = 0.5;
@@ -2015,8 +3621,14 @@ function renderSidebarToggle(): void {
 
 function setSidebarCollapsed(collapsed: boolean): void {
   if (!settingsSidebarEl) return;
+  if (!collapsed && !tabHasEngineControls(studioView.tab)) return;
   settingsSidebarEl.dataset.collapsed = collapsed ? 'true' : 'false';
-  sidebarCollapseBtn?.setAttribute('aria-pressed', String(!collapsed));
+  if (sidebarCollapseBtn) {
+    sidebarCollapseBtn.setAttribute('aria-pressed', String(!collapsed));
+    const label = collapsed ? 'Expand settings sidebar' : 'Collapse settings sidebar';
+    sidebarCollapseBtn.setAttribute('aria-label', label);
+    sidebarCollapseBtn.setAttribute('title', label);
+  }
   renderSidebarToggle();
   if (!collapsed) applySidebarWidth(sidebarWidthPx);
 }
@@ -2076,8 +3688,8 @@ window.addEventListener('resize', () => {
   if (sidebarWidthPx != null) applySidebarWidth(sidebarWidthPx);
 });
 
-// The top-bar button shows/hides the sidebar; the in-sidebar chevron collapses
-// it. Both drive the same state, so they stay in sync.
+// The top-bar button shows/hides the sidebar; the in-sidebar button collapses
+// it too. Both drive the same state, so they stay in sync.
 sidebarToggleBtn?.addEventListener('click', () => {
   const collapsed = settingsSidebarEl?.dataset.collapsed === 'true';
   setSidebarCollapsed(!collapsed);
@@ -2087,13 +3699,803 @@ sidebarCollapseBtn?.addEventListener('click', () => {
   setSidebarCollapsed(!collapsed);
 });
 
+// ——— Export bar: the step result or the whole Bulk batch ———
+// The encoder can fall back to PNG for a format the browser cannot produce
+// (WebP), so the archive entry takes its extension from the actual data URL.
+function dataUrlExtension(dataUrl: string, fallback: string): string {
+  if (dataUrl.startsWith('data:image/png')) return 'png';
+  if (dataUrl.startsWith('data:image/jpeg')) return 'jpg';
+  if (dataUrl.startsWith('data:image/webp')) return 'webp';
+  return fallback;
+}
+
+function uniqueZipName(name: string, used: Set<string>): string {
+  if (!used.has(name)) {
+    used.add(name);
+    return name;
+  }
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const extension = dot > 0 ? name.slice(dot) : '';
+  let index = 2;
+  let candidate = `${base}-${index}${extension}`;
+  while (used.has(candidate)) candidate = `${base}-${++index}${extension}`;
+  used.add(candidate);
+  return candidate;
+}
+
+function bulkExportTargets(): BulkItem[] {
+  const done = bulkState.items.filter((item) => item.status === 'done' && bulkResults.has(item.id));
+  const checked = done.filter((item) => bulkState.checkedIds.includes(item.id));
+  return checked.length ? checked : done;
+}
+
+function downloadAllBulk(): void {
+  const targets = bulkExportTargets();
+  if (!targets.length) return;
+  const used = new Set<string>();
+  const entries = targets.flatMap((item) => {
+    const canvas = bulkResults.get(item.id);
+    if (!canvas) return [];
+    const dataUrl = canvasToDataUrl(canvas, exportFormat, item.background ?? background);
+    const extension = dataUrlExtension(dataUrl, exportFormatInfo(exportFormat).extension);
+    return [
+      {
+        name: uniqueZipName(bulkDownloadName(item, extension), used),
+        data: dataUrlToBytes(dataUrl),
+      },
+    ];
+  });
+  if (!entries.length) return;
+  log(`Downloading ${entries.length} bulk cut-out(s) as a ZIP archive.`);
+
+  const url = URL.createObjectURL(createZipBlob(entries));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `background-removed-${entries.length}-photos.zip`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  trackDownloadInitiated();
+}
+bulkDownloadAllBtn?.addEventListener('click', () => {
+  downloadAllBulk();
+  closeDownloadMenu();
+});
+
+// ——— Bulk queue ———
+function updateBulkStatus(): void {
+  if (!bulkStatusEl) return;
+  if (!bulkBatchRunning) {
+    bulkStatusEl.hidden = true;
+    return;
+  }
+  const active = bulkActiveCount(bulkState);
+  const done = bulkDoneCount(bulkState);
+  const pct = studioView.percent;
+  bulkStatusEl.hidden = false;
+  bulkStatusEl.textContent =
+    `Processing — ${done} cut-out(s) ready, ${active} left` + (pct === null ? '…' : ` — ${pct}%`);
+}
+
+function bulkStatusLabel(item: BulkItem): string {
+  switch (item.status) {
+    case 'processing':
+      return 'Processing…';
+    case 'done':
+      return 'Cut-out ready';
+    case 'error':
+      return item.error ?? 'Failed';
+    default:
+      return 'Queued';
+  }
+}
+
+let bulkBackground: BackgroundChoice = { kind: 'color', hex: '#ffffff', alpha: 100 };
+
+function updateBulkBackgroundUi(): void {
+  paintColorSwatch(bulkBgSwatch, bulkBackground);
+  if (bulkBgButton) colorPicker.syncFor(bulkBgButton, bulkBackground);
+}
+
+function updateBulkToolbar(): void {
+  const total = bulkState.items.length;
+  const checked = bulkCheckedCount(bulkState);
+  if (bulkSelectAllEl) {
+    bulkSelectAllEl.disabled = total === 0;
+    bulkSelectAllEl.checked = total > 0 && checked === total;
+    bulkSelectAllEl.indeterminate = checked > 0 && checked < total;
+  }
+  if (bulkDeleteSelectedBtn) {
+    bulkDeleteSelectedBtn.disabled = bulkBatchRunning || checked === 0;
+    const label = checked > 0 ? `Delete ${checked} selected` : 'Delete selected';
+    bulkDeleteSelectedBtn.setAttribute('aria-label', label);
+    bulkDeleteSelectedBtn.title = label;
+  }
+  if (bulkBgButton) {
+    bulkBgButton.disabled = checked === 0;
+    const label =
+      checked > 0
+        ? `Apply background to ${checked} selected`
+        : 'Select an image to apply a background';
+    bulkBgButton.setAttribute('aria-label', label);
+    bulkBgButton.title = label;
+  }
+}
+
+function renderBulk(): void {
+  if (!bulkGridEl) return;
+  bulkGridEl.innerHTML = '';
+  if (bulkEmptyEl) bulkEmptyEl.hidden = bulkState.items.length > 0;
+  const active = bulkActiveCount(bulkState);
+  const done = bulkDoneCount(bulkState);
+  if (bulkCountEl) {
+    bulkCountEl.textContent = `${active} / ${BULK_LIMIT}` + (done ? ` · ${done} done` : '');
+  }
+  const capacity = bulkCapacity(bulkState);
+  if (bulkPickBtn) {
+    bulkPickBtn.disabled = bulkBatchRunning || capacity === 0;
+    const label =
+      capacity === 0 ? `Maximum ${BULK_LIMIT} active images` : 'Add images';
+    bulkPickBtn.setAttribute('aria-label', label);
+    bulkPickBtn.title = label;
+  }
+
+  for (const item of bulkState.items) {
+    const checked = bulkState.checkedIds.includes(item.id);
+    const card = document.createElement('div');
+    card.className = 'bulkCard';
+    card.dataset.selected = String(item.id === bulkState.selectedId);
+    card.dataset.checked = String(checked);
+    card.dataset.status = item.status;
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', `Select ${item.name}`);
+    const select = (): void => {
+      bulkState = selectBulkItem(bulkState, item.id);
+      renderBulk();
+    };
+    card.addEventListener('click', select);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        select();
+      }
+    });
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'bulkCheck';
+    check.checked = checked;
+    check.setAttribute('aria-label', `Select ${item.name} for bulk actions`);
+    check.addEventListener('click', (e) => e.stopPropagation());
+    check.addEventListener('change', () => {
+      bulkState = setBulkChecked(bulkState, item.id, check.checked);
+      renderBulk();
+    });
+    card.appendChild(check);
+
+    const thumb = document.createElement('img');
+    thumb.className = 'bulkThumb';
+    thumb.alt = '';
+    thumb.src = item.resultUrl ?? item.originalUrl;
+    if (item.resultUrl && item.background && !isTransparent(item.background)) {
+      thumb.style.backgroundImage = 'none';
+      thumb.style.backgroundColor = toRgba(item.background);
+    }
+    card.appendChild(thumb);
+
+    const meta = document.createElement('div');
+    meta.className = 'bulkMeta';
+    const name = document.createElement('span');
+    name.className = 'bulkName';
+    name.textContent = item.name;
+    const dims = document.createElement('span');
+    dims.className = 'bulkDims';
+    dims.textContent = formatDims(item.width, item.height);
+    meta.appendChild(name);
+    meta.appendChild(dims);
+    card.appendChild(meta);
+
+    const status = document.createElement('span');
+    status.className = 'bulkItemStatus';
+    status.textContent = bulkStatusLabel(item);
+    card.appendChild(status);
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'bulkRemove';
+    remove.setAttribute('aria-label', `Remove ${item.name}`);
+    remove.textContent = '×';
+    remove.disabled = bulkBatchRunning;
+    remove.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeBulkFile(item.id);
+    });
+    card.appendChild(remove);
+    bulkGridEl.appendChild(card);
+  }
+  updateBulkToolbar();
+  updateBulkStatus();
+  updateDownloadUi();
+}
+
+function removeBulkFile(id: number): void {
+  const { state, revoked } = removeBulkItem(bulkState, id);
+  bulkState = state;
+  for (const url of revoked) URL.revokeObjectURL(url);
+  bulkBlobs.delete(id);
+  bulkResults.delete(id);
+  renderBulk();
+}
+
+function removeSelectedBulkFiles(): void {
+  const ids = [...bulkState.checkedIds];
+  if (!ids.length) return;
+  const { state, revoked } = removeBulkItems(bulkState, ids);
+  bulkState = state;
+  for (const url of revoked) URL.revokeObjectURL(url);
+  for (const id of ids) {
+    bulkBlobs.delete(id);
+    bulkResults.delete(id);
+  }
+  renderBulk();
+  log(`Bulk: removed ${ids.length} image(s).`);
+}
+
+function applyBulkBackground(choice: BackgroundChoice | null): void {
+  const targets = [...bulkState.checkedIds];
+  if (!targets.length) return;
+  bulkState = setBulkBackground(bulkState, targets, choice);
+  renderBulk();
+  log(
+    choice
+      ? `Bulk background: ${describeChoice(choice)} for ${targets.length} image(s).`
+      : `Bulk background: cleared for ${targets.length} image(s).`,
+  );
+}
+
+function pickBulkFiles(): void {
+  if (bulkCapacity(bulkState) === 0) {
+    showToast(
+      `Bulk handles up to ${BULK_LIMIT} active images. Wait for the batch to finish or remove one.`,
+      { kind: 'warn' },
+    );
+    return;
+  }
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/jpeg,image/png,image/webp';
+  input.multiple = true;
+  input.onchange = () => void addBulkFiles(Array.from(input.files ?? []));
+  input.click();
+}
+
+async function addBulkFiles(files: File[]): Promise<void> {
+  const capacity = bulkCapacity(bulkState);
+  if (capacity === 0) {
+    showToast(
+      `Bulk handles up to ${BULK_LIMIT} active images. Wait for the batch to finish or remove one.`,
+      { kind: 'warn' },
+    );
+    return;
+  }
+  if (files.length > capacity) {
+    showToast(`Bulk handles up to ${BULK_LIMIT} active images; adding the first ${capacity}.`, {
+      kind: 'warn',
+    });
+  }
+  for (const file of files.slice(0, capacity)) {
+    const typeCheck = validateFileTypeAndSize(file);
+    if (!typeCheck.ok) {
+      error(typeCheck.reason, 'upload');
+      continue;
+    }
+    const url = URL.createObjectURL(file);
+    let img: HTMLImageElement;
+    try {
+      img = await loadImageElement(url);
+    } catch {
+      URL.revokeObjectURL(url);
+      error('Failed to decode image', 'upload');
+      continue;
+    }
+    const sourceScale = sourceScaleDecision(img.naturalWidth, img.naturalHeight);
+    if (sourceScale.downscaled) log(sourceScale.reason);
+    const dimCheck = validateDimensions(sourceScale.width, sourceScale.height);
+    if (!dimCheck.ok) {
+      URL.revokeObjectURL(url);
+      error(dimCheck.reason, 'upload');
+      continue;
+    }
+    // The card thumbnail must not keep a full-resolution decode alive for every
+    // queued photo; a batch of five phone photos is the worst case for memory.
+    let displayUrl = url;
+    if (sourceScale.downscaled) {
+      const canvas = document.createElement('canvas');
+      canvas.width = sourceScale.width;
+      canvas.height = sourceScale.height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const scaledBlob = await canvasToPngBlob(canvas);
+      if (scaledBlob) {
+        displayUrl = URL.createObjectURL(scaledBlob);
+        URL.revokeObjectURL(url);
+      }
+    }
+    const added = addBulkItem(bulkState, {
+      name: file.name || `Photo ${bulkState.nextId}`,
+      width: sourceScale.width,
+      height: sourceScale.height,
+      originalUrl: displayUrl,
+    });
+    bulkState = added.state;
+    if (!added.item) {
+      URL.revokeObjectURL(displayUrl);
+      break;
+    }
+    bulkBlobs.set(added.item.id, file);
+  }
+  renderBulk();
+  log(`Bulk: ${bulkState.items.length} image(s) in the queue.`);
+  // Adding photos is the trigger: the batch starts on its own.
+  if (bulkState.items.some((item) => item.status === 'queued')) void processBulkBatch();
+}
+
+bulkPickBtn?.addEventListener('click', pickBulkFiles);
+bulkEmptyPickBtn?.addEventListener('click', pickBulkFiles);
+bulkSelectAllEl?.addEventListener('change', () => {
+  bulkState = setBulkCheckedAll(bulkState, bulkSelectAllEl.checked);
+  renderBulk();
+});
+bulkDeleteSelectedBtn?.addEventListener('click', removeSelectedBulkFiles);
+bulkBgButton?.addEventListener('click', () => {
+  colorPicker.toggle(bulkBgButton, bulkBackground, (choice) => {
+    bulkBackground = choice;
+    updateBulkBackgroundUi();
+    applyBulkBackground(choice);
+  });
+});
+updateBulkBackgroundUi();
+renderBulk();
+
+// A bulk batch drives the same single-image pipeline, so it temporarily takes
+// over the step editor. Snapshot the step photo/result and put them back when the
+// batch ends; the user's single-image work is never lost.
+interface StepSnapshot {
+  image: HTMLImageElement | null;
+  imageData: ImageData | null;
+  objectUrl: string | null;
+  imageName: string;
+  result: HTMLCanvasElement | null;
+  preview: HTMLCanvasElement | null;
+  alpha: Uint8ClampedArray | null;
+  view: typeof studioView;
+  settingsKey: string | null;
+}
+
+function snapshotStep(): StepSnapshot {
+  return {
+    image: currentImage,
+    imageData: currentImageData,
+    objectUrl: currentObjectUrl,
+    imageName: currentImageName,
+    result: lastResultCanvas,
+    preview: lastPreviewCanvas,
+    alpha: lastResultAlpha,
+    view: studioView,
+    settingsKey: resultSettingsKey,
+  };
+}
+
+function restoreStep(snapshot: StepSnapshot): void {
+  invalidateActiveJob();
+  if (currentObjectUrl && currentObjectUrl !== snapshot.objectUrl) {
+    URL.revokeObjectURL(currentObjectUrl);
+  }
+  currentImage = snapshot.image;
+  currentImageData = snapshot.imageData;
+  currentObjectUrl = snapshot.objectUrl;
+  currentImageName = snapshot.imageName;
+  lastResultCanvas = snapshot.result;
+  lastPreviewCanvas = snapshot.preview;
+  lastResultAlpha = snapshot.alpha;
+  outputBox.innerHTML = '';
+  outputBox.classList.remove('hasResultCompare');
+  resultCompareFigure = null;
+  if (snapshot.objectUrl) {
+    inputPreviewImg.src = snapshot.objectUrl;
+    inputPreviewEl.hidden = false;
+    stepInputEl.classList.add('has-preview');
+  } else {
+    inputPreviewImg.removeAttribute('src');
+    inputPreviewEl.hidden = true;
+    stepInputEl.classList.remove('has-preview');
+  }
+  outputSection.hidden = !snapshot.result;
+  // Keep whatever tab the user is on: the batch normally leaves them on Bulk to
+  // download, but a manual tab switch during the run is respected.
+  studioView = { ...snapshot.view, tab: studioView.tab };
+  resultSettingsKey = snapshot.settingsKey;
+  applyStudioView();
+  if (snapshot.result) {
+    renderResultPreview();
+    applyFormatUi();
+  }
+}
+
+interface EngineSnapshot {
+  maskAdjust: MaskAdjust;
+  tileGrid: TileGrid;
+  refine: FastRefinementConfig;
+}
+
+function snapshotEngine(): EngineSnapshot {
+  return {
+    maskAdjust: { ...maskAdjust },
+    tileGrid,
+    refine: {
+      ...refineConfig,
+      maskUpscale: { ...refineConfig.maskUpscale },
+      edgeRefinement: { ...refineConfig.edgeRefinement },
+      cleanup: { ...refineConfig.cleanup },
+      performance: { ...refineConfig.performance },
+    },
+  };
+}
+
+// Bulk runs never inherit the experimental Photo/Result engine controls: the
+// batch uses the stock mask adjustment, a single full-image pass, and the
+// default refinement config. The user's settings are restored when it ends.
+function applyDefaultEngine(): void {
+  maskAdjust = { ...DEFAULT_MASK_ADJUST };
+  tileGrid = 1;
+  Object.assign(refineConfig, resolveRefinementConfig());
+  applyMaskUi();
+  applyTilingUi();
+  applyRefineUi();
+  updateReprocessButton();
+}
+
+function restoreEngine(snapshot: EngineSnapshot): void {
+  maskAdjust = snapshot.maskAdjust;
+  tileGrid = snapshot.tileGrid;
+  Object.assign(refineConfig, snapshot.refine);
+  applyMaskUi();
+  applyTilingUi();
+  applyRefineUi();
+  updateReprocessButton();
+}
+
+async function processBulkBatch(): Promise<void> {
+  if (bulkBatchRunning) return;
+  if (modelError) {
+    showToast(modelError, { kind: 'error' });
+    return;
+  }
+  let pending = bulkState.items.filter((item) => item.status !== 'done');
+  if (!pending.length) return;
+
+  bulkBatchRunning = true;
+  let snapshot: StepSnapshot | null = null;
+  let engine: EngineSnapshot | null = null;
+  try {
+    // Adding photos starts the batch even while a single photo is still running;
+    // wait for that run instead of dropping the request.
+    if (studioView.running && activeRunPromise) {
+      log('Bulk: waiting for the current photo to finish first.');
+      await activeRunPromise;
+      pending = bulkState.items.filter((item) => item.status !== 'done');
+      if (!pending.length) return;
+    }
+    snapshot = snapshotStep();
+    engine = snapshotEngine();
+    protectedObjectUrl = currentObjectUrl;
+    bulkTabPinned = true;
+    downloadConsentDeclined = false;
+    setStudioTab('bulk', true);
+    applyDefaultEngine();
+    log('Bulk: using the default engine settings.');
+    renderBulk();
+    const total = pending.length;
+    let index = 0;
+    for (const item of pending) {
+      index += 1;
+      bulkState = updateBulkItem(bulkState, item.id, { status: 'processing', error: null });
+      renderBulk();
+      const blob = bulkBlobs.get(item.id);
+      if (!blob) {
+        bulkState = updateBulkItem(bulkState, item.id, {
+          status: 'error',
+          error: 'Source photo is no longer available',
+        });
+        renderBulk();
+        continue;
+      }
+      log(`Bulk ${index}/${total}: processing a ${item.width}x${item.height} photo.`);
+      const file = new File([blob], item.name, { type: blob.type || 'image/png' });
+      const revisionBefore = resultRevision;
+      await loadImageFromFile(file, librarySavingEnabled);
+      const run = activeRunPromise;
+      if (run) await run;
+      if (downloadConsentDeclined) {
+        bulkState = updateBulkItem(bulkState, item.id, {
+          status: 'error',
+          error: 'Model download not confirmed',
+        });
+        log('Bulk run stopped: the model download was not confirmed.');
+        break;
+      }
+      await waitForJobSettled();
+      // The library write is queued behind a PNG encode; let it finish before the
+      // next run bumps the run token, or the write would be dropped.
+      await libraryWriteQueue;
+      // A run that never painted a result must not reuse the previous item's
+      // canvas; resultRevision only moves when a fresh result lands.
+      const canvas = resultRevision !== revisionBefore ? lastResultCanvas : null;
+      if (canvas) {
+        bulkResults.set(item.id, canvas);
+        const png = await canvasToPngBlob(previewFromCanvas(canvas));
+        const resultUrl = png ? URL.createObjectURL(png) : null;
+        bulkState = updateBulkItem(bulkState, item.id, { status: 'done', resultUrl });
+        log(`Bulk ${index}/${total}: cut-out ready (${canvas.width}x${canvas.height}).`);
+      } else {
+        bulkState = updateBulkItem(bulkState, item.id, { status: 'error', error: 'No cut-out produced' });
+        log(`Bulk ${index}/${total}: no cut-out produced.`);
+      }
+      renderBulk();
+    }
+  } finally {
+    bulkBatchRunning = false;
+    bulkTabPinned = false;
+    if (snapshot) restoreStep(snapshot);
+    if (engine) restoreEngine(engine);
+    protectedObjectUrl = null;
+    renderBulk();
+    log(`Bulk finished: ${bulkDoneCount(bulkState)} of ${bulkState.items.length} cut-out(s).`);
+  }
+}
+
+// ——— Info bubbles ———
+// Each "?" toggles a floating explanation panel. The panel is positioned in
+// viewport coordinates and overlays the page, so opening it never reflows the
+// sidebar or moves the controls below it. Only one panel is open at a time.
+const infoBubbles = Array.from(document.querySelectorAll<HTMLButtonElement>('.infoBubble'));
+let openInfoBubble: HTMLButtonElement | null = null;
+
+function closeInfoPanels(except?: HTMLElement | null): void {
+  for (const bubble of infoBubbles) {
+    const target = document.getElementById(bubble.dataset.infoTarget ?? '');
+    if (target && target !== except) {
+      target.hidden = true;
+      bubble.setAttribute('aria-expanded', 'false');
+    }
+  }
+  if (!except) openInfoBubble = null;
+}
+
+// Place the panel next to its "?", right-aligned and flipped above when there
+// is not enough room below. The width is clamped to the viewport.
+function positionInfoPanel(panel: HTMLElement, bubble: HTMLButtonElement): void {
+  const margin = 8;
+  const width = Math.min(320, window.innerWidth - margin * 2);
+  panel.style.width = `${width}px`;
+  const height = panel.offsetHeight;
+  const rect = bubble.getBoundingClientRect();
+  const left = Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin));
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - height - 6);
+  }
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function toggleInfoPanel(bubble: HTMLButtonElement): void {
+  const target = document.getElementById(bubble.dataset.infoTarget ?? '');
+  if (!target) return;
+  const willOpen = target.hidden;
+  if (!willOpen) {
+    target.hidden = true;
+    bubble.setAttribute('aria-expanded', 'false');
+    openInfoBubble = null;
+    return;
+  }
+  closeInfoPanels(target);
+  target.hidden = false;
+  bubble.setAttribute('aria-expanded', 'true');
+  openInfoBubble = bubble;
+  positionInfoPanel(target, bubble);
+}
+
+for (const bubble of infoBubbles) {
+  bubble.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleInfoPanel(bubble);
+  });
+}
+
+// A click outside the open panel/bubble closes it. Clicking the bubble itself is
+// left to the click handler so it can toggle shut.
+document.addEventListener('pointerdown', (e) => {
+  if (!openInfoBubble) return;
+  const panel = document.getElementById(openInfoBubble.dataset.infoTarget ?? '');
+  const target = e.target as Node | null;
+  if (!target) return;
+  if (openInfoBubble.contains(target) || panel?.contains(target)) return;
+  closeInfoPanels();
+});
+
+// Escape closes the explanation before it reaches the studio's close handler.
+document.addEventListener(
+  'keydown',
+  (e) => {
+    if (e.key !== 'Escape' || !openInfoBubble) return;
+    e.stopPropagation();
+    const bubble = openInfoBubble;
+    closeInfoPanels();
+    bubble.focus();
+  },
+  true,
+);
+
+const repositionOpenInfoPanel = (): void => {
+  if (!openInfoBubble) return;
+  const panel = document.getElementById(openInfoBubble.dataset.infoTarget ?? '');
+  if (panel && !panel.hidden) positionInfoPanel(panel, openInfoBubble);
+};
+window.addEventListener('resize', repositionOpenInfoPanel);
+document
+  .querySelector('.settingsSidebarBody')
+  ?.addEventListener('scroll', repositionOpenInfoPanel, { passive: true });
+
+// ——— Tiled inference control ———
+function tilingLabel(grid: TileGrid): string {
+  return grid === 1 ? 'Off' : `${grid} × ${grid}`;
+}
+function applyTilingUi(): void {
+  if (tilingSelect) tilingSelect.value = tileGrid === 1 ? 'off' : String(tileGrid);
+  if (tilingValueEl) tilingValueEl.textContent = tilingLabel(tileGrid);
+  // Explain why tiling is unavailable for a small photo, so the option never
+  // silently does nothing.
+  const img = currentImageData;
+  if (tilingHintEl) {
+    tilingHintEl.hidden = !img;
+    if (img) {
+      const longSide = Math.max(img.width, img.height);
+      tilingHintEl.textContent =
+        longSide < TILING_MIN_LONG_SIDE
+          ? `This photo is ${longSide}px on its longest side — below the ${TILING_MIN_LONG_SIDE}px minimum, so a single pass is used.`
+          : `Runs the model on overlapping tiles and crossfades the masks. ${tileGrid > 1 ? `Currently ${tileGrid} × ${tileGrid} = ${tileGrid * tileGrid} passes.` : 'Best for large photos whose mask is upscaled a lot.'}`;
+    }
+  }
+  // The per-photo recommendation, shown inside the info panel (never a toast).
+  // Hidden when tiling is already on or not advised for this photo. A new photo
+  // (different size key) clears any advice left over from the previous image.
+  if (img && tilingAdvice && tilingAdviceFor !== `${img.width}x${img.height}`) {
+    tilingAdvice = null;
+  }
+  if (tilingAdviceEl) {
+    tilingAdviceEl.hidden = !tilingAdvice;
+    tilingAdviceEl.textContent = tilingAdvice ? `Recommended for this photo: ${tilingAdvice.reason}` : '';
+  }
+  if (tilingApplyBtn) {
+    tilingApplyBtn.hidden = !tilingAdvice;
+    if (tilingAdvice) tilingApplyBtn.textContent = `Run ${tilingAdvice.grid} × ${tilingAdvice.grid} tiles`;
+  }
+}
+tilingSelect?.addEventListener('change', () => {
+  const v = Number(tilingSelect.value);
+  tileGrid = (v === 2 || v === 3 || v === 4 ? v : 1) as TileGrid;
+  savePref('remove-bg:tiles', tileGrid);
+  applyTilingUi();
+  log(`Tiled inference: ${tileGrid === 1 ? 'off' : `${tileGrid}x${tileGrid}`}`);
+  updateReprocessButton();
+});
+// The recommendation's one-click apply, inside the info panel. Re-runs with the
+// suggested grid, like the old toast action did.
+tilingApplyBtn?.addEventListener('click', () => {
+  if (!tilingAdvice) return;
+  tileGrid = tilingAdvice.grid;
+  savePref('remove-bg:tiles', tileGrid);
+  tilingAdvice = null;
+  applyTilingUi();
+  if (currentImageData) {
+    setStudioTab('step', true);
+    void runSmoke();
+  }
+});
+
+// ——— Edge refinement + island cleanup controls ———
+// The product previously exposed refinement only through URL params. The sidebar
+// now surfaces the two knobs that matter (on/off and strength/sensitivity), each
+// mapping onto the same config the URL params resolve to.
+const ISLAND_CLEANUP_LABELS = {
+  fine: { short: 'Fine', log: 'fine (2e-5) — keeps small detail' },
+  strict: { short: 'Strict', log: 'strict (5e-4) — removes speckle' },
+} as const;
+
+function applyRefineUi(): void {
+  if (refineToggle) refineToggle.value = refineConfig.enabled ? 'on' : 'off';
+  if (refineValueEl) refineValueEl.textContent = refineConfig.enabled ? 'On' : 'Off';
+  if (refineStrengthInput) refineStrengthInput.value = String(Math.round(refineConfig.edgeRefinement.strength * 100));
+  if (refineStrengthValueEl) refineStrengthValueEl.textContent = refineConfig.edgeRefinement.strength.toFixed(2);
+  if (refineEdgeSensitivityInput) {
+    refineEdgeSensitivityInput.value = String(Math.round(refineConfig.edgeRefinement.edgeSensitivity * 100));
+  }
+  if (refineEdgeSensitivityValueEl) {
+    refineEdgeSensitivityValueEl.textContent = refineConfig.edgeRefinement.edgeSensitivity.toFixed(2);
+  }
+  if (islandCleanupSelect) islandCleanupSelect.value = refineConfig.cleanup.islandCleanup;
+  if (islandCleanupValueEl) {
+    islandCleanupValueEl.textContent = ISLAND_CLEANUP_LABELS[refineConfig.cleanup.islandCleanup].short;
+  }
+  // The two sliders only matter when the stage is on.
+  if (refineFieldEl) refineFieldEl.dataset.disabled = String(!refineConfig.enabled);
+}
+refineToggle?.addEventListener('change', () => {
+  refineConfig.enabled = refineToggle.value !== 'off';
+  applyRefineUi();
+  log(`Edge refinement: ${refineConfig.enabled ? 'on' : 'off'}`);
+  updateReprocessButton();
+});
+refineStrengthInput?.addEventListener('input', () => {
+  const v = Math.max(0, Math.min(100, Number(refineStrengthInput.value))) / 100;
+  refineConfig.edgeRefinement.strength = v;
+  if (refineStrengthValueEl) refineStrengthValueEl.textContent = v.toFixed(2);
+  updateReprocessButton();
+});
+refineEdgeSensitivityInput?.addEventListener('input', () => {
+  const v = Math.max(5, Math.min(400, Number(refineEdgeSensitivityInput.value))) / 100;
+  refineConfig.edgeRefinement.edgeSensitivity = v;
+  if (refineEdgeSensitivityValueEl) refineEdgeSensitivityValueEl.textContent = v.toFixed(2);
+  updateReprocessButton();
+});
+islandCleanupSelect?.addEventListener('change', () => {
+  if (!isIslandCleanup(islandCleanupSelect.value)) return;
+  refineConfig.cleanup.islandCleanup = islandCleanupSelect.value;
+  applyRefineUi();
+  log(`Island cleanup: ${ISLAND_CLEANUP_LABELS[refineConfig.cleanup.islandCleanup].log}`);
+  updateReprocessButton();
+});
+applyTilingUi();
+applyRefineUi();
+
 // Re-run inference with the current engine settings, then jump to the Processing
 // tab so the user sees the run they asked for.
 reprocessBtn?.addEventListener('click', () => {
   if (!currentImageData) return;
-  setStudioTab('processing', true);
+  setStudioTab('step', true);
   void runSmoke();
 });
+
+// Restore every engine control to its default: the GPU gate's provider, mask
+// threshold/feather off, tiling off, and the stock edge-refinement config.
+function resetEngineOptions(): void {
+  const defaultProvider: 'webgpu' | 'wasm' = webGpuUsable() ? 'webgpu' : 'wasm';
+  if (selectedProvider !== defaultProvider) {
+    selectedProvider = defaultProvider;
+    savePref(LS_PROVIDER, selectedProvider);
+    applyProviderUi();
+    void ensureModelLoaded(true);
+  }
+
+  maskAdjust = { ...DEFAULT_MASK_ADJUST };
+  saveMaskAdjust();
+  applyMaskUi();
+
+  tileGrid = 1;
+  savePref('remove-bg:tiles', tileGrid);
+  applyTilingUi();
+
+  Object.assign(refineConfig, resolveRefinementConfig());
+  applyRefineUi();
+
+  updateReprocessButton();
+  log('Engine options reset to their defaults.');
+}
+resetEngineBtn?.addEventListener('click', resetEngineOptions);
 
 type PendingRun = { resolve: (ms: number) => void; reject: (err: Error) => void };
 const pendingRuns = new Map<number, PendingRun>();
@@ -2182,9 +4584,12 @@ async function restartOnFreshWorker(msg: {
   // loading; only re-run it if it is still pending, or its caller would hang.
   if (!pendingRuns.has(msg.runId) || !currentImageData) return;
   // Re-run the failed inference on the fresh worker, reusing its run id so its
-  // pending promise settles when this run finishes.
+  // pending promise settles when this run finishes. For a tiled run the failed
+  // inference was one tile, so re-post that tile's pixels, not the whole image.
+  const tiled = tiledRuns.get(msg.runId);
   setConsoleStatus('Removing background…', true);
-  postRunMessage(msg.runId, currentImageData);
+  if (tiled) postRunMessage(msg.runId, tiled.state.tiles[tiled.tileIndex]);
+  else postRunMessage(msg.runId, currentImageData);
 }
 
 function finishedRun(): void {
@@ -2220,6 +4625,7 @@ dropZone.addEventListener('keydown', (e) => {
 // The selected-photo preview replaces the drop zone once a photo exists, so it
 // takes over the "choose another image" job: clicking it re-opens the picker.
 inputPreviewEl.addEventListener('click', chooseFile);
+newPhotoBtn?.addEventListener('click', chooseFile);
 inputPreviewEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault();
@@ -2285,15 +4691,20 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
     error('No image loaded');
     return null;
   }
-  // A model download that was paused at the metered-connection prompt resumes
-  // here: running is an explicit request to use the model.
+  // A run needs the model before it can start. On a metered link that is the
+  // user's decision, not the photo picker's: ask first and wait for the answer
+  // instead of silently spending their data plan. A dismissed prompt cancels
+  // the run; Wi-Fi arriving in the meantime resolves it as a confirmation.
   if (!modelReady && !modelError) {
-    sessionStorage.setItem('remove-bg:download-confirmed', '1');
-    netWarnEl.hidden = true;
-    if (!modelLoadInFlight) loadSelectedModel();
+    const canDownload = await ensureModelLoaded();
+    if (!canDownload) {
+      setStage('Paused — download the model to remove the background.');
+      return null;
+    }
   }
   hideRecovery();
   clearOutput();
+  beginLibraryRun();
   // The panel's progress spans the whole run. A model that still has to be
   // fetched starts in the download band; one already on the device starts at
   // the session-build band, so the bar never sits at a bare 0%.
@@ -2325,16 +4736,27 @@ async function runSmoke(imgUrl?: string, runs = WARM_RUNS): Promise<RunDone | nu
   trackProcessingStarted();
   timings.length = 0;
   lastJobSettled = false;
-  for (let i = 0; i < runs; i++) {
-    try {
-      await runOneInference();
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      endProcPhase();
-      studioError();
-      error(message, classifyError(message));
-      return null;
+  // Tiled inference runs one worker pass per tile; below the minimum long side
+  // the model already sees the photo at ~1x, so tiling only adds cost.
+  const longSide = currentImageData ? Math.max(currentImageData.width, currentImageData.height) : 0;
+  const useTiling = tileGrid > 1 && longSide >= TILING_MIN_LONG_SIDE;
+  if (tileGrid > 1 && !useTiling) {
+    log(`Tiling skipped: ${longSide}px is below the ${TILING_MIN_LONG_SIDE}px minimum; running a single pass.`);
+  }
+  try {
+    if (useTiling) {
+      await runTiledInference(currentImageData!);
+    } else {
+      for (let i = 0; i < runs; i++) {
+        await runOneInference();
+      }
     }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    endProcPhase();
+    studioError();
+    error(message, classifyError(message));
+    return null;
   }
   // The inference resolves when the mask is back; the cut-out (and its edge
   // refinement, when enabled) is composited afterwards. Wait for the final
@@ -2498,6 +4920,55 @@ initCompareSliders();
 initShowcaseGallery();
 initSupportCarousel();
 
+async function loadSampleIntoStudio(url: string, filename: string): Promise<void> {
+  setStudioTab('step', true);
+  openStudio();
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
+    await loadImageFromFile(file);
+  } catch {
+    showToast('Could not load sample image into Studio.', { kind: 'warn', title: 'Sample unavailable' });
+  }
+}
+
+initLandingWorkspace((url, filename) => {
+  void loadSampleIntoStudio(url, filename);
+});
+
+initCommandPalette({
+  onAction: (action) => {
+    switch (action.type) {
+      case 'open-studio': {
+        openStudio();
+        if (action.tab) setStudioTab(action.tab, true);
+        break;
+      }
+      case 'load-sample': {
+        void loadSampleIntoStudio(action.url, action.filename);
+        break;
+      }
+      case 'scroll-to': {
+        if (studioEl.classList.contains('is-open')) closeStudio();
+        const target = document.querySelector(action.selector);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        break;
+      }
+      case 'set-theme': {
+        setThemePreference(action.mode);
+        break;
+      }
+    }
+  },
+});
+
+// The console and the engine sidebar both start hidden so the first photo gets
+// the whole workspace; each stays one tap away in the studio top bar.
+setSidebarCollapsed(true);
+setConsoleVisible(false);
+
 // ——— Privacy-first analytics ———
 // Custom-event endpoint comes from VITE_ANALYTICS_ENDPOINT and the Cloudflare
 // Web Analytics beacon token from VITE_CF_WEB_ANALYTICS_TOKEN, both at build
@@ -2524,7 +4995,7 @@ let analyticsUi: AnalyticsUi | null = null;
     diagnostics: diagnosticReport,
     onReportSubmitted: () => {
       // Confirmation is a plain toast; the report itself is already stored.
-      showToast('Thanks — your report was sent.', { kind: 'info', title: 'Report sent' });
+      showToast('Thanks — your report was sent.', { kind: 'success', title: 'Report sent' });
     },
   });
   if (analyticsUi.enabled) {
@@ -2592,8 +5063,10 @@ window.addEventListener('scroll', updateHeaderCollapse, { passive: true });
 updateHeaderCollapse();
 
 async function boot(): Promise<void> {
-  // GPU gate first: it decides which provider is offered and the default.
-  gpuState = await detectWebGpu();
+  // GPU gate first: it decides which provider is offered and the default. The
+  // shared device probe lets an unverified mobile adapter stay off the default
+  // (it remains selectable; see provider-gate.ts).
+  gpuState = await detectWebGpu({ deviceClass: readDeviceMobile() ? 'mobile' : 'desktop' });
   log(gpuState.reason);
   // Probe whenever an adapter exists — even one the gate did not endorse — so the
   // GPU stays selectable in Advanced options (the user is warned, not blocked).
@@ -2736,8 +5209,9 @@ async function modelFetchTick(): Promise<void> {
     return;
   }
   // An unmetered link is available and the model is still absent, so the earlier
-  // "may be metered" prompt no longer applies.
-  netWarnEl.hidden = true;
+  // "may be metered" prompt no longer applies. Resolve any run waiting on that
+  // prompt as a confirmation before starting the download.
+  settleDownloadPrompt(true);
   log(`Unmetered connection detected and the model is not on this device yet; downloading it now (${connection}).`);
   loadSelectedModel();
 }
@@ -2785,19 +5259,74 @@ function showMeteredPausePrompt(): void {
   netWarnConfirm.focus();
 }
 
+// A run that needs the model waits on this promise while the prompt is up, so
+// the transfer starts only after the user answers. Wi-Fi arriving also resolves
+// it as a confirmation (the background fetch loop can download for free).
+let downloadPromptPromise: Promise<boolean> | null = null;
+let downloadPromptResolve: ((confirmed: boolean) => void) | null = null;
+// Set when the prompt is dismissed, so a bulk batch stops instead of asking
+// again for every remaining photo.
+let downloadConsentDeclined = false;
+
+function requestDownloadConfirmation(): Promise<boolean> {
+  if (!selectedModel) return Promise.resolve(true);
+  if (sessionStorage.getItem('remove-bg:download-confirmed') === '1') {
+    return Promise.resolve(true);
+  }
+  downloadConsentDeclined = false;
+  if (!downloadPromptPromise) {
+    showNetWarn();
+    downloadPromptPromise = new Promise<boolean>((resolve) => {
+      downloadPromptResolve = resolve;
+    });
+  }
+  return downloadPromptPromise;
+}
+
+function settleDownloadPrompt(confirmed: boolean): void {
+  netWarnEl.hidden = true;
+  downloadConsentDeclined = !confirmed;
+  downloadPromptResolve?.(confirmed);
+  downloadPromptResolve = null;
+  downloadPromptPromise = null;
+}
+
+/**
+ * Makes the model available, asking first on a metered link. Resolves false when
+ * the user declines the download, so a caller can abandon its run instead of
+ * hanging on a model that will never arrive. `force` reloads the model even when
+ * one is already ready (a provider change).
+ */
+async function ensureModelLoaded(force = false): Promise<boolean> {
+  if (!force && (modelLoadInFlight || modelReady)) return true;
+  if (modelLoadInFlight) return true;
+  if (await needsDownloadConfirmation()) {
+    const confirmed = await requestDownloadConfirmation();
+    // The prompt's confirm button starts the download itself; this covers a
+    // consent remembered from earlier in the session, when no prompt appears.
+    if (confirmed && !modelLoadInFlight && !modelReady) autoLoadModel();
+    return confirmed;
+  }
+  // No confirmation needed: any stale prompt is answered and the download starts.
+  settleDownloadPrompt(true);
+  if (force) loadSelectedModel();
+  else autoLoadModel();
+  return true;
+}
+
 function confirmDownload(): void {
   sessionStorage.setItem('remove-bg:download-confirmed', '1');
-  netWarnEl.hidden = true;
   log('Download confirmed by the user; starting the model download.');
+  settleDownloadPrompt(true);
   autoLoadModel();
 }
 
 netWarnConfirm.addEventListener('click', confirmDownload);
 netWarnDismiss.addEventListener('click', () => {
-  netWarnEl.hidden = true;
+  settleDownloadPrompt(false);
   setStage('Paused — choose a photo to download the model and remove its background.');
-  // A dismissal is not a dead end: choosing a photo starts the download and the
-  // run automatically.
+  // A dismissal is not a dead end: choosing a photo asks again before spending
+  // data, and Wi-Fi can still fetch the model in the background.
 });
 
 boot().catch((e) => error(e instanceof Error ? e.message : String(e)));

@@ -80,7 +80,9 @@ export function classifyConnection(
   return 'unknown';
 }
 
-function readDeviceMobile(): boolean {
+/** Coarse mobile-device probe, shared by the metered-connection preflight and
+ *  the adaptive source downscaler so there is only one UA/UA-CH heuristic. */
+export function readDeviceMobile(): boolean {
   if (typeof navigator === 'undefined') return false;
   const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
   if (uaData && typeof uaData.mobile === 'boolean') return uaData.mobile;
@@ -244,8 +246,8 @@ function describeConnection(info: NetworkInformationLike | null, connection: Con
 
 /**
  * The confirmation copy for a metered/unknown connection. States the download
- * size (MVP §6: "Tell users the model download size before the first download"),
- * that it is one-time, and that the image never leaves the device.
+ * size (MVP §6: "Tell users the model download size before the first download")
+ * and that the image never leaves the device.
  */
 export function downloadConfirmationText(sizeBytes: number, label?: string): string {
   const size = sizeBytes > 0 ? formatBytes(sizeBytes) : 'a large file';
@@ -253,7 +255,7 @@ export function downloadConfirmationText(sizeBytes: number, label?: string): str
   return (
     `Removing backgrounds needs to download the model${named} once — about ${size}.\n\n` +
     'You look like you may be on mobile data, and this download uses your data plan. ' +
-    'It is kept on this device, so it only happens once. We will ask again next visit.\n\n' +
+    'We will ask again next visit.\n\n' +
     'Your photo is never uploaded; everything runs in your browser.'
   );
 }

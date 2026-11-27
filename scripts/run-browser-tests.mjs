@@ -72,6 +72,9 @@ function makePng(width, height, rgb) {
 function writeFixtures() {
   mkdirSync(FIXTURES, { recursive: true });
   writeFileSync(resolve(FIXTURES, 'input.png'), makePng(64, 48, [180, 90, 60]));
+  // A 15.4 MP "phone photo" whose long side (4800) exceeds the 4096 upload cap.
+  // Solid colour keeps the committed fixture tiny while the decode is realistic.
+  writeFileSync(resolve(FIXTURES, 'large-phone-photo.png'), makePng(4800, 3200, [180, 90, 60]));
   writeFileSync(resolve(FIXTURES, 'not-an-image.txt'), 'this is not an image\n');
   // A file the browser labels as PNG (by extension) but whose bytes are not a
   // decodable image — the decode path must reject it.
@@ -193,41 +196,71 @@ const browser = await puppeteer.launch({
 try {
   if (!providedUrl) await waitForServer(pageUrl.toString());
 
-  // ——— Scenario 0: the hero tagline stays on one unbroken, animating line ———
+  // ——— Scenario 0: the hero preview switches samples in place ———
   {
     const page = await browser.newPage();
     await page.setViewport({ width: 360, height: 800 });
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
-    const shape = await page.evaluate(() => {
-      const el = document.querySelector('.heroTaglineText');
-      const wrap = el.closest('.heroTagline');
-      const track = el.closest('.heroTaglineTrack');
-      const cs = getComputedStyle(el);
-      const wcs = getComputedStyle(wrap);
-      const tcs = getComputedStyle(track);
+    const hero = await page.evaluate(() => {
+      const tabs = Array.from(document.querySelectorAll('[data-hero-sample]'));
+      const stage = document.getElementById('heroCompareStage');
+      const before = document.getElementById('heroCompareBefore');
+      const after = document.getElementById('heroCompareAfter');
+      const active = tabs.filter((tab) => tab.getAttribute('aria-selected') === 'true');
       return {
-        nowrap: cs.whiteSpace === 'nowrap',
-        padding: parseFloat(wcs.paddingLeft) > 0,
-        clipped: wcs.overflow === 'hidden' || wcs.overflowX === 'hidden',
-        lines: Math.round(el.offsetHeight / parseFloat(cs.lineHeight)),
-        copies: track.querySelectorAll('.heroTaglineText').length,
-        animation: tcs.animationName,
+        tabCount: tabs.length,
+        active: active.map((tab) => tab.dataset.heroSample),
+        activeClass: active[0]?.classList.contains('is-active') ?? false,
+        before: before?.getAttribute('src') ?? '',
+        after: after?.getAttribute('src') ?? '',
+        filename: document.getElementById('heroShellFilename')?.textContent ?? '',
+        meta: document.getElementById('heroShellMeta')?.textContent ?? '',
+        hasSlider: !!stage?.querySelector('.compareRange'),
+        hasDivider: !!stage?.querySelector('.compareDivider'),
       };
     });
-    record('hero tagline is one unbroken line', shape.nowrap && shape.lines === 1);
-    record('hero tagline keeps its padding and clips overflow', shape.padding && shape.clipped);
-    record('hero tagline loops with a seamless second copy', shape.copies === 2);
-    // A linear marquee moves continuously, so sampling a couple of frames is
-    // enough to see the track's transform change.
-    let moved = false;
-    let prev = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineTrack')).transform);
-    for (let attempt = 0; attempt < 24 && !moved; attempt += 1) {
-      await sleep(200);
-      const now = await page.evaluate(() => getComputedStyle(document.querySelector('.heroTaglineTrack')).transform);
-      moved = now !== prev;
-      prev = now;
-    }
-    record('hero tagline scrolls horizontally (marquee animation)', shape.animation === 'taglineMarquee' && moved);
+    record(
+      'hero preview offers three sample tabs with Product active',
+      hero.tabCount === 3 && hero.active.length === 1 && hero.active[0] === 'product' && hero.activeClass,
+      `${hero.tabCount} tabs, active=${hero.active}`,
+    );
+    record(
+      'hero preview starts on the product before/after pair',
+      hero.before.includes('perfume-bottle-before') &&
+        hero.after.includes('perfume-bottle-after') &&
+        hero.filename === 'perfume-bottle.webp',
+      `${hero.filename} · ${hero.meta}`,
+    );
+    record('hero compare stage keeps its slider and divider', hero.hasSlider && hero.hasDivider);
+
+    await page.evaluate(() => document.querySelector('[data-hero-sample="glass"]').click());
+    const switched = await page.evaluate(() => {
+      const tab = document.querySelector('[data-hero-sample="glass"]');
+      return {
+        selected: tab.getAttribute('aria-selected'),
+        activeClass: tab.classList.contains('is-active'),
+        otherSelected: Array.from(document.querySelectorAll('[data-hero-sample]')).filter(
+          (other) => other !== tab && other.getAttribute('aria-selected') === 'true',
+        ).length,
+        before: document.getElementById('heroCompareBefore').getAttribute('src'),
+        after: document.getElementById('heroCompareAfter').getAttribute('src'),
+        filename: document.getElementById('heroShellFilename').textContent,
+        meta: document.getElementById('heroShellMeta').textContent,
+        alt: document.getElementById('heroCompareAfter').alt,
+      };
+    });
+    record(
+      'choosing a sample tab swaps the preview and its telemetry',
+      switched.selected === 'true' &&
+        switched.activeClass &&
+        switched.otherSelected === 0 &&
+        switched.before.includes('crystal-vase-before') &&
+        switched.after.includes('crystal-vase-after') &&
+        switched.filename === 'crystal-vase.webp' &&
+        switched.meta.includes('Translucent Glass') &&
+        switched.alt.includes('Crystal vase'),
+      `${switched.filename} · ${switched.meta}`,
+    );
     await page.close();
   }
 
@@ -244,7 +277,8 @@ try {
         const tabs = [...gallery.querySelectorAll('[role="tab"]')];
         const visible = panels.filter((p) => !p.hidden);
         const active = tabs.find((t) => t.getAttribute('aria-selected') === 'true');
-        const railBox = gallery.querySelector('.showcaseRail').getBoundingClientRect();
+        const rail = gallery.querySelector('.showcaseRail');
+        const railBox = rail.getBoundingClientRect();
         const stageBox = gallery.querySelector('.compareStage').getBoundingClientRect();
         return {
           panelCount: panels.length,
@@ -254,14 +288,15 @@ try {
           selectedId: active?.getAttribute('aria-controls') ?? null,
           activeTabId: active?.id ?? null,
           activeTabTabIndex: active?.tabIndex ?? null,
-          railRightOfStage: railBox.left >= stageBox.right - 1,
+          railBelowStage: railBox.top >= stageBox.bottom - 1,
+          railScrolls: rail.scrollWidth > rail.clientWidth,
         };
       });
 
     const initial = await readState();
     record(
       'the showcase shows exactly one example at a time',
-      initial.panelCount === 3 && initial.tabCount === 3 && initial.visibleCount === 1,
+      initial.panelCount === 8 && initial.tabCount === 8 && initial.visibleCount === 1,
       `visible ${initial.visibleCount}/${initial.panelCount}`,
     );
     record(
@@ -269,7 +304,12 @@ try {
       initial.visibleId === 'showcase-panel-1' && initial.selectedId === 'showcase-panel-1',
       `${initial.visibleId} / ${initial.selectedId}`,
     );
-    record('the thumbnail rail sits to the right of the stage', initial.railRightOfStage);
+    record('the thumbnail rail sits below the stage', initial.railBelowStage);
+    record(
+      'the thumbnail rail scrolls horizontally to reach all eight examples',
+      initial.railScrolls,
+      `scroll ${initial.railScrolls}`,
+    );
 
     // Click the third thumbnail. The module script is deferred, so the rail may
     // not have listeners yet on a busy runner — retry until the click lands.
@@ -307,6 +347,29 @@ try {
       return panel.style.getPropertyValue('--pos');
     });
     record('the comparison slider works on the revealed example', pos === '80%', pos);
+
+    // A pointer drag has to track the whole gesture. Dragging a bare <img>
+    // starts a native drag-and-drop, which fires `pointercancel` and used to
+    // freeze the divider after its first move.
+    const stageBox = await page.evaluate(() => {
+      const stage = document.querySelector('#showcase-panel-2 .compareStage');
+      stage.scrollIntoView({ block: 'center' });
+      const r = stage.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height };
+    });
+    const dragY = stageBox.y + stageBox.h / 2;
+    await page.mouse.move(stageBox.x + stageBox.w * 0.2, dragY);
+    await page.mouse.down();
+    await page.mouse.move(stageBox.x + stageBox.w * 0.8, dragY, { steps: 6 });
+    await page.mouse.up();
+    const dragPos = await page.evaluate(() =>
+      document.getElementById('showcase-panel-2').style.getPropertyValue('--pos'),
+    );
+    record(
+      'dragging the comparison stage tracks the pointer across the whole gesture',
+      Math.abs(Number.parseFloat(dragPos) - 80) <= 2,
+      dragPos,
+    );
 
     await page.close();
   }
@@ -422,14 +485,23 @@ try {
 
     const exportState = await page.evaluate(() => {
       const dl = document.getElementById('downloadImage');
-      const radios = Array.from(document.querySelectorAll('#formatOptions input[type=radio]'));
+      const trigger = document.getElementById('downloadMenuBtn');
+      const menu = document.getElementById('downloadMenu');
+      const select = document.getElementById('exportFormatSelect');
       const img = document.querySelector('#outputBox img');
+      trigger?.click();
       return {
         dlHref: dl?.getAttribute('href') ?? '',
         dlDownload: dl?.getAttribute('download') ?? '',
         dlHidden: dl ? dl.hidden : true,
-        dlText: dl?.textContent ?? '',
-        radios: radios.map((r) => ({ value: r.value, checked: r.checked, disabled: r.disabled })),
+        dlLabel: document.getElementById('downloadImageLabel')?.textContent ?? '',
+        menuOpen: menu ? !menu.hidden : false,
+        expanded: trigger?.getAttribute('aria-expanded'),
+        options: Array.from(select?.options ?? []).map((o) => ({
+          value: o.value,
+          selected: o.selected,
+          disabled: o.disabled,
+        })),
         imgSrc: img?.getAttribute('src') ?? '',
         outputSectionHidden: document.getElementById('outputSection')?.hidden ?? true,
         log: document.getElementById('consoleOutput')?.textContent ?? '',
@@ -445,21 +517,25 @@ try {
     const colourType = Buffer.from(pngB64, 'base64')[25];
     record('PNG export has an alpha channel (colour type 6)', colourType === 6, `colourType=${colourType}`);
     record(
-      'download section offers PNG (default) + JPG + WebP radios and one download link',
+      'the download button opens a menu with PNG (default), JPG and WebP plus one download action',
       exportState.outputSectionHidden === false &&
+        exportState.menuOpen &&
+        exportState.expanded === 'true' &&
         exportState.dlHidden === false &&
         exportState.dlDownload.endsWith('.png') &&
-        exportState.radios.length === 3 &&
-        exportState.radios.some((r) => r.value === 'png' && r.checked) &&
-        exportState.radios.some((r) => r.value === 'jpeg') &&
-        exportState.radios.some((r) => r.value === 'webp'),
-      `${exportState.dlDownload} / [${exportState.radios.map((r) => r.value).join(',')}]`,
+        exportState.dlLabel === 'Download PNG' &&
+        exportState.options.length === 3 &&
+        exportState.options.some((o) => o.value === 'png' && o.selected) &&
+        exportState.options.some((o) => o.value === 'jpeg') &&
+        exportState.options.some((o) => o.value === 'webp'),
+      `${exportState.dlDownload} / [${exportState.options.map((o) => o.value).join(',')}]`,
     );
 
     // Switching the format re-encodes the same result into the chosen format.
     const jpegState = await page.evaluate(() => {
-      const jpeg = document.querySelector('#formatOptions input[value=jpeg]');
-      jpeg.click();
+      const select = document.getElementById('exportFormatSelect');
+      select.value = 'jpeg';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
       const dl = document.getElementById('downloadImage');
       return { href: dl?.getAttribute('href') ?? '', download: dl?.getAttribute('download') ?? '' };
     });
@@ -469,59 +545,384 @@ try {
       jpegState.download,
     );
 
-    // Compare tab: a fourth editor tab, enabled once a result exists, pairing the
-    // original photo with the composited cut-out.
-    const compareState = await page.evaluate(() => {
-      const tab = document.getElementById('tabCompare');
-      tab.click();
+    // One step tab, titled after the current step: the result view now carries
+    // the before/after slider instead of a separate Compare tab.
+    const stepState = await page.evaluate(() => {
+      const tab = document.getElementById('tabStep');
+      const toggle = document.getElementById('resultCompareToggle');
+      const beforeEl = document.querySelector('#outputBox .resultCompare .compareBefore');
+      const beforeHidden = beforeEl ? getComputedStyle(beforeEl).display === 'none' : false;
+      toggle?.click();
+      const afterClick = {
+        pressed: toggle?.getAttribute('aria-pressed'),
+        beforeDisplay: beforeEl ? getComputedStyle(beforeEl).display : '',
+      };
+      toggle?.click();
       return {
-        enabled: !tab.disabled,
-        selected: tab.getAttribute('aria-selected') === 'true',
-        panelVisible: !document.getElementById('panelCompare').hidden,
-        before: document.getElementById('compareBefore')?.getAttribute('src') ?? '',
-        after: document.getElementById('compareAfter')?.getAttribute('src') ?? '',
+        title: tab?.textContent?.trim() ?? '',
+        selected: tab?.getAttribute('aria-selected') === 'true',
+        resultVisible: !document.getElementById('stepResult')?.hidden,
+        before: document.querySelector('#outputBox .resultCompare .compareBefore')?.getAttribute('src') ?? '',
+        after: document.querySelector('#outputBox .resultCompare .compareAfter')?.getAttribute('src') ?? '',
+        compareToggle: !!toggle && toggle.hidden === false,
+        beforeHidden,
+        afterClick,
+        beforeHiddenAgain: beforeEl ? getComputedStyle(beforeEl).display === 'none' : false,
       };
     });
     record(
-      'the Compare tab shows the original beside the cut-out',
-      compareState.enabled &&
-        compareState.selected &&
-        compareState.panelVisible &&
-        compareState.before.length > 0 &&
-        compareState.after.startsWith('data:image/'),
+      'the single step tab is titled Result and builds the before/after slider',
+      stepState.title === 'Result' &&
+        stepState.selected &&
+        stepState.resultVisible &&
+        stepState.before.length > 0 &&
+        stepState.after.startsWith('data:image/'),
+      `${stepState.title} / before ${stepState.before.length > 0} / after ${stepState.after.slice(0, 22)}`,
+    );
+    record(
+      'the compare button floats over the image and gates the before/after slider',
+      stepState.compareToggle &&
+        stepState.beforeHidden &&
+        stepState.afterClick.pressed === 'true' &&
+        stepState.afterClick.beforeDisplay !== 'none' &&
+        stepState.beforeHiddenAgain,
+      `toggle ${stepState.compareToggle} hidden ${stepState.beforeHidden} → ${stepState.afterClick.beforeDisplay} → hidden ${stepState.beforeHiddenAgain}`,
     );
 
-    // Background picker: one system colour input (a solid colour exports as JPG,
-    // no alpha to carry) repaints the compare view; the transparent toggle
-    // returns a real alpha PNG.
-    const bgState = await page.evaluate(() => {
-      const picker = document.getElementById('bgColorPicker');
-      picker.value = '#2563eb';
-      picker.dispatchEvent(new Event('input', { bubbles: true }));
-      const afterColor = {
-        download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
-        pressed: document.getElementById('bgTransparentBtn')?.getAttribute('aria-pressed'),
-        compareAfter: document.getElementById('compareAfter')?.getAttribute('src') ?? '',
+    // Bulk and Library are available once a result exists, and the old Compare
+    // tab is gone. Wait for refinement to settle so the engine is no longer
+    // owned by the run (the Bulk tab is disabled while it is).
+    await page.waitForFunction(() => !document.getElementById('tabBulk')?.disabled, { timeout: 600000 });
+    const tabsState = await page.evaluate(() => ({
+      compareGone: !document.getElementById('tabCompare') && !document.getElementById('panelCompare'),
+      bulkEnabled: !document.getElementById('tabBulk')?.disabled,
+      libraryEnabled: !document.getElementById('tabLibrary')?.disabled,
+      exportGone: !document.getElementById('exportBar'),
+      actionsInResult: !!document
+        .getElementById('stepResult')
+        ?.querySelector('.resultActions #downloadMenuBtn'),
+    }));
+    record(
+      'Bulk and Library tabs replace Compare, with export controls folded into the result actions',
+      tabsState.compareGone &&
+        tabsState.bulkEnabled &&
+        tabsState.libraryEnabled &&
+        tabsState.exportGone &&
+        tabsState.actionsInResult,
+      `compareGone ${tabsState.compareGone} bulk ${tabsState.bulkEnabled} library ${tabsState.libraryEnabled} exportGone ${tabsState.exportGone}`,
+    );
+
+    // The download button opens a positioned menu, and Escape closes it.
+    const menuState = await page.evaluate(() => {
+      const trigger = document.getElementById('downloadMenuBtn');
+      const menu = document.getElementById('downloadMenu');
+      if (!menu.hidden) trigger.click();
+      trigger.click();
+      const rect = menu.getBoundingClientRect();
+      const opened = !menu.hidden && trigger.getAttribute('aria-expanded') === 'true';
+      const positioned = rect.width > 0 && rect.height > 0;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return {
+        opened,
+        positioned,
+        closed: menu.hidden && trigger.getAttribute('aria-expanded') === 'false',
       };
-      document.getElementById('bgTransparentBtn').click();
-      const afterTransparent = {
-        download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
-        current: document.getElementById('bgCurrent')?.textContent ?? '',
-      };
-      return { afterColor, afterTransparent };
     });
     record(
-      'picking a solid background exports JPG and repaints the compare view',
-      bgState.afterColor.download.endsWith('.jpg') &&
-        bgState.afterColor.pressed === 'false' &&
-        bgState.afterColor.compareAfter.startsWith('data:image/'),
-      bgState.afterColor.download,
+      'the download menu opens under its button and Escape closes it',
+      menuState.opened && menuState.positioned && menuState.closed,
+      `opened ${menuState.opened} positioned ${menuState.positioned} closed ${menuState.closed}`,
+    );
+
+    // Background: one colour button opens the modern picker. A solid colour
+    // exports as JPG (no alpha to carry) and repaints the compare view; the
+    // picker's Transparent option returns a real alpha PNG.
+    const bgState = await page.evaluate(async () => {
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const button = document.getElementById('bgColorButton');
+      button.click();
+      const popover = document.getElementById('colorPickerPopover');
+      const opened = !popover.hidden && button.getAttribute('aria-expanded') === 'true';
+      const hex = popover.querySelector('[data-picker="hex"]');
+      hex.value = '2563eb';
+      hex.dispatchEvent(new Event('input', { bubbles: true }));
+      await nextFrame();
+      const afterColor = {
+        download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
+        compareAfter: document.querySelector('#outputBox .resultCompare .compareAfter')?.getAttribute('src') ?? '',
+        swatch: getComputedStyle(document.getElementById('bgColorSwatch')).getPropertyValue('--swatch').trim(),
+      };
+      popover.querySelector('[data-picker="transparent"]').click();
+      await nextFrame();
+      const afterTransparent = {
+        download: document.getElementById('downloadImage')?.getAttribute('download') ?? '',
+        label: document.getElementById('bgColorButton')?.getAttribute('aria-label') ?? '',
+        pressed: popover.querySelector('[data-picker="transparent"]').getAttribute('aria-pressed'),
+      };
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return { opened, afterColor, afterTransparent, closed: popover.hidden };
+    });
+    record(
+      'the colour button opens the picker and a solid background exports JPG',
+      bgState.opened &&
+        bgState.afterColor.download.endsWith('.jpg') &&
+        bgState.afterColor.compareAfter.startsWith('data:image/') &&
+        bgState.afterColor.swatch.includes('37, 99, 235'),
+      `${bgState.opened} ${bgState.afterColor.download} swatch=${bgState.afterColor.swatch}`,
     );
     record(
-      'transparent keeps a PNG export',
+      'the picker Transparent option keeps a PNG export',
       bgState.afterTransparent.download.endsWith('.png') &&
-        bgState.afterTransparent.current === 'transparent',
-      bgState.afterTransparent.current,
+        bgState.afterTransparent.label.includes('transparent') &&
+        bgState.afterTransparent.pressed === 'true' &&
+        bgState.closed,
+      `${bgState.afterTransparent.label} pressed=${bgState.afterTransparent.pressed} closed=${bgState.closed}`,
+    );
+
+    // PNG/WebP are the alpha-capable formats, so choosing one after a solid
+    // colour must hand back a transparent cut-out instead of an opaque file
+    // (the "PNG and WebP don't take alpha" report).
+    const alphaFormatState = await page.evaluate(async () => {
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const button = document.getElementById('bgColorButton');
+      button.click();
+      const popover = document.getElementById('colorPickerPopover');
+      const hex = popover.querySelector('[data-picker="hex"]');
+      hex.value = 'ffffff';
+      hex.dispatchEvent(new Event('input', { bubbles: true }));
+      await nextFrame();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const solid = document.getElementById('downloadImage')?.getAttribute('download') ?? '';
+      const select = document.getElementById('exportFormatSelect');
+      select.value = 'png';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      const dl = document.getElementById('downloadImage');
+      const href = dl?.getAttribute('href') ?? '';
+      const img = new Image();
+      img.src = href;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let transparent = 0;
+      for (let i = 3; i < data.length; i += 4 * 97) if (data[i] === 0) transparent += 1;
+      return {
+        solid,
+        download: dl?.getAttribute('download') ?? '',
+        label: document.getElementById('bgColorButton')?.getAttribute('aria-label') ?? '',
+        transparent,
+      };
+    });
+    record(
+      'selecting PNG after a solid colour restores a transparent cut-out',
+      alphaFormatState.solid.endsWith('.jpg') &&
+        alphaFormatState.download.endsWith('.png') &&
+        alphaFormatState.label.includes('transparent') &&
+        alphaFormatState.transparent > 0,
+      `${alphaFormatState.solid} → ${alphaFormatState.download} (${alphaFormatState.label}, transparent samples=${alphaFormatState.transparent})`,
+    );
+
+    // ——— Manual retouch: open → stroke → Save, then open → Cancel ———
+    // The edit icon lives only on the Result tab. Opening it swaps the
+    // background & export block for the retouch panel in the same slot; Save
+    // commits the edited alpha and restores the block, Cancel restores it
+    // pixel-for-pixel.
+    const retouchEntry = await page.evaluate(() => {
+      const btn = document.getElementById('resultEditToggle');
+      const panel = document.getElementById('retouchPanel');
+      const rect = btn?.getBoundingClientRect();
+      return {
+        hasBtn: !!btn,
+        hidden: btn ? btn.hidden : true,
+        visible: !!rect && rect.width > 0 && rect.height > 0,
+        panelHidden: panel ? panel.hidden : true,
+        sameSlot: panel?.parentElement?.classList.contains('studioTabBody') === true,
+      };
+    });
+    record(
+      'the retouch edit icon appears on the Result tab above the shared panel slot',
+      retouchEntry.hasBtn &&
+        retouchEntry.hidden === false &&
+        retouchEntry.visible &&
+        retouchEntry.panelHidden &&
+        retouchEntry.sameSlot,
+      `btn ${retouchEntry.hasBtn} hidden ${retouchEntry.hidden} visible ${retouchEntry.visible} sameSlot ${retouchEntry.sameSlot}`,
+    );
+
+    const retouchSave = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const loadPixels = async (href) => {
+        const img = new Image();
+        img.src = href;
+        await img.decode();
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        return { c, ctx, data: ctx.getImageData(0, 0, c.width, c.height).data };
+      };
+      const alphaAt = async (href, fx, fy) => {
+        const { c, data } = await loadPixels(href);
+        const x = Math.min(c.width - 1, Math.max(0, Math.round(c.width * fx)));
+        const y = Math.min(c.height - 1, Math.max(0, Math.round(c.height * fy)));
+        return data[(y * c.width + x) * 4 + 3];
+      };
+      const findOpaque = async (href) => {
+        const { c, data } = await loadPixels(href);
+        const stepX = Math.max(8, Math.floor(c.width / 24));
+        const stepY = Math.max(8, Math.floor(c.height / 24));
+        for (let y = 8; y < c.height; y += stepY) {
+          for (let x = 8; x < c.width; x += stepX) {
+            const a = data[(y * c.width + x) * 4 + 3];
+            if (a > 200) return { fx: x / c.width, fy: y / c.height };
+          }
+        }
+        return { fx: 0.5, fy: 0.5 };
+      };
+      const dl = document.getElementById('downloadImage');
+      const beforeHref = dl.getAttribute('href');
+      const pt = await findOpaque(beforeHref);
+      const beforeAlpha = await alphaAt(beforeHref, pt.fx, pt.fy);
+
+      document.getElementById('resultEditToggle').click();
+      await sleep(40);
+      const panel = document.getElementById('retouchPanel');
+      const canvas = document.getElementById('retouchCanvas');
+      const openState = {
+        panelHidden: panel?.hidden,
+        downloadHidden: document.getElementById('downloadMenuBtn')?.hidden,
+        colorHidden: document.getElementById('bgColorButton')?.hidden,
+        canvas: !!canvas,
+      };
+
+      // Erase is guaranteed to change an opaque centre pixel.
+      document.getElementById('retouchErase').click();
+      const rect = canvas.getBoundingClientRect();
+      const cx = rect.left + rect.width * pt.fx;
+      const cy = rect.top + rect.height * pt.fy;
+      const ev = (type, x, y) =>
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          pointerId: 7,
+          pointerType: 'mouse',
+          isPrimary: true,
+          buttons: type === 'pointerup' ? 0 : 1,
+        });
+      canvas.dispatchEvent(ev('pointerdown', cx, cy));
+      canvas.dispatchEvent(ev('pointermove', cx + Math.max(4, rect.width * 0.06), cy));
+      canvas.dispatchEvent(ev('pointerup', cx + Math.max(4, rect.width * 0.06), cy));
+
+      const undo = document.getElementById('retouchUndo');
+      const redo = document.getElementById('retouchRedo');
+      const undoEnabled = !undo.disabled;
+      undo.click();
+      const redoEnabled = !redo.disabled;
+      redo.click();
+
+      document.getElementById('retouchSave').click();
+      for (let i = 0; i < 200 && !panel.hidden; i++) await sleep(50);
+
+      const afterHref = dl.getAttribute('href');
+      const afterAlpha = await alphaAt(afterHref, pt.fx, pt.fy);
+      return {
+        beforeAlpha,
+        afterAlpha,
+        undoEnabled,
+        redoEnabled,
+        openState,
+        panelHiddenAfter: panel.hidden,
+        downloadHiddenAfter: document.getElementById('downloadMenuBtn')?.hidden,
+        download: dl.getAttribute('download'),
+        log: document.getElementById('consoleOutput')?.textContent ?? '',
+      };
+    });
+    record(
+      'opening retouch hides the download and colour controls and shows the brush canvas',
+      retouchSave.openState.panelHidden === false &&
+        retouchSave.openState.downloadHidden === true &&
+        retouchSave.openState.colorHidden === true &&
+        retouchSave.openState.canvas === true,
+      `panel ${retouchSave.openState.panelHidden} download ${retouchSave.openState.downloadHidden} colour ${retouchSave.openState.colorHidden} canvas ${retouchSave.openState.canvas}`,
+    );
+    record(
+      'undo/redo toggles per stroke while retouching',
+      retouchSave.undoEnabled === true && retouchSave.redoEnabled === true,
+      `undo ${retouchSave.undoEnabled} redo ${retouchSave.redoEnabled}`,
+    );
+    record(
+      'a retouch stroke + Save changes the exported alpha and restores the download control',
+      retouchSave.beforeAlpha > 200 &&
+        retouchSave.afterAlpha < 50 &&
+        retouchSave.panelHiddenAfter === true &&
+        retouchSave.downloadHiddenAfter === false &&
+        retouchSave.download.endsWith('.png') &&
+        /Manual retouch saved: 1 stroke/.test(retouchSave.log),
+      `alpha ${retouchSave.beforeAlpha} → ${retouchSave.afterAlpha}, panel ${retouchSave.panelHiddenAfter}, download ${retouchSave.downloadHiddenAfter}`,
+    );
+
+    const retouchCancel = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const dl = document.getElementById('downloadImage');
+      const beforeHref = dl.getAttribute('href');
+      document.getElementById('resultEditToggle').click();
+      await sleep(40);
+      const canvas = document.getElementById('retouchCanvas');
+      const rect = canvas.getBoundingClientRect();
+      const cx = rect.left + rect.width * 0.5;
+      const cy = rect.top + rect.height * 0.5;
+      const ev = (type, x, y) =>
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          pointerId: 8,
+          pointerType: 'mouse',
+          isPrimary: true,
+          buttons: type === 'pointerup' ? 0 : 1,
+        });
+      document.getElementById('retouchErase').click();
+      canvas.dispatchEvent(ev('pointerdown', cx, cy));
+      canvas.dispatchEvent(ev('pointerup', cx, cy));
+      document.getElementById('retouchCancel').click();
+      await sleep(60);
+      return {
+        unchanged: dl.getAttribute('href') === beforeHref,
+        panelHidden: document.getElementById('retouchPanel').hidden,
+        downloadHidden: document.getElementById('downloadMenuBtn').hidden,
+        overlayGone: !document.getElementById('retouchCanvas'),
+        editVisible: document.getElementById('resultEditToggle').hidden === false,
+      };
+    });
+    record(
+      'Cancel restores the pre-edit export pixel-for-pixel',
+      retouchCancel.unchanged &&
+        retouchCancel.panelHidden === true &&
+        retouchCancel.downloadHidden === false &&
+        retouchCancel.overlayGone === true &&
+        retouchCancel.editVisible === true,
+      `unchanged ${retouchCancel.unchanged} panel ${retouchCancel.panelHidden} download ${retouchCancel.downloadHidden} overlayGone ${retouchCancel.overlayGone}`,
+    );
+
+    const retouchTabs = await page.evaluate(() => {
+      const btn = document.getElementById('resultEditToggle');
+      document.getElementById('tabBulk').click();
+      const bulkHidden = btn.hidden;
+      document.getElementById('tabStep').click();
+      const stepHidden = btn.hidden;
+      return { bulkHidden, stepHidden };
+    });
+    record(
+      'the retouch edit icon is hidden outside the Result tab',
+      retouchTabs.bulkHidden === true && retouchTabs.stepHidden === false,
+      `bulk ${retouchTabs.bulkHidden} step ${retouchTabs.stepHidden}`,
     );
 
     // Theme: the toggle pins an explicit mode and flips the page surface. The
@@ -642,6 +1043,20 @@ try {
     // monospace line per event, newest at the bottom, with a prompt glyph. There
     // are no threads, chevrons, or collapsible groups, and no pipeline-dot row.
     // The Zero-Upload statement is hidden behind a clickable icon.
+    // The console starts hidden now; show it so its layout can be measured.
+    const consoleStartsHidden = await page.evaluate(
+      () => document.querySelector('.studioGrid')?.dataset.console === 'hidden',
+    );
+    record('the console is hidden by default', consoleStartsHidden === true, String(consoleStartsHidden));
+    // Escape closes the colour picker AND the studio, so the picker checks above
+    // may have left the workspace closed. Reopen it before measuring the console,
+    // otherwise every visibility read below sees a hidden layer.
+    const studioStillOpen = await page.evaluate(
+      () => document.getElementById('studio')?.classList.contains('is-open') === true,
+    );
+    if (!studioStillOpen) await openStudio(page);
+    await page.evaluate(() => document.getElementById('consoleToggle').click());
+
     const panelState = await page.evaluate(() => {
       const consoleEl = document.querySelector('.consoleCard');
       const inStudio = !!document.getElementById('studio')?.contains(consoleEl);
@@ -784,6 +1199,9 @@ try {
         insideClosedDetails,
         visible,
         btnLabel,
+        studioOpen: document.getElementById('studio')?.classList.contains('is-open') ?? false,
+        consoleShown: document.querySelector('.studioGrid')?.dataset.console ?? '',
+        cardWidth: Math.round(document.querySelector('.consoleCard')?.getBoundingClientRect().width ?? 0),
         hasReport: !!report,
         schema: report?.schemaVersion ?? null,
         hasRawMaskBlock: /RAW MASK STATISTICS/.test(text),
@@ -799,7 +1217,7 @@ try {
         reportState.insideClosedDetails === false &&
         reportState.visible === true &&
         reportState.btnLabel === 'Copy report',
-      `btn ${reportState.hasBtn} inConsoleHead ${reportState.inConsoleHead} insideClosedDetails ${reportState.insideClosedDetails} visible ${reportState.visible} label "${reportState.btnLabel}"`,
+      `btn ${reportState.hasBtn} inConsoleHead ${reportState.inConsoleHead} insideClosedDetails ${reportState.insideClosedDetails} visible ${reportState.visible} label "${reportState.btnLabel}" studio ${reportState.studioOpen} console ${reportState.consoleShown} card ${reportState.cardWidth}px`,
     );
     record(
       'the Copy report button copies a report with real GPU + raw-mask facts',
@@ -839,7 +1257,8 @@ try {
 
 
     // Console show/hide + drag-resize: the toggle button and the in-card close
-    // both hide it; the resize handle can only shrink it (never past 35%).
+    // both hide it; the resize handle grows it to the 50% cap and returns to the
+    // 20% floor, which is also its default resting height.
     const consoleControls = await page.evaluate(async () => {
       const grid = document.querySelector('.studioGrid');
       const col = document.getElementById('studioConsoleCol');
@@ -856,7 +1275,7 @@ try {
       handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientY: y0, pointerId: 1 }));
       handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 - 900, pointerId: 1 }));
       const grownH = col.getBoundingClientRect().height;
-      // Drag down hard: it shrinks (below 35%) but keeps a usable minimum.
+      // Drag down hard: it returns to the 20% floor (its default height).
       handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: y0 + 900, pointerId: 1 }));
       const shrunkH = col.getBoundingClientRect().height;
       handle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientY: y0 + 900, pointerId: 1 }));
@@ -879,8 +1298,9 @@ try {
     record(
       'the console top edge resizes between 20% and 50%',
       consoleControls.grownH <= consoleControls.cap + 1 &&
-        consoleControls.grownH >= consoleControls.openH - 1 &&
-        consoleControls.shrunkH < consoleControls.openH &&
+        consoleControls.grownH > consoleControls.openH + 1 &&
+        consoleControls.shrunkH < consoleControls.grownH &&
+        consoleControls.shrunkH <= consoleControls.openH + 1 &&
         consoleControls.shrunkH >= consoleControls.floor - 1,
       `open ${Math.round(consoleControls.openH)} cap ${Math.round(consoleControls.cap)} floor ${Math.round(consoleControls.floor)} grown ${Math.round(consoleControls.grownH)} shrunk ${Math.round(consoleControls.shrunkH)}`,
     );
@@ -912,9 +1332,9 @@ try {
     await page.close();
   }
 
-  // ——— Scenario 2b: input tab shows exactly one of drop zone / preview ———
+  // ——— Scenario 2b: the step tab swaps the drop zone for the preview ———
   // The drop zone is the default; once a photo is chosen it is replaced by the
-  // preview (never both at once), and the preview reopens the picker.
+  // preview (never both at once) and the step tab advances to the run.
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
@@ -928,36 +1348,53 @@ try {
         preview: visible(document.getElementById('inputPreview')),
       };
     });
-    record('input tab shows only the drop-zone placeholder before a photo is chosen', initial.dropZone && !initial.preview);
+    record('the step tab shows only the drop-zone placeholder before a photo is chosen', initial.dropZone && !initial.preview);
 
     await chooseFile(page, resolve(ROOT, 'test-images/glass-wine.jpg'));
     await page.waitForFunction(
-      () => document.getElementById('panelInput')?.classList.contains('has-preview') === true,
+      () => document.getElementById('stepInput')?.classList.contains('has-preview') === true,
       { timeout: 30000 },
     );
-    // Choosing a photo auto-starts the run, which moves to the Processing tab;
-    // return to the Input tab to inspect the editor view the user sees.
-    await page.click('#tabInput');
+    // Choosing a photo auto-starts the run, so the step tab advances to the
+    // Processing view; the preview lives in the now-hidden photo view.
     await page.waitForFunction(
-      () => document.getElementById('tabInput')?.getAttribute('aria-selected') === 'true',
-      { timeout: 10000 },
+      () => {
+        const visible = (id) => {
+          const el = document.getElementById(id);
+          return !!el && !el.hidden && el.getBoundingClientRect().height > 0;
+        };
+        return visible('stepProcessing') || visible('stepResult');
+      },
+      { timeout: 600000 },
     );
     const afterSelect = await page.evaluate(() => {
-      const visible = (el) => !!el && !el.hidden && el.getBoundingClientRect().height > 0;
+      const stepInput = document.getElementById('stepInput');
+      const preview = document.getElementById('inputPreview');
       return {
-        dropZone: visible(document.getElementById('dropZone')),
-        preview: visible(document.getElementById('inputPreview')),
+        hasPreviewClass: stepInput?.classList.contains('has-preview') ?? false,
+        previewSrc: preview?.querySelector('img')?.getAttribute('src') ?? '',
+        photoViewHidden: stepInput?.hidden ?? false,
+        dropZoneInPhotoView: !!stepInput?.contains(document.getElementById('dropZone')),
       };
     });
-    record('input tab shows only the preview once a photo is chosen (drop zone hidden)', afterSelect.preview && !afterSelect.dropZone);
+    record(
+      'the step tab replaces the drop zone with the preview and advances to the run',
+      afterSelect.hasPreviewClass &&
+        afterSelect.previewSrc.length > 0 &&
+        afterSelect.photoViewHidden &&
+        afterSelect.dropZoneInPhotoView,
+    );
 
-    // The preview itself is now the picker target.
+    // The Result step offers "Choose another photo" as the picker target.
+    await page.waitForFunction(() => document.getElementById('stepResult') && !document.getElementById('stepResult').hidden, {
+      timeout: 600000,
+    });
     const [chooser] = await Promise.all([
       page.waitForFileChooser({ timeout: 10000 }).catch(() => null),
-      page.click('#inputPreview'),
+      page.click('#newPhotoBtn'),
     ]);
     if (chooser) await chooser.cancel();
-    record('clicking the selected preview reopens the file chooser', !!chooser);
+    record('the Result step offers "Choose another photo"', !!chooser);
     await page.close();
   }
 
@@ -994,22 +1431,32 @@ try {
     const toast = await page.evaluate(() => {
       const t = document.querySelector('#toastHost .toast.error');
       if (!t) return null;
-      const host = document.getElementById('toastHost').getBoundingClientRect();
+      const hostEl = document.getElementById('toastHost');
+      const host = hostEl.getBoundingClientRect();
       const r = t.getBoundingClientRect();
       const body = getComputedStyle(t.querySelector('.toastBody')).color;
       const stage = document.getElementById('processingLabel');
+      const hostStyle = getComputedStyle(hostEl);
       return {
         onRight: Math.abs(window.innerWidth - host.right) < 40,
         nearTop: host.top < 60,
         floatAbove: r.width > 0,
         redText: /rgb\(\s*127|\s*252, 165, 165/.test(body),
         stageError: stage?.classList.contains('is-error') === true,
+        fixed: hostStyle.position === 'fixed',
+        scrolls: hostStyle.overflowY === 'auto',
+        bounded: hostStyle.maxHeight !== 'none',
       };
     });
     record(
       'errors show a red floating notification at the top-right',
       !!toast && toast.onRight && toast.nearTop && toast.floatAbove && toast.redText,
       toast ? `right:${toast.onRight} top:${toast.nearTop} red:${toast.redText}` : 'no error toast',
+    );
+    record(
+      'the notification stack is fixed and scrolls instead of overflowing the screen',
+      !!toast && toast.fixed && toast.scrolls && toast.bounded,
+      toast ? `fixed:${toast.fixed} scrolls:${toast.scrolls} bounded:${toast.bounded}` : 'no toast',
     );
     record('the stage line turns to the error colour theme', !!toast && toast.stageError);
     await page.close();
@@ -1164,6 +1611,20 @@ try {
       () => !!document.getElementById('netWarnRemember'),
     );
     record('the download confirmation no longer offers a "remember" checkbox', !hasRemember);
+
+    // Choosing a photo is not consent to spend mobile data: the run must wait
+    // for the confirmation instead of starting the download on its own.
+    await chooseFile(page, resolve(ROOT, 'test-images/glass-wine.jpg'));
+    await sleep(2000);
+    const startedAfterPhoto = await page.evaluate(() => window.smokeModelReady === true);
+    const promptStillShown = await page.evaluate(
+      () => (document.getElementById('netWarn')?.hidden ?? true) === false,
+    );
+    record(
+      'choosing a photo on mobile data waits for the download confirmation',
+      startedAfterPhoto === false && promptStillShown === true,
+      `ready:${startedAfterPhoto} prompt:${promptStillShown}`,
+    );
 
     // Confirm: the download starts and the prompt goes away.
     await page.click('#netWarnConfirm');
@@ -1492,26 +1953,42 @@ try {
   }
 
   // ——— Scenario: home page section order ———
-  // The Before & After showcase sits after the "What SmartCutAI Supports"
-  // reference section (a plain DOM-order check; no studio needed).
+  // The landing sections keep a fixed reading order: how it works, benchmarks,
+  // the Before & After showcase, then the "What SmartCutAI Supports" reference
+  // and the FAQ. A plain DOM-order check; no studio needed.
   {
     const page = await browser.newPage();
     await page.goto(pageUrl.toString(), { waitUntil: 'load', timeout: 120000 });
     const order = await page.evaluate(() => {
       const ids = [...document.querySelectorAll('section[id]')].map((s) => s.id);
-      return { support: ids.indexOf('support'), showcase: ids.indexOf('showcase'), how: ids.indexOf('how') };
+      return {
+        how: ids.indexOf('how'),
+        benchmarks: ids.indexOf('benchmarks'),
+        showcase: ids.indexOf('showcase'),
+        support: ids.indexOf('support'),
+        faq: ids.indexOf('faq'),
+      };
     });
     record(
-      'the Before & After showcase follows the What-Supported section',
-      order.support !== -1 && order.showcase !== -1 && order.showcase > order.support && order.how < order.support,
-      `how ${order.how} support ${order.support} showcase ${order.showcase}`,
+      'the home sections keep their order (how → benchmarks → showcase → support → FAQ)',
+      order.how !== -1 &&
+        order.benchmarks !== -1 &&
+        order.showcase !== -1 &&
+        order.support !== -1 &&
+        order.faq !== -1 &&
+        order.how < order.benchmarks &&
+        order.benchmarks < order.showcase &&
+        order.showcase < order.support &&
+        order.support < order.faq,
+      `how ${order.how} benchmarks ${order.benchmarks} showcase ${order.showcase} support ${order.support} faq ${order.faq}`,
     );
     await page.close();
   }
 
-  // ——— Scenario: studio result sidebar (settings) ———
-  // The gear popover is gone; the engine controls live in a left sidebar in the
-  // result tab that collapses via a chevron and drag-resizes up to 50%.
+  // ——— Scenario: studio engine sidebar (settings) ———
+  // The gear popover is gone; the engine controls live in a left sidebar on the
+  // Step tab. It collapses via a chevron and drag-resizes up to 50% of the
+  // workspace; the Bulk and Library tabs cannot open it or the console.
   {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 900 });
@@ -1519,85 +1996,110 @@ try {
     await openStudio(page);
     await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
 
-    const markup = await page.evaluate(() => ({
-      hasSidebar: !!document.getElementById('settingsSidebar'),
-      hasToggle: !!document.getElementById('sidebarToggle'),
-      hasCollapse: !!document.getElementById('sidebarCollapse'),
-      hasResize: !!document.getElementById('sidebarResize'),
-      gearGone: !document.getElementById('settingsGearBtn') && !document.getElementById('advancedMenu'),
-      photoTab: document.getElementById('tabInput')?.textContent?.trim(),
-      barToggleHiddenOnPhoto: document.getElementById('sidebarToggle')?.hidden,
-      sidebarLeftOfMain: (() => {
-        const sb = document.getElementById('settingsSidebar')?.getBoundingClientRect();
-        const rm = document.querySelector('.resultMain')?.getBoundingClientRect();
-        return !!sb && !!rm && sb.right <= rm.left + 1;
-      })(),
-    }));
-    record('the studio input tab reads "Photo"', markup.photoTab === 'Photo', markup.photoTab);
-    record(
-      'the result engine controls are a left sidebar (gear popover removed)',
-      markup.hasSidebar && markup.hasToggle && markup.hasCollapse && markup.hasResize && markup.gearGone && markup.sidebarLeftOfMain,
-      `sidebar ${markup.hasSidebar} toggle ${markup.hasToggle} collapse ${markup.hasCollapse} resize ${markup.hasResize} gearGone ${markup.gearGone} leftOfMain ${markup.sidebarLeftOfMain}`,
-    );
-    record(
-      'the settings sidebar show/hide button appears only in the Result tab',
-      markup.barToggleHiddenOnPhoto === true,
-      `hidden on photo tab: ${markup.barToggleHiddenOnPhoto}`,
-    );
-
-    // Make the result tab visible (its panel starts hidden until a run finishes).
-    await page.evaluate(() => {
-      const panel = document.getElementById('panelResult');
-      panel.hidden = false;
-      panel.style.display = 'block';
-      document.getElementById('outputSection').hidden = false;
-      document.getElementById('sidebarToggle').hidden = false;
+    const markup = await page.evaluate(async () => {
+      const sidebar = document.getElementById('settingsSidebar');
+      const toggle = document.getElementById('sidebarToggle');
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const collapsedDisplay = sidebar ? getComputedStyle(sidebar).display : '';
+      const collapsedVisible = !!sidebar && sidebar.offsetParent !== null;
+      // The sidebar starts hidden. Expand it to check the shared left-column
+      // geometry, then collapse it again.
+      toggle?.click();
+      await wait(320);
+      const sidebarLeftOfBody = (() => {
+        const sb = sidebar?.getBoundingClientRect();
+        const body = document.querySelector('.studioTabBody')?.getBoundingClientRect();
+        return !!sb && !!body && sb.right <= body.left + 1;
+      })();
+      const expandedVisible = !!sidebar && sidebar.offsetParent !== null && sidebar.getBoundingClientRect().width > 0;
+      toggle?.click();
+      await wait(320);
+      return {
+        hasSidebar: !!document.getElementById('settingsSidebar'),
+        hasToggle: !!document.getElementById('sidebarToggle'),
+        hasCollapse: !!document.getElementById('sidebarCollapse'),
+        hasResize: !!document.getElementById('sidebarResize'),
+        gearGone: !document.getElementById('settingsGearBtn') && !document.getElementById('advancedMenu'),
+        photoTab: document.getElementById('tabStep')?.textContent?.trim(),
+        barToggleHiddenOnPhoto: document.getElementById('sidebarToggle')?.hidden,
+        barToggleDisabledOnPhoto: document.getElementById('sidebarToggle')?.disabled,
+        // The sidebar is a sibling of the tab body (the panel area) — not
+        // nested inside the Result panel as it once was.
+        sidebarLeftOfBody,
+        expandedVisible,
+        collapsedDisplay,
+        collapsedVisible,
+        defaultCollapsed: document.getElementById('settingsSidebar')?.dataset.collapsed,
+        experimentalTag: document.querySelector('#settingsSidebar .sidebarBadge')?.textContent?.trim(),
+      };
     });
-    await sleep(250);
+    record('the step tab starts as "Photo"', markup.photoTab === 'Photo', markup.photoTab);
+    record(
+      'the engine controls are a shared left sidebar (gear popover removed)',
+      markup.hasSidebar && markup.hasToggle && markup.hasCollapse && markup.hasResize && markup.gearGone && markup.sidebarLeftOfBody,
+      `sidebar ${markup.hasSidebar} toggle ${markup.hasToggle} collapse ${markup.hasCollapse} resize ${markup.hasResize} gearGone ${markup.gearGone} leftOfBody ${markup.sidebarLeftOfBody}`,
+    );
+    record(
+      'the settings sidebar is hidden when collapsed and expands on the Step tab',
+      markup.barToggleHiddenOnPhoto === false &&
+        markup.barToggleDisabledOnPhoto === false &&
+        markup.collapsedDisplay === 'none' &&
+        markup.collapsedVisible === false &&
+        markup.expandedVisible === true,
+      `toggle hidden ${markup.barToggleHiddenOnPhoto} disabled ${markup.barToggleDisabledOnPhoto} collapsed display "${markup.collapsedDisplay}" visible ${markup.collapsedVisible} expanded visible ${markup.expandedVisible}`,
+    );
+    record(
+      'the engine controls start collapsed and carry an experimental tag',
+      markup.defaultCollapsed === 'true' && markup.experimentalTag === 'Experimental',
+      `collapsed: ${markup.defaultCollapsed} tag: ${markup.experimentalTag}`,
+    );
 
-    // The top-bar show/hide button collapses the sidebar and stays in sync.
+    // The top-bar show/hide button expands the sidebar from its collapsed
+    // default and collapses it again, staying in sync.
     const barToggle = await page.evaluate(async () => {
       const sb = document.getElementById('settingsSidebar');
       const toggle = document.getElementById('sidebarToggle');
-      const openW = sb.getBoundingClientRect().width;
-      toggle.click();
-      await new Promise((r) => setTimeout(r, 320));
       const collapsedW = sb.getBoundingClientRect().width;
-      const pressedCollapsed = toggle.getAttribute('aria-pressed');
       toggle.click();
       await new Promise((r) => setTimeout(r, 320));
-      return { openW, collapsedW, pressedCollapsed, expandedW: sb.getBoundingClientRect().width };
+      const expandedW = sb.getBoundingClientRect().width;
+      const pressedExpanded = toggle.getAttribute('aria-pressed');
+      toggle.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return { collapsedW, expandedW, pressedExpanded, collapsedAgainW: sb.getBoundingClientRect().width };
     });
     record(
-      'the top-bar show/hide button collapses and re-expands the settings sidebar',
-      barToggle.collapsedW < barToggle.openW && barToggle.pressedCollapsed === 'false' && barToggle.expandedW > barToggle.collapsedW,
-      `open ${Math.round(barToggle.openW)} → collapsed ${Math.round(barToggle.collapsedW)} → expanded ${Math.round(barToggle.expandedW)}`,
+      'the top-bar show/hide button expands and re-collapses the settings sidebar',
+      barToggle.expandedW > barToggle.collapsedW && barToggle.pressedExpanded === 'true' && barToggle.collapsedAgainW < barToggle.expandedW,
+      `collapsed ${Math.round(barToggle.collapsedW)} → expanded ${Math.round(barToggle.expandedW)} → collapsed ${Math.round(barToggle.collapsedAgainW)}`,
     );
 
-    // Collapse + expand via the in-sidebar chevron.
+    // Expand + collapse via the in-sidebar chevron.
     const collapse = await page.evaluate(async () => {
       const sb = document.getElementById('settingsSidebar');
       const chevron = document.getElementById('sidebarCollapse');
-      const openW = sb.getBoundingClientRect().width;
-      chevron.click();
-      await new Promise((r) => setTimeout(r, 320));
       const collapsedW = sb.getBoundingClientRect().width;
-      const pressedCollapsed = chevron.getAttribute('aria-pressed');
       chevron.click();
       await new Promise((r) => setTimeout(r, 320));
-      return { openW, collapsedW, pressedCollapsed, expandedW: sb.getBoundingClientRect().width };
+      const expandedW = sb.getBoundingClientRect().width;
+      const pressedExpanded = chevron.getAttribute('aria-pressed');
+      chevron.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return { collapsedW, expandedW, pressedExpanded, collapsedAgainW: sb.getBoundingClientRect().width };
     });
     record(
-      'the settings sidebar collapses and re-expands from its chevron',
-      collapse.collapsedW < collapse.openW && collapse.pressedCollapsed === 'false' && collapse.expandedW > collapse.collapsedW,
-      `open ${Math.round(collapse.openW)} → collapsed ${Math.round(collapse.collapsedW)} → expanded ${Math.round(collapse.expandedW)}`,
+      'the settings sidebar expands and re-collapses from its chevron',
+      collapse.expandedW > collapse.collapsedW && collapse.pressedExpanded === 'true' && collapse.collapsedAgainW < collapse.expandedW,
+      `collapsed ${Math.round(collapse.collapsedW)} → expanded ${Math.round(collapse.expandedW)} → collapsed ${Math.round(collapse.collapsedAgainW)}`,
     );
 
     // Drag the right edge: grows toward the 50% cap, then shrinks but stays usable.
     const resize = await page.evaluate(async () => {
       const sb = document.getElementById('settingsSidebar');
-      const ws = document.getElementById('resultWorkspace');
+      const ws = document.getElementById('studioWorkspace');
       const h = document.getElementById('sidebarResize');
+      document.getElementById('sidebarCollapse').click();
+      await new Promise((res) => setTimeout(res, 320));
       const r = h.getBoundingClientRect();
       const x0 = r.left + r.width / 2;
       const y0 = r.top + r.height / 2;
@@ -1617,6 +2119,128 @@ try {
       'the settings sidebar drag-resizes up to 50% of the workspace',
       resize.grownW <= resize.cap + 1 && resize.grownW >= resize.openW - 1 && resize.shrunkW < resize.grownW && resize.shrunkW > 0,
       `open ${Math.round(resize.openW)} cap ${Math.round(resize.cap)} grown ${Math.round(resize.grownW)} shrunk ${Math.round(resize.shrunkW)}`,
+    );
+
+    // The console and engine controls are step-editor tools: the Bulk and
+    // Library tabs close them and disable their top-bar toggles.
+    const gating = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const grid = document.querySelector('.studioGrid');
+      const consoleToggle = document.getElementById('consoleToggle');
+      const sidebarToggle = document.getElementById('sidebarToggle');
+      const consoleCol = document.getElementById('studioConsoleCol');
+      const sidebar = document.getElementById('settingsSidebar');
+      const snap = () => ({
+        consoleShown: grid?.dataset.console === 'shown',
+        consoleDisabled: consoleToggle?.disabled,
+        consoleDisplay: consoleCol ? getComputedStyle(consoleCol).display : '',
+        sidebarDisabled: sidebarToggle?.disabled,
+        sidebarCollapsed: sidebar?.dataset.collapsed === 'true',
+        sidebarDisplay: sidebar ? getComputedStyle(sidebar).display : '',
+      });
+      // On the Step tab both controls can be opened.
+      consoleToggle.click();
+      if (sidebar?.dataset.collapsed === 'true') sidebarToggle.click();
+      await wait(320);
+      const step = snap();
+      // Bulk: both are closed and their toggles are disabled.
+      document.getElementById('tabBulk').click();
+      await wait(320);
+      const bulk = snap();
+      // A disabled toggle must not reopen them.
+      consoleToggle.click();
+      sidebarToggle.click();
+      await wait(120);
+      const bulkAfterClicks = snap();
+      // Library behaves the same way.
+      document.getElementById('tabLibrary').click();
+      await wait(320);
+      const library = snap();
+      document.getElementById('tabStep').click();
+      await wait(120);
+      const backToStep = snap();
+      return { step, bulk, bulkAfterClicks, library, backToStep };
+    });
+    record(
+      'the Bulk and Library tabs cannot enable the console or engine controls',
+      gating.step.consoleShown &&
+        gating.step.consoleDisabled === false &&
+        gating.step.sidebarDisplay !== 'none' &&
+        gating.step.sidebarDisabled === false &&
+        gating.bulk.consoleShown === false &&
+        gating.bulk.consoleDisabled === true &&
+        gating.bulk.consoleDisplay === 'none' &&
+        gating.bulk.sidebarDisabled === true &&
+        gating.bulk.sidebarCollapsed === true &&
+        gating.bulk.sidebarDisplay === 'none' &&
+        gating.bulkAfterClicks.consoleShown === false &&
+        gating.bulkAfterClicks.sidebarCollapsed === true &&
+        gating.library.consoleDisabled === true &&
+        gating.library.consoleDisplay === 'none' &&
+        gating.library.sidebarDisabled === true &&
+        gating.library.sidebarDisplay === 'none' &&
+        gating.backToStep.consoleDisabled === false &&
+        gating.backToStep.sidebarDisabled === false,
+      JSON.stringify(gating),
+    );
+    await page.close();
+  }
+
+  // ——— Scenario: emulated mobile viewport downsizes an oversized source ———
+  // This is an EMULATED viewport (mobile UA + deviceMemory=2 + touch viewport),
+  // not a real phone. It proves the page chooses a smaller source and exports at
+  // that size; it says nothing about a real Android/iOS GPU or memory budget.
+  {
+    const page = await browser.newPage();
+    await page.setUserAgent(
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+        'Chrome/157.0.0.0 Mobile Safari/537.36',
+    );
+    await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'userAgentData', {
+        configurable: true,
+        get: () => ({ mobile: true }),
+      });
+      Object.defineProperty(navigator, 'deviceMemory', {
+        configurable: true,
+        get: () => 2,
+      });
+    });
+    const mobileUrl = new URL(pageUrl.toString());
+    mobileUrl.searchParams.set('provider', 'wasm');
+    await page.goto(mobileUrl.toString(), { waitUntil: 'load', timeout: 120000 });
+    await openStudio(page);
+    await page.waitForFunction('window.smokeModelReady === true', { timeout: 600000 });
+    await chooseFile(page, resolve(FIXTURES, 'large-phone-photo.png'));
+    await page.waitForFunction(() => document.querySelector('#outputBox img') !== null, {
+      timeout: 600000,
+    });
+    const state = await page.evaluate(() => ({
+      // The preview <img> is display-sized, so the export is the only place
+      // that proves the result's real dimensions.
+      href: document.getElementById('downloadImage')?.getAttribute('href') ?? '',
+      log: document.getElementById('consoleOutput')?.textContent ?? '',
+      recoveryHidden: document.getElementById('recovery')?.hidden ?? true,
+      stage: document.getElementById('stage')?.textContent ?? '',
+    }));
+    // PNG IHDR: width at byte 16, height at byte 20 (after sig + length + type).
+    const png = Buffer.from(state.href.split(',')[1] ?? '', 'base64');
+    const exportWidth = png.length >= 24 ? png.readUInt32BE(16) : 0;
+    const exportHeight = png.length >= 24 ? png.readUInt32BE(20) : 0;
+    record(
+      'emulated mobile: a 4800×3200 source exports at 2048×1365',
+      exportWidth === 2048 && exportHeight === 1365,
+      `${exportWidth}x${exportHeight}`,
+    );
+    record(
+      'emulated mobile: the reduction is logged',
+      /Reduced from 4800×3200 to 2048×1365/.test(state.log),
+    );
+    record(
+      'emulated mobile: the oversized photo reaches a result without an OOM path',
+      state.recoveryHidden === true && !/bad_alloc|out of memory/i.test(state.stage),
+      state.stage.replace(/\s+/g, ' ').slice(0, 60),
     );
     await page.close();
   }
@@ -1687,8 +2311,13 @@ try {
       afterReject.banner === false && afterReject.visitor === null && (await events()).length === 0,
     );
 
-    // 3. Change the choice via the footer control, then allow.
-    await page.click('#analyticsSettingsBtn');
+    // 3. Change the choice via the footer control, then allow. Use a DOM click
+    // (the footer sits at the very bottom of a long page) and wait for the
+    // banner before reading its state.
+    await page.evaluate(() => document.getElementById('analyticsSettingsBtn')?.click());
+    await page
+      .waitForFunction(() => document.getElementById('consentBanner')?.hidden === false, { timeout: 5000 })
+      .catch(() => {});
     const bannerBack = await page.evaluate(
       () => document.getElementById('consentBanner')?.hidden === false,
     );
@@ -1715,6 +2344,7 @@ try {
     );
 
     // 5. Trigger a download: exactly one download_initiated.
+    await page.click('#downloadMenuBtn');
     await page.click('#downloadImage');
     await sleep(400);
     record(

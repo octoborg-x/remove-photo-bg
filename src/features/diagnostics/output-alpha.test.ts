@@ -13,6 +13,7 @@ import {
   classifyOutputAlpha,
   outputAlphaWarning,
   formatOutputAlphaStats,
+  transitionBandFraction,
   NEAR_OPAQUE_ALPHA,
   WASHED_MIN_COVERAGE,
 } from './output-alpha';
@@ -131,6 +132,34 @@ describe('outputAlphaWarning', () => {
     expect(outputAlphaWarning('empty')).toMatch(/fully transparent/);
     expect(outputAlphaWarning('kept')).toMatch(/no background was found/);
     expect(outputAlphaWarning('ok')).toBeNull();
+  });
+});
+
+describe('transitionBandFraction', () => {
+  it('is 0 for a hard-edged mask (every pixel flat)', () => {
+    // Half background (0), half solid subject (255) — no partial alpha at all.
+    const a = new Uint8ClampedArray(100).fill(0);
+    a.fill(255, 50);
+    expect(transitionBandFraction(a)).toBe(0);
+  });
+
+  it('is 1 when every pixel is mid-alpha', () => {
+    const a = new Uint8ClampedArray(100).fill(128);
+    expect(transitionBandFraction(a)).toBe(1);
+  });
+
+  it('counts only the partial band, ignoring flat 0/255 pixels', () => {
+    const a = new Uint8ClampedArray(100).fill(0);
+    a.fill(255, 50); // 50 flat
+    a[0] = 1; // below the low cut (a/255 = 0.004)
+    a[1] = 250; // above the high cut (a/255 = 0.980)
+    a[2] = 128; // in the band
+    expect(transitionBandFraction(a)).toBeCloseTo(1 / 100, 6);
+  });
+
+  it('honours a stride/offset for an interleaved RGBA buffer', () => {
+    const rgba = new Uint8ClampedArray([0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 128]);
+    expect(transitionBandFraction(rgba, 4, 3)).toBeCloseTo(1 / 3, 6);
   });
 });
 

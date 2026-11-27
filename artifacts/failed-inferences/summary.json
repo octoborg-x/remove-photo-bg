@@ -1,0 +1,39 @@
+{
+  "totalCases": 9,
+  "confirmedFailures": 6,
+  "confirmedFailureIds": [
+    "failure-001",
+    "failure-002",
+    "failure-003",
+    "failure-004",
+    "failure-005",
+    "failure-009"
+  ],
+  "borderlineCases": 3,
+  "borderlineCaseIds": [
+    "failure-006",
+    "failure-007",
+    "failure-008"
+  ],
+  "failuresByCategory": {
+    "empty-output": 4,
+    "near-empty-output": 1,
+    "partial-subject-removal": 3,
+    "washed-out-ghost": 1
+  },
+  "failuresByProvider": {
+    "wasm": 8,
+    "webgpu": 1
+  },
+  "failuresByModel": {
+    "qmix-cut-512": 9
+  },
+  "failuresBySeverity": {
+    "high": 6,
+    "medium": 3
+  },
+  "fixedFailures": 0,
+  "unresolvedFailures": 9,
+  "casesPassingAfterFix": 0,
+  "syntheticCases": 1
+}

@@ -31,6 +31,7 @@ export function resolveModelParam(
   const needle = param.trim();
   return (
     models.find((m) => m.id === needle) ??
+    models.find((m) => (m.aliases ?? []).includes(needle)) ??
     models.find((m) => m.file.split('/').pop() === needle) ??
     null
   );

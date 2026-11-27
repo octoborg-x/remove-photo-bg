@@ -150,12 +150,12 @@ single model is served — the smallest artifact, weight-only quantised and
 materialised to fp32 so the runtime kernels and the mask are identical to the
 full-precision teacher:
 
-The served artifact is named **QMix Cut-512** (technical id `qmix-cut-512`), an
+The served artifact is named **Background Model 512 (INT8/FP16)** (technical id `birefnet-lite-engine-512-int8-fp16`), an
 optimised **BiRefNet Lite** variant — the file keeps its precision-stating name:
 
 | id (product name) | file | size | what |
 |---|---|---|---|
-| `qmix-cut-512` (QMix Cut-512) | `models/model_512_int8_fp16.onnx` | 60.8 MB | int8 backbone + fp16 decoder; PyTorch debug metadata and duplicate initializers stripped (lossless). On the repo test images it reproduces the fp32 teacher at IoU@0.5 0.9987 with 0 pixels crossing the 0.5 threshold; on the wider 62-image eval set it averages 0.981 with one empty-mask miss (`clothing-04.jpg`). |
+| `birefnet-lite-engine-512-int8-fp16` (Background Model 512 (INT8/FP16)) | `models/model_512_int8_fp16.onnx` | 60.8 MB | int8 backbone + fp16 decoder; PyTorch debug metadata and duplicate initializers stripped (lossless). On the repo test images it reproduces the fp32 teacher at IoU@0.5 0.9987 with 0 pixels crossing the 0.5 threshold; on the wider 62-image eval set it averages 0.981 with one empty-mask miss (`clothing-04.jpg`). |
 
 Every artifact was the raw export with its PyTorch `torch.onnx` debug metadata
 and duplicate initializers removed (`scripts/distill/optimize-onnx.py --scope

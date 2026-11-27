@@ -3,7 +3,7 @@
 The before/after pairs in this directory are model outputs, not mock-ups:
 
 - `-before.webp` is the original photo, downscaled to at most 720 px wide.
-- `-after.webp` is the RGBA cut-out produced by the pinned QMix Cut-512 model
+- `-after.webp` is the RGBA cut-out produced by the pinned Background Model 512 model
   (`model_512_int8_fp16.onnx`, SHA-256
   `10f1cf12d614b8b9db8a8dc9183c8525cbf6e020bb230e9b15daaf127012bc26`), then
   downscaled and re-encoded to WebP.

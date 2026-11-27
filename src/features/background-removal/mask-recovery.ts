@@ -1,6 +1,6 @@
 // Recovery for the model's "flooded mask" failure mode.
 //
-// BiRefNet_lite (QMix Cut-512) segments most photos well, but on some inputs it
+// BiRefNet_lite (Background Model 512) segments most photos well, but on some inputs it
 // does not separate a subject at all: it returns near-1.0 probability across the
 // whole frame, so the "cut-out" is the original image with the background still
 // attached. It reproduces identically at int8, fp16 and fp32 precision, so it is

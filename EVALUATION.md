@@ -110,6 +110,13 @@ Recorded on a GitHub-hosted-class Linux container (no GPU), Chromium headless,
 | Peak browser RSS | **555 MB** (baseline 460 MB) |
 | Empty / near-empty outputs | **8 / 64** |
 
+> **2026-11-26 re-run — same 64 images, same shipped model.** `artifacts/wasm-64-2026-11-26/` (raw run in the gitignored `eval-results/wasm-64-now/`)
+> records **64 / 64 with no errors** and **5 empty / near-empty** outputs
+> (`hair-fur-07`, `hair-fur-08`, `complex-bg-05`, `complex-bg-07`, `thin-structure-04`),
+> i.e. **59 / 64 usable cut-outs**. That run averaged 6388 ms on a slower container, so the
+> 4097 ms figure above remains the reference timing. The 8 / 64 count is the 2026-11-04
+> record and is kept for history; the landing page quotes 59 / 64.
+
 | category | n | ok | empty | foreground | soft edge | edge contrast | components | speckle |
 |---|---|---|---|---|---|---|---|---|
 | ordinary-product | 8 | 8 | 1 | 0.21879 | 0.0129 | 0.2202 | 1.25 | 0.0 |

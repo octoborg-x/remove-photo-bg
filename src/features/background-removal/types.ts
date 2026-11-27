@@ -3,6 +3,8 @@
 // download URL, and the service worker's per-model cache bucket.
 export interface ModelManifestEntry {
   id: string;
+  /** Older ids that still resolve, so existing ?model= links keep working. */
+  aliases?: string[];
   /** Path served by this origin through the asset service worker, e.g. '/models/model_512_int8_fp16.onnx'. */
   file: string;
   /** Relative URL the inference worker fetches. */

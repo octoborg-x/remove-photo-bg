@@ -192,7 +192,7 @@ describe('connectionChangeAction', () => {
 
 describe('meteredSwitchNotice', () => {
   it('states the size, that it paused, and how to resume', () => {
-    const text = meteredSwitchNotice(60 * 1024 * 1024, 'QMix Cut-512');
+    const text = meteredSwitchNotice(60 * 1024 * 1024, 'Background Model 512 (INT8/FP16)');
     expect(text).toContain('mobile data');
     expect(text).toMatch(/paused/i);
     expect(text).toContain('60.0 MB');

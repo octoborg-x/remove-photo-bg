@@ -5,16 +5,87 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <title>Remove Photo BG — SmartCutAI | In-Browser AI Background Remover</title>
+    <title>SmartCutAI — In-Browser AI Background Remover, No Upload</title>
     <meta
       name="description"
-      content="Private, in-browser background remover for product photos. Download transparent PNG or white-background JPG without uploading photos."
+      content="Remove backgrounds from product photos right in your browser — no upload, no account, no watermark. Free PNG, JPG, or WebP exports."
     />
-    <meta property="og:title" content="Remove Photo BG — SmartCutAI | In-Browser AI Background Remover" />
+    <meta property="og:title" content="SmartCutAI — In-Browser AI Background Remover, No Upload" />
     <meta
       property="og:description"
-      content="Private, in-browser background remover for product photos. Download transparent PNG or white-background JPG without uploading photos."
+      content="Remove backgrounds from product photos right in your browser — no upload, no account, no watermark. Free PNG, JPG, or WebP exports."
     />
+    <!-- Structured data: product + FAQ (SEO and generative-engine discoverability). -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "name": "SmartCutAI",
+            "applicationCategory": "MultimediaApplication",
+            "operatingSystem": "Any modern browser",
+            "url": "https://remove-photo-bg.vercel.app/",
+            "description": "In-browser AI background remover for product photos. Images are processed on-device with WebGPU or SIMD WebAssembly and are never uploaded.",
+            "featureList": [
+              "On-device background removal",
+              "Tiled inference",
+              "Guided-filter edge refinement",
+              "Flood-mask recovery",
+              "Island and contour cleanup",
+              "Transparent PNG, JPG and WebP export",
+              "Batch processing of up to 5 photos"
+            ],
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "How accurate is it?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "59 of 64 test photos produced a usable cut-out on the first pass, and all 64 processed with no errors. Dark or very busy backgrounds can return an empty result; the built-in retouch brush fixes those."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is my photo uploaded to any server or cloud database?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. SmartCutAI is fully client-side; the model runs in your browser's WebAssembly or WebGPU sandbox and you can run it offline once cached."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Why is there a one-time download when opening the app?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "The quantized model weights (~58 MB) download once on the first visit and persist in the browser Cache API, so later visits launch with no network download."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Do I need a discrete graphics card (GPU)?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. It runs on standard CPUs via multi-threaded WebAssembly SIMD and uses hardware WebGPU acceleration when a desktop GPU is available."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What image file formats and resolutions are supported?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "PNG, JPEG and WebP up to 20 MB and 4096 px on the longest side; exports include transparent PNG, white-background JPG and compressed WebP."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
     <!-- Same-origin pre-paint theme bootstrap (`script-src 'self'`). -->
     <script src="./theme-init.js"></script>
   </head>
@@ -184,16 +255,16 @@
       <section class="pt-7 sm:pt-10 pb-2 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
         <div class="max-w-3xl mx-auto text-center">
           <p class="text-[11px] sm:text-xs font-mono uppercase tracking-[0.14em] text-slate-500 mb-3">
-            On-Device BiRefNet Engine · WebGPU &amp; SIMD WASM · Zero Uploads
+            On-Device BiRefNet · WebGPU &amp; SIMD WASM · Background Model 512 (INT8/FP16)
           </p>
 
           <h1 class="text-4xl sm:text-5xl lg:text-[3.25rem] font-bold text-slate-900 tracking-[-0.03em] leading-[1.08] text-balance">
-            Studio-grade background removal inside your browser.
+            Cut out backgrounds without ever uploading a photo.
           </h1>
 
           <p class="mt-4 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto text-balance leading-relaxed">
-            Isolate products, portraits, hair, and translucent glass at native resolution with zero server uploads,
-            no accounts, and no watermarks.
+            Clean cut-outs for product photos, done right in your browser. No account, no credit packs, no watermark —
+            your photo never touches a server.
           </p>
 
           <div class="mt-6 flex flex-wrap items-center justify-center gap-3">
@@ -226,7 +297,7 @@
           </div>
 
           <p class="mt-4 text-xs sm:text-sm text-slate-500 font-medium">
-            Photos stay in browser memory · Up to 20 MB &amp; 4096 px · PNG, JPG &amp; WebP export · Batch ZIP up to 5 photos
+            Your photo never leaves this device · Up to 20 MB &amp; 4096 px · PNG, JPG &amp; WebP export · Processes up to 5 photos at once
           </p>
         </div>
 
@@ -311,11 +382,14 @@
         <div class="max-w-2xl mb-10">
           <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">01 · Architecture</p>
           <h2 class="text-2xl sm:text-4xl font-bold text-slate-900 tracking-[-0.025em] text-balance">
-            Deterministic four-stage client pipeline.
+            What happens when you drop in a photo.
           </h2>
           <p class="text-sm sm:text-base text-slate-600 mt-2.5 leading-relaxed">
-            Every operation — validation, tensor prep, neural matting, guided filtering, and encoding — executes in
-            isolated browser workers without network writes.
+            Four steps, start to finish — reading the file, running the model, sharpening the edges, and exporting the
+            result — all inside your browser. Nothing goes over the network.
+          </p>
+          <p class="font-mono text-[11px] text-slate-400 mt-2.5">
+            Tiled inference · guided-filter edge refinement · flood-mask recovery · island/contour cleanup
           </p>
         </div>
 
@@ -325,9 +399,10 @@
             <div class="flex items-center justify-between gap-4 pb-5 mb-5 border-b border-slate-200/80">
               <div>
                 <h3 class="text-base font-semibold text-slate-900">On-Device Inference Flow</h3>
-                <p class="text-xs text-slate-500 mt-0.5">QMix Cut-512 distilled BiRefNet Lite · ~58 MB cached once</p>
+                <p class="text-xs text-slate-500 mt-0.5">Background Model 512 (INT8/FP16) · ~58 MB cached once</p>
+                <p class="font-mono text-[10px] text-slate-400 mt-0.5">birefnet-lite-engine-512-int8-fp16</p>
               </div>
-              <span class="font-mono text-xs text-slate-500 tabular-nums">WebGPU → SIMD WASM</span>
+              <span class="font-mono text-xs text-slate-500 tabular-nums whitespace-nowrap">WebGPU → SIMD WASM</span>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -479,24 +554,24 @@
           <!-- Top 4 Tabular Metrics -->
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-6 py-8 border-b border-slate-200/80">
             <div>
-              <p class="font-mono text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight tabular-nums">4.1s</p>
-              <p class="text-xs font-medium text-slate-600 mt-1">Mean CPU WASM inference</p>
-              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">3.9–4.5s warm desktop</p>
+              <p class="font-mono text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight tabular-nums">~4s</p>
+              <p class="text-xs font-medium text-slate-600 mt-1">Mean CPU inference</p>
+              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">3.6–4.0s desktop, ~6.9s on phone</p>
             </div>
             <div>
               <p class="font-mono text-3xl sm:text-4xl font-bold text-blue-600 tracking-tight tabular-nums">0.9987</p>
-              <p class="text-xs font-medium text-slate-600 mt-1">Teacher IoU@0.5 parity</p>
-              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">INT8/FP16 vs FP32</p>
+              <p class="text-xs font-medium text-slate-600 mt-1">Parity with the FP32 teacher</p>
+              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">same architecture, INT8/FP16 vs. full precision</p>
             </div>
             <div>
               <p class="font-mono text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight tabular-nums">0 B</p>
-              <p class="text-xs font-medium text-slate-600 mt-1">Image bytes uploaded</p>
-              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">Strict connect-src 'self'</p>
+              <p class="text-xs font-medium text-slate-600 mt-1">Image bytes ever uploaded</p>
+              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">no image-upload code path in the app</p>
             </div>
             <div>
-              <p class="font-mono text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight tabular-nums">64 / 64</p>
-              <p class="text-xs font-medium text-slate-600 mt-1">Exports completed</p>
-              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">0 dimension drift or crashes</p>
+              <p class="font-mono text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight tabular-nums">59 / 64</p>
+              <p class="text-xs font-medium text-slate-600 mt-1">Usable cut-out on the first pass</p>
+              <p class="font-mono text-[11px] text-slate-400 mt-0.5 tabular-nums">64 / 64 processed with no errors</p>
             </div>
           </div>
 
@@ -549,6 +624,9 @@
                   <span class="col-span-2 text-right font-mono text-slate-900 tabular-nums">0.120</span>
                 </div>
               </div>
+              <p class="text-xs text-slate-500 mt-4 leading-relaxed">
+                Thin structures and ordinary products score highest for edge sharpness in the 64-image suite.
+              </p>
             </div>
 
             <div class="lg:col-span-5 saas-well p-5 flex flex-col justify-between gap-4">
@@ -590,7 +668,7 @@
               Before &amp; After Neural Matting
             </h2>
             <p class="text-sm sm:text-base text-slate-600 mt-2">
-              Select any example from the strip and drag the divider to inspect real QMix Cut-512 cut-outs.
+              Select any example from the strip and drag the divider to inspect real Background Model 512 cut-outs.
             </p>
           </div>
           <button
@@ -989,8 +1067,9 @@
                 </span>
                 <h3 class="supportSlideTitle">Images it handles well</h3>
                 <p class="supportSlideBody">
-                  Product shots, portraits, clothing, accessories, hair and fur, glass and transparent items, and busy
-                  backgrounds. Extreme banners are padded safely and flooded masks invoke border-flood recovery.
+                  Product shots, clothing, and accessories cut cleanly on the first pass. Hair, fur, glass, and busy
+                  backgrounds are supported too — the retouch brush is built in for the occasional edge that needs a
+                  nudge.
                 </p>
               </article>
 
@@ -1086,6 +1165,20 @@
         </div>
 
         <div class="space-y-3">
+          <details class="group saas-card saas-card-interactive p-5">
+            <summary class="flex items-center justify-between font-semibold text-sm sm:text-base text-slate-900 cursor-pointer select-none">
+              <span>How accurate is it?</span>
+              <span class="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
+            </summary>
+            <p class="mt-3 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
+              Very good on product shots and most categories — 59 of 64 test photos came out with a usable cut-out on
+              the first pass, and all 64 processed with no errors. A handful of dark or very busy-background photos can
+              return an empty result; the built-in retouch brush fixes those in a few seconds. We haven't benchmarked
+              against remove.bg or similar tools, so we won't claim we're better — judge the cut-outs yourself in the
+              Showcase above.
+            </p>
+          </details>
+
           <details class="group saas-card saas-card-interactive p-5">
             <summary class="flex items-center justify-between font-semibold text-sm sm:text-base text-slate-900 cursor-pointer select-none">
               <span>Is my photo uploaded to any server or cloud database?</span>
@@ -1945,8 +2038,8 @@
             <img src="./assets/brand/smartcutai-vertical-light.png" alt="" aria-hidden="true" class="footerVertical footerVerticalLight object-contain" />
           </div>
           <p class="text-xs text-slate-500 max-w-sm leading-relaxed">
-            Client-side AI background removal powered by QMix Cut-512 (BiRefNet Lite), WebGPU, and multi-threaded
-            WebAssembly. Zero accounts and zero uploads.
+            Background removal that runs entirely in your browser, powered by Background Model 512 (INT8/FP16). No
+            accounts. No uploads. No watermark.
           </p>
         </div>
 

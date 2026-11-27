@@ -284,6 +284,30 @@ const retouchUndoBtn = document.getElementById('retouchUndo') as HTMLButtonEleme
 const retouchRedoBtn = document.getElementById('retouchRedo') as HTMLButtonElement | null;
 const retouchSaveBtn = document.getElementById('retouchSave') as HTMLButtonElement | null;
 const retouchCancelBtn = document.getElementById('retouchCancel') as HTMLButtonElement | null;
+const retouchBrushToggleBtn = document.getElementById('retouchBrushToggle') as HTMLButtonElement | null;
+const retouchBrushPopoverEl = document.getElementById('retouchBrushPopover') as HTMLElement | null;
+
+function setBrushPopoverOpen(open: boolean): void {
+  if (!retouchBrushPopoverEl || !retouchBrushToggleBtn) return;
+  retouchBrushPopoverEl.hidden = !open;
+  retouchBrushToggleBtn.setAttribute('aria-expanded', String(open));
+}
+
+retouchBrushToggleBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setBrushPopoverOpen(!!retouchBrushPopoverEl?.hidden);
+});
+document.addEventListener('click', (e) => {
+  if (!retouchBrushPopoverEl || retouchBrushPopoverEl.hidden) return;
+  if (
+    e.target instanceof Node &&
+    !retouchBrushPopoverEl.contains(e.target) &&
+    e.target !== retouchBrushToggleBtn
+  ) {
+    setBrushPopoverOpen(false);
+  }
+});
+
 // Bulk queue: up to five photos processed one after another.
 const bulkPickBtn = document.getElementById('bulkPick') as HTMLButtonElement | null;
 const bulkEmptyPickBtn = document.getElementById('bulkEmptyPick') as HTMLButtonElement | null;
@@ -701,6 +725,11 @@ document.addEventListener('keydown', (e) => {
   // The download menu owns Escape while it is open; its handler closes only the
   // menu, not the whole studio.
   if (!downloadMenuEl.hidden) return;
+  // The brush-settings popover owns Escape the same way while it is open.
+  if (retouchBrushPopoverEl && !retouchBrushPopoverEl.hidden) {
+    setBrushPopoverOpen(false);
+    return;
+  }
   if (menuPanelEl.classList.contains('is-open')) closeMenu();
   else if (studioEl.classList.contains('is-open')) closeStudio();
 });
@@ -1443,6 +1472,7 @@ function setRetouchMode(open: boolean): void {
     retouchOverlay?.remove();
     retouchOverlay = null;
     resultCompareFigure?.classList.remove('retouchOn');
+    setBrushPopoverOpen(false);
   }
   updateDownloadUi();
   updateRetouchUi();
@@ -1455,6 +1485,7 @@ function discardRetouchSession(): void {
   retouchOverlay?.remove();
   retouchOverlay = null;
   resultCompareFigure?.classList.remove('retouchOn');
+  setBrushPopoverOpen(false);
   if (retouchPanelEl) retouchPanelEl.hidden = true;
 }
 
@@ -1482,7 +1513,8 @@ function applyRetouchControls(): void {
   }
   if (retouchAutoCleanupBtn) {
     retouchAutoCleanupBtn.disabled = false;
-    retouchAutoCleanupBtn.textContent = 'Auto color contour cleanup';
+    retouchAutoCleanupBtn.classList.remove('is-busy');
+    retouchAutoCleanupBtn.title = 'Auto color contour cleanup';
   }
   updateRetouchHistoryUi();
 }
@@ -1490,7 +1522,8 @@ function applyRetouchControls(): void {
 function setRetouchBusy(busy: boolean): void {
   if (retouchSaveBtn) {
     retouchSaveBtn.disabled = busy;
-    retouchSaveBtn.textContent = busy ? 'Saving…' : 'Save';
+    retouchSaveBtn.classList.toggle('is-busy', busy);
+    retouchSaveBtn.title = busy ? 'Saving…' : 'Save';
   }
   if (retouchCancelBtn) retouchCancelBtn.disabled = busy;
   if (retouchAutoCleanupBtn) retouchAutoCleanupBtn.disabled = busy;
@@ -1651,7 +1684,8 @@ async function runRetouchCleanup(): Promise<void> {
   if (!s || s.saving) return;
   if (retouchAutoCleanupBtn) {
     retouchAutoCleanupBtn.disabled = true;
-    retouchAutoCleanupBtn.textContent = 'Cleaning…';
+    retouchAutoCleanupBtn.classList.add('is-busy');
+    retouchAutoCleanupBtn.title = 'Cleaning…';
   }
   try {
     const cleaned = await autoContourCleanup(s.previewImage, s.previewBaseAlpha);
@@ -1669,7 +1703,8 @@ async function runRetouchCleanup(): Promise<void> {
   } finally {
     if (retouchSession === s && retouchAutoCleanupBtn) {
       retouchAutoCleanupBtn.disabled = false;
-      retouchAutoCleanupBtn.textContent = 'Auto color contour cleanup';
+      retouchAutoCleanupBtn.classList.remove('is-busy');
+      retouchAutoCleanupBtn.title = 'Auto color contour cleanup';
     }
   }
 }

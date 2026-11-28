@@ -6,6 +6,7 @@
 // - composites the mask and renders/downloads a transparent PNG (and JPG)
 import './fonts.css';
 import './style.css';
+import { initParallelBackground, initScrollAssembly } from './features/landing/ambient-background';
 import {
   imageDataToTensor,
   letterboxRect,
@@ -317,7 +318,7 @@ const bulkPickBtn = document.getElementById('bulkPick') as HTMLButtonElement | n
 const bulkEmptyPickBtn = document.getElementById('bulkEmptyPick') as HTMLButtonElement | null;
 const bulkGridEl = document.getElementById('bulkGrid');
 const bulkEmptyEl = document.getElementById('bulkEmpty');
-const bulkCountEl = document.getElementById('bulkCount');
+const bulkSelectionCountEl = document.getElementById('bulkSelectionCount');
 const bulkStatusEl = document.getElementById('bulkStatus');
 const bulkDownloadAllBtn = document.getElementById('bulkDownloadAll') as HTMLButtonElement | null;
 const bulkSelectAllEl = document.getElementById('bulkSelectAll') as HTMLInputElement | null;
@@ -3855,6 +3856,9 @@ function updateBulkBackgroundUi(): void {
 function updateBulkToolbar(): void {
   const total = bulkState.items.length;
   const checked = bulkCheckedCount(bulkState);
+  if (bulkSelectionCountEl) {
+    bulkSelectionCountEl.textContent = `${checked} selected / ${total} total`;
+  }
   if (bulkSelectAllEl) {
     bulkSelectAllEl.disabled = total === 0;
     bulkSelectAllEl.checked = total > 0 && checked === total;
@@ -3881,11 +3885,6 @@ function renderBulk(): void {
   if (!bulkGridEl) return;
   bulkGridEl.innerHTML = '';
   if (bulkEmptyEl) bulkEmptyEl.hidden = bulkState.items.length > 0;
-  const active = bulkActiveCount(bulkState);
-  const done = bulkDoneCount(bulkState);
-  if (bulkCountEl) {
-    bulkCountEl.textContent = `${active} / ${BULK_LIMIT}` + (done ? ` · ${done} done` : '');
-  }
   const capacity = bulkCapacity(bulkState);
   if (bulkPickBtn) {
     bulkPickBtn.disabled = bulkBatchRunning || capacity === 0;
@@ -5383,5 +5382,8 @@ netWarnDismiss.addEventListener('click', () => {
   // A dismissal is not a dead end: choosing a photo asks again before spending
   // data, and Wi-Fi can still fetch the model in the background.
 });
+
+initParallelBackground();
+initScrollAssembly();
 
 boot().catch((e) => error(e instanceof Error ? e.message : String(e)));

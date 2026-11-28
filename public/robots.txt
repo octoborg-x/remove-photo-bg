@@ -1,0 +1,22 @@
+# SmartCutAI (remove-photo-bg) — all crawlers welcome.
+User-agent: *
+Allow: /
+
+# AI search and citation crawlers, so answers can cite the privacy and model
+# documentation. These agents are also visible in Cloudflare's AI Audit reports.
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://remove-photo-bg.vercel.app/sitemap.xml

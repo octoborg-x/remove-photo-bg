@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <title>SmartCutAI — In-Browser AI Background Remover, No Upload</title>
+    <title>SmartCutAI — Free In-Browser AI Background Remover, No Upload</title>
     <meta
       name="description"
-      content="Remove backgrounds from product photos right in your browser — no upload, no account, no watermark. Free PNG, JPG, or WebP exports."
+      content="Free in-browser AI background remover — no upload, no account, no credit packs, no watermark. Up to 20 MB &amp; 4096 px longest side, PNG/JPG/WebP export."
     />
-    <meta property="og:title" content="SmartCutAI — In-Browser AI Background Remover, No Upload" />
+    <meta property="og:title" content="SmartCutAI — Free In-Browser AI Background Remover, No Upload" />
     <meta
       property="og:description"
-      content="Remove backgrounds from product photos right in your browser — no upload, no account, no watermark. Free PNG, JPG, or WebP exports."
+      content="Free in-browser AI background remover — no upload, no account, no credit packs, no watermark. Up to 20 MB &amp; 4096 px longest side, PNG/JPG/WebP export."
     />
     <!-- Structured data: product + FAQ (SEO and generative-engine discoverability). -->
     <script type="application/ld+json">
@@ -26,7 +26,7 @@
             "applicationCategory": "MultimediaApplication",
             "operatingSystem": "Any modern browser",
             "url": "https://remove-photo-bg.vercel.app/",
-            "description": "In-browser AI background remover for product photos. Images are processed on-device with WebGPU or SIMD WebAssembly and are never uploaded.",
+            "description": "Free in-browser AI background remover for product photos. Images are processed on-device with WebGPU (GPU) or SIMD WebAssembly (CPU) and are never uploaded. No account, no credit packs, no watermark.",
             "featureList": [
               "On-device background removal",
               "Tiled inference",
@@ -54,7 +54,7 @@
                 "name": "Is my photo uploaded to any server or cloud database?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "No. SmartCutAI is fully client-side; the model runs in your browser's WebAssembly or WebGPU sandbox and you can run it offline once cached."
+                  "text": "No. SmartCutAI is fully client-side; the model runs in your browser's WebGPU (GPU) or SIMD WebAssembly (CPU) sandbox and you can run it offline once cached."
                 }
               },
               {
@@ -70,7 +70,7 @@
                 "name": "Do I need a discrete graphics card (GPU)?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "No. It runs on standard CPUs via multi-threaded WebAssembly SIMD and uses hardware WebGPU acceleration when a desktop GPU is available."
+                  "text": "No. It runs on standard CPUs via multi-threaded WebAssembly SIMD and uses hardware WebGPU (GPU) acceleration when a desktop GPU is available."
                 }
               },
               {
@@ -78,7 +78,7 @@
                 "name": "What image file formats and resolutions are supported?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "PNG, JPEG and WebP up to 20 MB and 4096 px on the longest side; exports include transparent PNG, white-background JPG and compressed WebP."
+                  "text": "PNG, JPEG and WebP up to 20 MB & 4096 px longest side; exports include transparent PNG, white-background JPG and compressed WebP."
                 }
               }
             ]
@@ -90,6 +90,8 @@
     <script src="./theme-init.js"></script>
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-blue-500/15 selection:text-blue-900">
+    <!-- Layer 0: parallel OffscreenCanvas background (public/bg-parallel-worker.js). -->
+    <canvas id="parallel-bg-canvas" class="parallelBgCanvas" aria-hidden="true"></canvas>
     <!-- Floating notifications host. -->
     <div id="toastHost" class="toastHost" aria-live="polite" aria-atomic="false">
       <div id="recovery" class="recovery rounded-xl p-4 bg-red-50 border border-red-200 text-red-900 text-sm" hidden></div>
@@ -253,9 +255,9 @@
     <main class="space-y-20 lg:space-y-24 pb-24">
       <!-- Hero / Primary Workspace Canvas -->
       <section class="pt-7 sm:pt-10 pb-2 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
-        <div class="max-w-3xl mx-auto text-center">
+        <div class="max-w-3xl mx-auto text-center" data-assemble="from-bottom" style="--assemble-delay: 40ms">
           <p class="text-[11px] sm:text-xs font-mono uppercase tracking-[0.14em] text-slate-500 mb-3">
-            On-Device BiRefNet · WebGPU &amp; SIMD WASM · Background Model 512 (INT8/FP16)
+            On-Device BiRefNet · WebGPU (GPU) &amp; CPU SIMD WASM · Background Model 512 (INT8/FP16)
           </p>
 
           <h1 class="text-4xl sm:text-5xl lg:text-[3.25rem] font-bold text-slate-900 tracking-[-0.03em] leading-[1.08] text-balance">
@@ -263,7 +265,7 @@
           </h1>
 
           <p class="mt-4 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto text-balance leading-relaxed">
-            Clean cut-outs for product photos, done right in your browser. No account, no credit packs, no watermark —
+            Free, clean cut-outs for product photos, done right in your browser. No account, no credit packs, no watermark —
             your photo never touches a server.
           </p>
 
@@ -297,12 +299,12 @@
           </div>
 
           <p class="mt-4 text-xs sm:text-sm text-slate-500 font-medium">
-            Your photo never leaves this device · Up to 20 MB &amp; 4096 px · PNG, JPG &amp; WebP export · Processes up to 5 photos at once
+            Your photo never leaves this device · Up to 20 MB &amp; 4096 px longest side · PNG, JPG &amp; WebP export · Processes up to 5 photos at once
           </p>
         </div>
 
         <!-- Interactive App Shell Preview -->
-        <div class="heroShell mt-7">
+        <div class="heroShell mt-7" data-assemble="from-bottom" style="--assemble-delay: 160ms">
           <div class="heroShellBar">
             <div class="flex items-center gap-3 min-w-0">
               <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-white border border-slate-200 text-slate-700 shrink-0">
@@ -379,7 +381,7 @@
 
       <!-- Bento Feature & Architecture Grid (Asymmetric 12-Column) -->
       <section id="how" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-        <div class="max-w-2xl mb-10">
+        <div class="max-w-2xl mb-10" data-assemble="from-left" style="--assemble-delay: 0ms">
           <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">01 · Architecture</p>
           <h2 class="text-2xl sm:text-4xl font-bold text-slate-900 tracking-[-0.025em] text-balance">
             What happens when you drop in a photo.
@@ -402,11 +404,11 @@
                 <p class="text-xs text-slate-500 mt-0.5">Background Model 512 (INT8/FP16) · ~58 MB cached once</p>
                 <p class="font-mono text-[10px] text-slate-400 mt-0.5">birefnet-lite-engine-512-int8-fp16</p>
               </div>
-              <span class="font-mono text-xs text-slate-500 tabular-nums whitespace-nowrap">WebGPU → SIMD WASM</span>
+              <span class="font-mono text-xs text-slate-500 tabular-nums whitespace-nowrap">WebGPU (GPU) → CPU SIMD WASM</span>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div class="saas-well p-4">
+              <div class="saas-well stepCard stepCard--1 p-4" data-assemble="from-top-left" style="--assemble-delay: 40ms">
                 <div class="flex items-center justify-between mb-3">
                   <svg class="w-4 h-4 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -417,11 +419,11 @@
                 </div>
                 <h4 class="text-sm font-semibold text-slate-900">Local Canvas Decode</h4>
                 <p class="text-xs text-slate-600 mt-1 leading-relaxed">
-                  Reads PNG, JPG, and WebP up to 20 MB / 4096 px directly into ImageData with automatic mobile memory caps.
+                  Reads PNG, JPG, and WebP up to 20 MB &amp; 4096 px longest side directly into ImageData, with automatic mobile memory caps.
                 </p>
               </div>
 
-              <div class="saas-well p-4">
+              <div class="saas-well stepCard stepCard--2 p-4" data-assemble="from-top-right" style="--assemble-delay: 110ms">
                 <div class="flex items-center justify-between mb-3">
                   <svg class="w-4 h-4 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <rect x="4" y="4" width="16" height="16" rx="2" />
@@ -432,11 +434,11 @@
                 </div>
                 <h4 class="text-sm font-semibold text-slate-900">Hardware-Gated Matting</h4>
                 <p class="text-xs text-slate-600 mt-1 leading-relaxed">
-                  Detects real WebGPU adapters; routes slow/software renderers to multi-threaded SIMD WASM automatically.
+                  Detects real WebGPU (GPU) adapters; routes CPU-only or slow software renderers to multi-threaded SIMD WASM on the CPU automatically.
                 </p>
               </div>
 
-              <div class="saas-well p-4">
+              <div class="saas-well stepCard stepCard--3 p-4" data-assemble="from-bottom-left" style="--assemble-delay: 180ms">
                 <div class="flex items-center justify-between mb-3">
                   <svg class="w-4 h-4 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
@@ -452,7 +454,7 @@
                 </p>
               </div>
 
-              <div class="saas-well p-4">
+              <div class="saas-well stepCard stepCard--4 p-4" data-assemble="from-bottom-right" style="--assemble-delay: 250ms">
                 <div class="flex items-center justify-between mb-3">
                   <svg class="w-4 h-4 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -521,7 +523,7 @@
               </div>
               <div class="border border-slate-200/80 rounded-lg p-3 bg-white">
                 <p class="font-mono text-base font-bold text-slate-900 tabular-nums">4096 px</p>
-                <p class="text-[11px] text-slate-500 mt-0.5">Max long side</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Longest side</p>
               </div>
               <div class="border border-slate-200/80 rounded-lg p-3 bg-white">
                 <p class="font-mono text-base font-bold text-blue-600 tabular-nums">5× ZIP</p>
@@ -534,7 +536,7 @@
 
       <!-- Benchmarks & Measured Parity (Clean Light Analytical Grid) -->
       <section id="benchmarks" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-        <div class="saas-card p-6 sm:p-10">
+        <div class="saas-card p-6 sm:p-10" data-assemble="from-bottom" style="--assemble-delay: 0ms">
           <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-8 border-b border-slate-200/80">
             <div class="max-w-2xl">
               <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">02 · Measured Evaluation</p>
@@ -638,11 +640,11 @@
               </div>
               <div class="divide-y divide-slate-200/80 text-xs">
                 <div class="py-2.5 flex items-center justify-between gap-3">
-                  <span class="font-medium text-slate-800">Hardware WebGPU</span>
+                  <span class="font-medium text-slate-800">Hardware WebGPU (GPU)</span>
                   <span class="font-mono text-blue-600">Auto-default on desktop GPU</span>
                 </div>
                 <div class="py-2.5 flex items-center justify-between gap-3">
-                  <span class="font-medium text-slate-800">SIMD Multi-Thread WASM</span>
+                  <span class="font-medium text-slate-800">SIMD Multi-Thread WASM (CPU)</span>
                   <span class="font-mono text-slate-500">Safe CPU &amp; mobile default</span>
                 </div>
                 <div class="py-2.5 flex items-center justify-between gap-3">
@@ -661,7 +663,7 @@
 
       <!-- Interactive Before & After Showcase Section -->
       <section id="showcase" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 max-w-4xl mx-auto mb-10">
+        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 max-w-4xl mx-auto mb-10" data-assemble="from-right" style="--assemble-delay: 0ms">
           <div>
             <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">03 · Real Model Outputs</p>
             <h2 class="text-2xl sm:text-4xl font-bold text-slate-900 tracking-[-0.025em]">
@@ -683,7 +685,7 @@
           </button>
         </div>
 
-        <div class="showcaseGallery" data-showcase>
+        <div class="showcaseGallery" data-showcase data-assemble="from-bottom" style="--assemble-delay: 90ms">
           <!-- Main viewer: one before/after example at a time -->
           <div class="showcaseMain">
             <!-- Item 1: Everyday Product -->
@@ -1030,7 +1032,7 @@
 
       <!-- Plain-Language Capabilities Carousel -->
       <section id="support" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-        <div class="text-center max-w-2xl mx-auto mb-10">
+        <div class="text-center max-w-2xl mx-auto mb-10" data-assemble="from-bottom" style="--assemble-delay: 0ms">
           <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">04 · Plain-Language Reference</p>
           <h2 class="text-2xl sm:text-4xl font-bold text-slate-900 tracking-[-0.025em]">
             What SmartCutAI Supports
@@ -1040,7 +1042,7 @@
           </p>
         </div>
 
-        <div class="supportCarousel" data-support-carousel>
+        <div class="supportCarousel" data-support-carousel data-assemble="from-top" style="--assemble-delay: 80ms">
           <div class="supportViewport" data-support-viewport>
             <div class="supportTrack" id="supportTrack" data-support-track>
               <article class="supportSlide is-active" id="supportSlide-1" role="tabpanel" aria-labelledby="supportDot-1" data-support-slide>
@@ -1053,8 +1055,8 @@
                 </span>
                 <h3 class="supportSlideTitle">Photos you can drop in</h3>
                 <p class="supportSlideBody">
-                  PNG, JPEG, and WebP images up to <strong>20 MB</strong> and <strong>4096 pixels</strong> on the
-                  longest side. Files are read as-is — mislabelled or corrupt files are caught and explained cleanly.
+                  PNG, JPEG, and WebP images up to <strong>20 MB &amp; 4096 px longest side</strong>. Files are read as-is —
+                  mislabelled or corrupt files are caught and explained cleanly.
                 </p>
               </article>
 
@@ -1082,8 +1084,8 @@
                 </span>
                 <h3 class="supportSlideTitle">Where it runs</h3>
                 <p class="supportSlideBody">
-                  Runs in any modern browser. Uses WebGPU automatically on verified hardware GPUs and falls back to
-                  multi-threaded SIMD WebAssembly on CPUs and mobile chips, with manual override in Engine Controls.
+                  Runs in any modern browser. Uses WebGPU (GPU) automatically on verified hardware GPUs and falls back to
+                  multi-threaded SIMD WebAssembly on the CPU (including mobile chips), with manual override in Engine Controls.
                 </p>
               </article>
 
@@ -1109,8 +1111,8 @@
                 </span>
                 <h3 class="supportSlideTitle">Speed and the one-time download</h3>
                 <p class="supportSlideBody">
-                  The quantized model is ~<strong>58 MB</strong>, downloads once into your browser Cache API, and stays
-                  offline-ready. Metered mobile connections ask before downloading.
+                  Free to use, with no credit packs or per-image fees. The quantized model is ~<strong>58 MB</strong>, downloads once
+                  into your browser Cache API, and stays offline-ready. Metered mobile connections ask before downloading.
                 </p>
               </article>
 
@@ -1157,7 +1159,7 @@
 
       <!-- FAQ Section -->
       <section id="faq" class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-        <div class="text-center mb-10">
+        <div class="text-center mb-10" data-assemble="from-bottom" style="--assemble-delay: 0ms">
           <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">05 · Documentation</p>
           <h2 class="text-2xl sm:text-3xl font-bold text-slate-900 tracking-[-0.025em]">
             Frequently Asked Questions
@@ -1185,8 +1187,8 @@
               <span class="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
             </summary>
             <p class="mt-3 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
-              No, never. SmartCutAI is completely client-side. The neural network runs inside your browser's WebAssembly or
-              WebGPU sandbox. You can verify this in the Network tab or run the tool completely offline once cached.
+              No, never. SmartCutAI is completely client-side. The neural network runs inside your browser's WebGPU (GPU) or
+              SIMD WebAssembly (CPU) sandbox. You can verify this in the Network tab or run the tool completely offline once cached.
             </p>
           </details>
 
@@ -1207,8 +1209,8 @@
               <span class="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
             </summary>
             <p class="mt-3 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
-              No. SmartCutAI runs reliably on standard CPUs via multi-threaded WebAssembly SIMD, and automatically uses
-              hardware WebGPU acceleration when available on your desktop GPU.
+              No. SmartCutAI runs reliably on standard CPUs via multi-threaded WebAssembly SIMD (CPU), and automatically uses
+              hardware WebGPU (GPU) acceleration when available on your desktop GPU.
             </p>
           </details>
 
@@ -1218,9 +1220,8 @@
               <span class="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
             </summary>
             <p class="mt-3 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
-              Inputs support PNG, JPEG, and WebP up to 20 MB and 4096 px on the longest side (mobile devices scale
-              oversized photos down safely in local memory). Exports include transparent PNG, studio-white JPG, and
-              compressed WebP.
+              Inputs support PNG, JPEG, and WebP up to 20 MB &amp; 4096 px longest side (mobile devices scale oversized
+              photos down safely in local memory). Exports include transparent PNG, studio-white JPG, and compressed WebP.
             </p>
           </details>
         </div>
@@ -1429,7 +1430,7 @@
                           class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:ring-2 focus:ring-blue-600 focus:outline-none"
                         ></select>
                         <div id="providerInfo" class="infoPanel" hidden>
-                          <p><strong>Where inference runs.</strong> GPU (WebGPU) uses your graphics card; CPU (WASM) always works. The app picks the faster, safer option for this device.</p>
+                          <p><strong>Where inference runs.</strong> GPU (WebGPU) uses your graphics card; CPU (WASM SIMD) always works. The app picks the faster, safer option for this device.</p>
                           <p id="providerHint"></p>
                         </div>
                       </div>
@@ -1613,7 +1614,7 @@
                           Drop your image here, or <span class="text-blue-600 underline underline-offset-4 hover:text-blue-700">browse</span>
                         </p>
                         <p class="text-xs sm:text-sm text-slate-500 font-mono tabular-nums">
-                          PNG, JPG, JPEG, WEBP <span class="hidden sm:inline">· Max <span id="limitBytes">20 MB</span> · Up to <span id="limitSide">4096</span> px</span>
+                          PNG, JPG, JPEG, WEBP <span class="hidden sm:inline">· Up to <span id="limitBytes">20 MB</span> &amp; <span id="limitSide">4096</span> px longest side</span>
                         </p>
                       </div>
                     </div>
@@ -2095,15 +2096,15 @@
 
     <!-- Minimalist Multi-Column Clean Light SaaS Footer -->
     <footer class="border-t border-slate-200/80 bg-slate-50 py-14 px-4 sm:px-6 lg:px-8">
-      <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-10 pb-10 border-b border-slate-200/80">
+      <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-10 pb-10 border-b border-slate-200/80" data-assemble="from-bottom" style="--assemble-delay: 0ms">
         <div class="md:col-span-5 space-y-3">
           <div class="flex items-center gap-3">
             <img src="./assets/brand/smartcutai-vertical.png" alt="SmartCutAI" class="footerVertical footerVerticalDark object-contain" />
             <img src="./assets/brand/smartcutai-vertical-light.png" alt="" aria-hidden="true" class="footerVertical footerVerticalLight object-contain" />
           </div>
           <p class="text-xs text-slate-500 max-w-sm leading-relaxed">
-            Background removal that runs entirely in your browser, powered by Background Model 512 (INT8/FP16). No
-            accounts. No uploads. No watermark.
+            Free background removal that runs entirely in your browser, powered by Background Model 512 (INT8/FP16). No
+            accounts, no credit packs, no uploads, no watermark.
           </p>
         </div>
 

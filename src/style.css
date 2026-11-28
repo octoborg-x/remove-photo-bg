@@ -166,6 +166,24 @@
     border: 1px solid color-mix(in oklab, var(--color-slate-200) 80%, transparent);
     border-radius: 0.75rem;
   }
+
+  /* Inference-flow cards 01–04: a red → violet background spectrum. */
+  .stepCard--1 {
+    background: var(--color-red-50);
+    border-color: color-mix(in oklab, var(--color-red-500) 26%, transparent);
+  }
+  .stepCard--2 {
+    background: var(--color-amber-50);
+    border-color: color-mix(in oklab, var(--color-amber-800) 24%, transparent);
+  }
+  .stepCard--3 {
+    background: var(--color-indigo-50);
+    border-color: color-mix(in oklab, var(--color-indigo-600) 24%, transparent);
+  }
+  .stepCard--4 {
+    background: var(--color-violet-100);
+    border-color: color-mix(in oklab, var(--color-violet-600) 24%, transparent);
+  }
   .btn-obsidian {
     background: var(--obsidian-bg);
     color: var(--obsidian-fg);
@@ -4093,5 +4111,79 @@
   .supportSlide,
   .supportDot {
     transition: none;
+  }
+}
+
+/* ============================================================================
+   Landing ambient layers
+   ----------------------------------------------------------------------------
+   Layer 0 is a fixed OffscreenCanvas painted by public/bg-parallel-worker.js;
+   the semantic page sits on layer 1. Semantic blocks opt into the scroll
+   assembly with `data-assemble="from-…"`; the controller in
+   src/features/landing/ambient-background.ts toggles `.is-assembled`.
+   ========================================================================== */
+.parallelBgCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  transition: opacity 0.3s ease;
+}
+body.studio-open .parallelBgCanvas {
+  opacity: 0;
+}
+main,
+body > footer {
+  position: relative;
+  z-index: 1;
+}
+
+html.assemble-ready [data-assemble] {
+  opacity: 0;
+  will-change: transform, opacity;
+  transition:
+    transform 0.85s cubic-bezier(0.22, 1, 0.36, 1) var(--assemble-delay, 0ms),
+    opacity 0.7s ease-out var(--assemble-delay, 0ms);
+}
+html.assemble-ready [data-assemble="from-top"] {
+  transform: translate3d(0, -56px, 0) scale(0.96);
+}
+html.assemble-ready [data-assemble="from-bottom"] {
+  transform: translate3d(0, 64px, 0) scale(0.96);
+}
+html.assemble-ready [data-assemble="from-left"] {
+  transform: translate3d(-72px, 0, 0) rotate(-1.5deg);
+}
+html.assemble-ready [data-assemble="from-right"] {
+  transform: translate3d(72px, 0, 0) rotate(1.5deg);
+}
+html.assemble-ready [data-assemble="from-top-left"] {
+  transform: translate3d(-64px, -48px, 0) rotate(-2deg) scale(0.95);
+}
+html.assemble-ready [data-assemble="from-top-right"] {
+  transform: translate3d(64px, -48px, 0) rotate(2deg) scale(0.95);
+}
+html.assemble-ready [data-assemble="from-bottom-left"] {
+  transform: translate3d(-64px, 56px, 0) rotate(1.5deg) scale(0.95);
+}
+html.assemble-ready [data-assemble="from-bottom-right"] {
+  transform: translate3d(64px, 56px, 0) rotate(-1.5deg) scale(0.95);
+}
+html.assemble-ready [data-assemble].is-assembled {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .parallelBgCanvas {
+    transition: none;
+  }
+  html.assemble-ready [data-assemble] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
   }
 }

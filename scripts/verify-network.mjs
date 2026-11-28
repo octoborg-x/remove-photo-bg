@@ -66,11 +66,23 @@ const state = await page.evaluate(() => ({
   provider: window.smokeProvider,
 }));
 
-// Classify. The only allowed origins are the page origin (first-party).
+// Classify. First-party requests are always allowed; the only third-party
+// origins tolerated are the text-only telemetry endpoints (Cloudflare Web
+// Analytics and the first-party analytics Worker), which are consent-gated and
+// carry no image data.
 const origin = new URL(argUrl).origin;
-const external = requests.filter((r) => !r.url.startsWith(origin) && !r.url.startsWith('http://localhost'));
+const APPROVED_TELEMETRY_HOSTS = ['cloudflareinsights.com', 'smartcutai-analytics.'];
+const isApprovedTelemetry = (url) => APPROVED_TELEMETRY_HOSTS.some((host) => url.includes(host));
+const external = requests.filter(
+  (r) =>
+    !r.url.startsWith(origin) &&
+    !r.url.startsWith('http://localhost') &&
+    !isApprovedTelemetry(r.url),
+);
 const dataCandidates = requests.filter(
-  (r) => r.resourceType === 'fetch' || r.resourceType === 'xhr' || /api/.test(r.url),
+  (r) =>
+    (r.resourceType === 'fetch' || r.resourceType === 'xhr' || /api/.test(r.url)) &&
+    !isApprovedTelemetry(r.url),
 );
 const report = {
   modelReady: ready,

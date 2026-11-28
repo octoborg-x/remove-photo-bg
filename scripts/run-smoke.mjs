@@ -247,8 +247,19 @@ console.log(JSON.stringify({ ...results.run, measuresIndex }, null, 2));
 console.log(`Saved summary to ${outDir}/summary.json`);
 
 // Report whether any request could carry image pixels.
-const suspicious = requests.filter((r) =>
-  r.resourceType === 'fetch' || r.resourceType === 'xhr' || r.url.includes('api'),
+//
+// Two text-only telemetry endpoints are approved exceptions: the first-party
+// analytics Worker and Cloudflare Web Analytics. Both are consent-gated, send
+// no image data, and are absent from a smoke run unless explicitly configured
+// (VITE_ANALYTICS_ENDPOINT / VITE_CF_WEB_ANALYTICS_TOKEN). Every other
+// fetch/XHR stays suspicious.
+const APPROVED_TELEMETRY_HOSTS = ['cloudflareinsights.com', 'smartcutai-analytics.'];
+const isApprovedTelemetry = (url) => APPROVED_TELEMETRY_HOSTS.some((host) => url.includes(host));
+
+const suspicious = requests.filter(
+  (r) =>
+    (r.resourceType === 'fetch' || r.resourceType === 'xhr' || r.url.includes('api')) &&
+    !isApprovedTelemetry(r.url),
 );
 console.log('--- requests during run ---');
 for (const r of requests.slice(0, 60)) {

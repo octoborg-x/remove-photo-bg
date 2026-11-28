@@ -16,6 +16,8 @@ const DOCS = [
   'THIRD_PARTY_LEGAL_NOTICES.md',
   'LICENSE_AUDIT.md',
   'MODEL_CARD.md',
+  // Linked from public/sitemap.xml and public/llms.txt.
+  'EVALUATION.md',
 ];
 
 if (!existsSync(DIST)) {

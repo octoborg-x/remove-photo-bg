@@ -2074,6 +2074,45 @@ try {
       `collapsed ${Math.round(barToggle.collapsedW)} → expanded ${Math.round(barToggle.expandedW)} → collapsed ${Math.round(barToggle.collapsedAgainW)}`,
     );
 
+    // The header runtime pill reports the active provider and opens the same
+    // engine sidebar, so the mobile/desktop header stays the single entry point.
+    const pill = await page.evaluate(async () => {
+      const sb = document.getElementById('settingsSidebar');
+      const pillBtn = document.getElementById('enginePill');
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      if (!pillBtn || !sb) return { missing: true };
+      if (sb.dataset.collapsed !== 'true') {
+        document.getElementById('sidebarToggle')?.click();
+        await wait(320);
+      }
+      const label = document.getElementById('enginePillLabel')?.textContent?.trim();
+      const collapsedW = sb.getBoundingClientRect().width;
+      pillBtn.click();
+      await wait(320);
+      const expandedW = sb.getBoundingClientRect().width;
+      const expanded = pillBtn.getAttribute('aria-expanded');
+      pillBtn.click();
+      await wait(320);
+      return {
+        label,
+        runtime: pillBtn.dataset.runtime,
+        collapsedW,
+        expandedW,
+        expanded,
+        collapsedAgainW: sb.getBoundingClientRect().width,
+      };
+    });
+    record(
+      'the header runtime pill shows the provider and toggles the engine sidebar',
+      pill.missing !== true &&
+        /^(WebGPU|CPU)$/.test(pill.label || '') &&
+        (pill.runtime === 'webgpu' || pill.runtime === 'wasm') &&
+        pill.expandedW > pill.collapsedW &&
+        pill.expanded === 'true' &&
+        pill.collapsedAgainW < pill.expandedW,
+      `label ${pill.label} runtime ${pill.runtime} ${Math.round(pill.collapsedW ?? 0)} → ${Math.round(pill.expandedW ?? 0)} → ${Math.round(pill.collapsedAgainW ?? 0)}`,
+    );
+
     // Expand + collapse via the in-sidebar chevron.
     const collapse = await page.evaluate(async () => {
       const sb = document.getElementById('settingsSidebar');

@@ -1272,6 +1272,21 @@
         </div>
         <div class="flex items-center gap-2">
           <button
+            id="enginePill"
+            type="button"
+            class="aiModelPill"
+            aria-expanded="false"
+            aria-controls="settingsSidebar"
+            aria-label="Engine, runtime and mask settings"
+            title="Model, runtime &amp; mask controls"
+          >
+            <span id="enginePillDot" class="aiModelPillDot" aria-hidden="true"></span>
+            <span id="enginePillLabel" class="aiModelPillLabel">CPU</span>
+            <svg class="aiModelPillChevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <button
             id="consoleToggle"
             type="button"
             class="studioBarBtn"
@@ -1607,7 +1622,9 @@
                       <div class="procWallpaper">
                         <div class="procGrid" aria-hidden="true"></div>
                         <div class="procGlow" aria-hidden="true"></div>
+                        <div class="procShimmer" aria-hidden="true"></div>
                         <div class="procScan" aria-hidden="true"></div>
+                        <div class="procAura" aria-hidden="true"></div>
                         <div class="procStage">
                           <div class="procSpinner" aria-hidden="true">
                             <span class="procSpinnerTrack"></span>
@@ -1618,6 +1635,19 @@
                             </svg>
                           </div>
                           <div class="procStatus">
+                            <svg class="procSpark" viewBox="0 0 24 24" aria-hidden="true">
+                              <defs>
+                                <linearGradient id="ai-spark-grad-proc" x1="0%" y1="0%" x2="100%" y2="100%">
+                                  <stop offset="0%" stop-color="#8ab4f8" />
+                                  <stop offset="50%" stop-color="#c58af9" />
+                                  <stop offset="100%" stop-color="#7ee787" />
+                                </linearGradient>
+                              </defs>
+                              <path
+                                fill="url(#ai-spark-grad-proc)"
+                                d="M12 2C12.4 7.2 16.8 11.6 22 12C16.8 12.4 12.4 16.8 12 22C11.6 16.8 7.2 12.4 2 12C7.2 11.6 11.6 7.2 12 2Z"
+                              />
+                            </svg>
                             <span class="procStatusDot" aria-hidden="true"></span>
                             <span class="procStatusText">Removing background with on-device AI…</span>
                           </div>
@@ -1729,7 +1759,7 @@
                                 <path d="M12 9v4" /><path d="M12 17h.01" />
                                 <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
                               </svg>
-                              Report a quality problem
+                              <span class="reportProblemLabel">Report a quality problem</span>
                             </button>
 
                             <form id="qualityReportForm" class="qualityReportForm" hidden novalidate>
@@ -1882,45 +1912,83 @@
                     </div>
                   </div>
 
-                  <!-- Manual Retouch Panel -->
-                  <div id="retouchPanel" class="bottomBar retouchPanel" hidden role="region" aria-label="Retouch">
-                    <div class="bottomBarHead">
-                      <div class="bottomBarHeadTitle">
-                        <svg class="w-3.5 h-3.5 text-slate-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <path d="M12 20h9" />
-                          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  <!-- Manual Retouch Panel — compact icon-only toolbar -->
+                  <div id="retouchPanel" class="retouchPanel" hidden role="region" aria-label="Retouch">
+                    <div class="retouchToolbar" role="toolbar" aria-label="Retouch tools">
+
+                      <div class="retouchGroup" role="group" aria-label="Brush tool">
+                        <button id="retouchRestore" type="button" class="retouchIconBtn" aria-pressed="true" title="Restore" aria-label="Restore">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="M12 8v8M8 12h8" />
+                          </svg>
+                        </button>
+                        <button id="retouchErase" type="button" class="retouchIconBtn" aria-pressed="false" title="Erase" aria-label="Erase">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+                            <path d="M22 21H7" /><path d="m5 11 9 9" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      <span class="retouchDivider" aria-hidden="true"></span>
+
+                      <div class="retouchGroup">
+                        <button id="retouchBrushToggle" type="button" class="retouchIconBtn" aria-haspopup="true" aria-expanded="false" title="Brush settings" aria-label="Brush settings">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="21" x2="14" y1="4" y2="4" /><line x1="10" x2="3" y1="4" y2="4" />
+                            <line x1="21" x2="12" y1="12" y2="12" /><line x1="8" x2="3" y1="12" y2="12" />
+                            <line x1="21" x2="16" y1="20" y2="20" /><line x1="12" x2="3" y1="20" y2="20" />
+                            <line x1="14" x2="14" y1="2" y2="6" /><line x1="8" x2="8" y1="10" y2="14" /><line x1="16" x2="16" y1="18" y2="22" />
+                          </svg>
+                        </button>
+                        <div id="retouchBrushPopover" class="retouchPopover" hidden>
+                          <label class="retouchSlider">
+                            <span>Size <span id="retouchSizeValue" class="retouchValue">48px</span></span>
+                            <input id="retouchSize" type="range" min="4" max="160" step="1" value="48" aria-label="Brush size" />
+                          </label>
+                          <label class="retouchSlider">
+                            <span>Feather <span id="retouchFeatherValue" class="retouchValue">40%</span></span>
+                            <input id="retouchFeather" type="range" min="0" max="100" step="1" value="40" aria-label="Stroke feather" />
+                          </label>
+                        </div>
+                      </div>
+
+                      <span class="retouchDivider" aria-hidden="true"></span>
+
+                      <button id="retouchAutoCleanup" type="button" class="retouchIconBtn" title="Auto color contour cleanup" aria-label="Auto color contour cleanup">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
                         </svg>
-                        <h4 class="bottomBarTitle">Retouch</h4>
-                      </div>
-                      <span class="retouchHint">Edits the mask only — photo colours are never changed.</span>
+                      </button>
+
+                      <span class="retouchDivider" aria-hidden="true"></span>
+
+                      <button id="retouchUndo" type="button" class="retouchIconBtn" disabled title="Undo" aria-label="Undo">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" />
+                        </svg>
+                      </button>
+                      <button id="retouchRedo" type="button" class="retouchIconBtn" disabled title="Redo" aria-label="Redo">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="m15 14 5-5-5-5" /><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13" />
+                        </svg>
+                      </button>
+
+                      <span class="retouchDivider" aria-hidden="true"></span>
+
+                      <button id="retouchCancel" type="button" class="retouchIconBtn" title="Cancel" aria-label="Cancel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+                        </svg>
+                      </button>
+                      <button id="retouchSave" type="button" class="retouchIconBtn retouchSave" title="Save" aria-label="Save">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M20 6 9 17l-5-5" />
+                        </svg>
+                      </button>
                     </div>
-                    <div class="bottomBarBody retouchBody">
-                      <div class="bottomBarSection retouchTools">
-                        <div class="retouchToolGroup" role="group" aria-label="Brush tool">
-                          <button id="retouchRestore" type="button" class="retouchTool" aria-pressed="true">Restore</button>
-                          <button id="retouchErase" type="button" class="retouchTool" aria-pressed="false">Erase</button>
-                        </div>
-                        <label class="retouchSlider">
-                          <span>Brush size <span id="retouchSizeValue" class="retouchValue">48px</span></span>
-                          <input id="retouchSize" type="range" min="4" max="160" step="1" value="48" aria-label="Brush size" />
-                        </label>
-                        <label class="retouchSlider">
-                          <span>Stroke feather <span id="retouchFeatherValue" class="retouchValue">40%</span></span>
-                          <input id="retouchFeather" type="range" min="0" max="100" step="1" value="40" aria-label="Stroke feather" />
-                        </label>
-                      </div>
-                      <div class="bottomBarSection retouchActions">
-                        <button id="retouchAutoCleanup" type="button" class="retouchAction" title="Tighten the mask edge to the photo's real colour edges">Auto color contour cleanup</button>
-                        <div class="retouchHistory">
-                          <button id="retouchUndo" type="button" class="retouchAction" disabled>Undo</button>
-                          <button id="retouchRedo" type="button" class="retouchAction" disabled>Redo</button>
-                        </div>
-                        <div class="retouchCommit">
-                          <button id="retouchCancel" type="button" class="retouchAction">Cancel</button>
-                          <button id="retouchSave" type="button" class="retouchAction retouchSave">Save</button>
-                        </div>
-                      </div>
-                    </div>
+                    <span class="retouchHint">Edits the mask only.</span>
                   </div>
                 </div>
               </div>

@@ -1272,6 +1272,21 @@
         </div>
         <div class="flex items-center gap-2">
           <button
+            id="enginePill"
+            type="button"
+            class="aiModelPill"
+            aria-expanded="false"
+            aria-controls="settingsSidebar"
+            aria-label="Engine, runtime and mask settings"
+            title="Model, runtime &amp; mask controls"
+          >
+            <span id="enginePillDot" class="aiModelPillDot" aria-hidden="true"></span>
+            <span id="enginePillLabel" class="aiModelPillLabel">CPU</span>
+            <svg class="aiModelPillChevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <button
             id="consoleToggle"
             type="button"
             class="studioBarBtn"
@@ -1607,7 +1622,9 @@
                       <div class="procWallpaper">
                         <div class="procGrid" aria-hidden="true"></div>
                         <div class="procGlow" aria-hidden="true"></div>
+                        <div class="procShimmer" aria-hidden="true"></div>
                         <div class="procScan" aria-hidden="true"></div>
+                        <div class="procAura" aria-hidden="true"></div>
                         <div class="procStage">
                           <div class="procSpinner" aria-hidden="true">
                             <span class="procSpinnerTrack"></span>
@@ -1618,6 +1635,19 @@
                             </svg>
                           </div>
                           <div class="procStatus">
+                            <svg class="procSpark" viewBox="0 0 24 24" aria-hidden="true">
+                              <defs>
+                                <linearGradient id="ai-spark-grad-proc" x1="0%" y1="0%" x2="100%" y2="100%">
+                                  <stop offset="0%" stop-color="#8ab4f8" />
+                                  <stop offset="50%" stop-color="#c58af9" />
+                                  <stop offset="100%" stop-color="#7ee787" />
+                                </linearGradient>
+                              </defs>
+                              <path
+                                fill="url(#ai-spark-grad-proc)"
+                                d="M12 2C12.4 7.2 16.8 11.6 22 12C16.8 12.4 12.4 16.8 12 22C11.6 16.8 7.2 12.4 2 12C7.2 11.6 11.6 7.2 12 2Z"
+                              />
+                            </svg>
                             <span class="procStatusDot" aria-hidden="true"></span>
                             <span class="procStatusText">Removing background with on-device AI…</span>
                           </div>
@@ -1729,7 +1759,7 @@
                                 <path d="M12 9v4" /><path d="M12 17h.01" />
                                 <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
                               </svg>
-                              Report a quality problem
+                              <span class="reportProblemLabel">Report a quality problem</span>
                             </button>
 
                             <form id="qualityReportForm" class="qualityReportForm" hidden novalidate>

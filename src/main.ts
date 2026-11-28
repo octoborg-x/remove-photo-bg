@@ -6,6 +6,7 @@
 // - composites the mask and renders/downloads a transparent PNG (and JPG)
 import './fonts.css';
 import './style.css';
+import { initParallelBackground, initScrollAssembly } from './features/landing/ambient-background';
 import {
   imageDataToTensor,
   letterboxRect,
@@ -5383,5 +5384,8 @@ netWarnDismiss.addEventListener('click', () => {
   // A dismissal is not a dead end: choosing a photo asks again before spending
   // data, and Wi-Fi can still fetch the model in the background.
 });
+
+initParallelBackground();
+initScrollAssembly();
 
 boot().catch((e) => error(e instanceof Error ? e.message : String(e)));

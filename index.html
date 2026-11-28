@@ -10,12 +10,32 @@
       name="description"
       content="Free in-browser AI background remover — no upload, no account, no credit packs, no watermark. Up to 20 MB &amp; 4096 px longest side, PNG/JPG/WebP export."
     />
+    <link rel="canonical" href="https://remove-photo-bg.vercel.app/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta
+      name="keywords"
+      content="client-side background remover, in-browser AI background removal, WebGPU background remover, private remove bg, BiRefNet ONNX Web, no-upload background remover"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SmartCutAI" />
+    <meta property="og:url" content="https://remove-photo-bg.vercel.app/" />
     <meta property="og:title" content="SmartCutAI — Free In-Browser AI Background Remover, No Upload" />
     <meta
       property="og:description"
       content="Free in-browser AI background remover — no upload, no account, no credit packs, no watermark. Up to 20 MB &amp; 4096 px longest side, PNG/JPG/WebP export."
     />
-    <!-- Structured data: product + FAQ (SEO and generative-engine discoverability). -->
+    <meta property="og:image" content="https://remove-photo-bg.vercel.app/assets/brand/smartcutai-og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="SmartCutAI — cut out backgrounds without ever uploading a photo" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="SmartCutAI — 100% Private In-Browser Background Remover" />
+    <meta
+      name="twitter:description"
+      content="BiRefNet runs locally via ONNX Runtime Web and WebGPU. Fast, free, and 100% private."
+    />
+    <meta name="twitter:image" content="https://remove-photo-bg.vercel.app/assets/brand/smartcutai-og.png" />
+    <!-- Structured data: product + FAQ + how-to (SEO and generative-engine discoverability). -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -27,6 +47,11 @@
             "operatingSystem": "Any modern browser",
             "url": "https://remove-photo-bg.vercel.app/",
             "description": "Free in-browser AI background remover for product photos. Images are processed on-device with WebGPU (GPU) or SIMD WebAssembly (CPU) and are never uploaded. No account, no credit packs, no watermark.",
+            "browserRequirements": "Requires WebAssembly SIMD or WebGPU",
+            "softwareHelp": {
+              "@type": "CreativeWork",
+              "url": "https://remove-photo-bg.vercel.app/MODEL_CARD.md"
+            },
             "featureList": [
               "On-device background removal",
               "Tiled inference",
@@ -80,6 +105,50 @@
                   "@type": "Answer",
                   "text": "PNG, JPEG and WebP up to 20 MB & 4096 px longest side; exports include transparent PNG, white-background JPG and compressed WebP."
                 }
+              }
+            ]
+          },
+          {
+            "@type": "HowTo",
+            "name": "How to remove an image background without uploading the photo",
+            "description": "Cut out a product photo entirely inside the browser with SmartCutAI, so no image pixels leave the device.",
+            "totalTime": "PT1M",
+            "tool": [
+              {
+                "@type": "HowToTool",
+                "name": "A modern browser with WebAssembly SIMD or WebGPU"
+              }
+            ],
+            "step": [
+              {
+                "@type": "HowToStep",
+                "name": "Open the Studio",
+                "text": "Open SmartCutAI in a modern browser. The quantized BiRefNet model downloads once (~58 MB) and is cached locally for later visits.",
+                "url": "https://remove-photo-bg.vercel.app/#studio"
+              },
+              {
+                "@type": "HowToStep",
+                "name": "Drop in a photo",
+                "text": "Choose or drag a PNG, JPEG or WebP up to 20 MB and 4096 px. The file is read locally by the page; nothing is uploaded.",
+                "url": "https://remove-photo-bg.vercel.app/#studio"
+              },
+              {
+                "@type": "HowToStep",
+                "name": "Run the on-device model",
+                "text": "SmartCutAI segments the photo with hardware WebGPU when available, otherwise multi-threaded WebAssembly SIMD. A desktop CPU takes roughly 4 seconds per image once warm.",
+                "url": "https://remove-photo-bg.vercel.app/#studio"
+              },
+              {
+                "@type": "HowToStep",
+                "name": "Refine the edge",
+                "text": "Adjust the mask threshold (0–100%) and mask feather (0–64 px), or use the retouch brush, to clean up hair, glass and fine structure.",
+                "url": "https://remove-photo-bg.vercel.app/#studio"
+              },
+              {
+                "@type": "HowToStep",
+                "name": "Export the cut-out",
+                "text": "Download a transparent PNG, a white-background JPG or a compressed WebP. Exporting re-encodes the existing result and does not re-run inference.",
+                "url": "https://remove-photo-bg.vercel.app/#studio"
               }
             ]
           }
@@ -1224,6 +1293,103 @@
               photos down safely in local memory). Exports include transparent PNG, studio-white JPG, and compressed WebP.
             </p>
           </details>
+        </div>
+      </section>
+
+      <!-- Semantic specification & comparison block for search snippets and AI answer engines. -->
+      <section
+        aria-label="Product specifications and benchmarks"
+        class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24"
+      >
+        <div class="text-center mb-10">
+          <p class="font-mono text-xs uppercase tracking-[0.12em] text-blue-600 mb-2">06 · Specifications</p>
+          <h2 class="text-2xl sm:text-3xl font-bold text-slate-900 tracking-[-0.025em]">
+            How SmartCutAI compares
+          </h2>
+        </div>
+
+        <div class="space-y-3">
+          <div class="saas-card p-5">
+            <h3 class="font-semibold text-sm sm:text-base text-slate-900">Does SmartCutAI upload my photo?</h3>
+            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">
+              No. SmartCutAI has no image-upload code path. The page is served with a strict Content Security Policy
+              (<code class="font-mono text-[11px]">default-src 'self'</code>), and the BiRefNet model runs inside the
+              browser's WebGPU or WebAssembly sandbox, so image pixels stay on the device.
+            </p>
+          </div>
+          <div class="saas-card p-5">
+            <h3 class="font-semibold text-sm sm:text-base text-slate-900">How fast is in-browser background removal?</h3>
+            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">
+              About 4 seconds per image once warm on a desktop CPU (3.6–4.0 s, multi-threaded WASM SIMD) and roughly
+              6.9 s on a phone. Hardware WebGPU is selected automatically when a desktop GPU is available. The first
+              visit also downloads the ~58 MB model once; later visits load it from the browser cache.
+            </p>
+          </div>
+          <div class="saas-card p-5">
+            <h3 class="font-semibold text-sm sm:text-base text-slate-900">Does it work offline and without an account?</h3>
+            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">
+              Yes. There is no sign-up, credit pack or watermark. After the model is cached, the Studio keeps working
+              offline because inference is local.
+            </p>
+          </div>
+          <div class="saas-card p-5">
+            <h3 class="font-semibold text-sm sm:text-base text-slate-900">How accurate is the cut-out?</h3>
+            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">
+              On the repository's 64-image, 8-category benchmark, all 64 photos processed with no errors and 59 produced
+              a usable first-pass cut-out. The INT8/FP16 export measures IoU@0.5 0.9987 against its FP32 teacher.
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-8 saas-card p-5 sm:p-6">
+          <h3 class="font-semibold text-sm sm:text-base text-slate-900 mb-1">
+            Client-side inference vs. cloud SaaS vs. manual editing
+          </h3>
+          <p class="text-xs text-slate-500 mb-4">Structural comparison of the three common background-removal workflows.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs sm:text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200">
+                  <th scope="col" class="py-2 pr-4 font-semibold text-slate-900">Criterion</th>
+                  <th scope="col" class="py-2 pr-4 font-semibold text-blue-700">SmartCutAI (client-side)</th>
+                  <th scope="col" class="py-2 pr-4 font-semibold text-slate-900">Cloud SaaS remover</th>
+                  <th scope="col" class="py-2 font-semibold text-slate-900">Manual editor</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600">
+                <tr class="border-b border-slate-100">
+                  <th scope="row" class="py-2.5 pr-4 font-medium text-slate-800 align-top">Where the image goes</th>
+                  <td class="py-2.5 pr-4 align-top">Stays on the device; no upload path</td>
+                  <td class="py-2.5 pr-4 align-top">Uploaded to the provider's servers</td>
+                  <td class="py-2.5 align-top">Stays local</td>
+                </tr>
+                <tr class="border-b border-slate-100">
+                  <th scope="row" class="py-2.5 pr-4 font-medium text-slate-800 align-top">Cost</th>
+                  <td class="py-2.5 pr-4 align-top">Free, no account</td>
+                  <td class="py-2.5 pr-4 align-top">Subscription or per-image credits</td>
+                  <td class="py-2.5 align-top">Licence fee or free tool</td>
+                </tr>
+                <tr class="border-b border-slate-100">
+                  <th scope="row" class="py-2.5 pr-4 font-medium text-slate-800 align-top">Typical latency</th>
+                  <td class="py-2.5 pr-4 align-top">~4 s warm on a desktop CPU; WebGPU when available</td>
+                  <td class="py-2.5 pr-4 align-top">Upload + queue + download round trip</td>
+                  <td class="py-2.5 align-top">Minutes of manual masking</td>
+                </tr>
+                <tr class="border-b border-slate-100">
+                  <th scope="row" class="py-2.5 pr-4 font-medium text-slate-800 align-top">Works offline</th>
+                  <td class="py-2.5 pr-4 align-top">Yes, after the model is cached</td>
+                  <td class="py-2.5 pr-4 align-top">No</td>
+                  <td class="py-2.5 align-top">Yes</td>
+                </tr>
+                <tr>
+                  <th scope="row" class="py-2.5 pr-4 font-medium text-slate-800 align-top">Batch handling</th>
+                  <td class="py-2.5 pr-4 align-top">Up to 5 photos per batch</td>
+                  <td class="py-2.5 pr-4 align-top">Depends on the plan</td>
+                  <td class="py-2.5 align-top">One image at a time</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </main>

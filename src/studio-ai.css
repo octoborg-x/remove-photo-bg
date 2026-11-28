@@ -1,0 +1,457 @@
+/* ============================================================================
+   AI Studio skin — Gemini / ChatGPT-style obsidian console
+   ----------------------------------------------------------------------------
+   Scoped to `#studio` so the marketing page keeps the shared light/dark palette.
+   The studio is a full-screen workspace, so it always renders as the dark AI
+   console: obsidian canvas, matte elevated containers, hairline borders and the
+   Gemini blue → violet → green accent ramp.
+
+   Only design tokens and additive decorations live here. No id, `data-*` or
+   ARIA contract moves, so the TypeScript hooks and the Puppeteer suite keep
+   working unchanged.
+   ========================================================================== */
+
+@layer components {
+  /* ——— Palette: obsidian canvas, matte surfaces, AI accent ramp ——— */
+  #studio {
+    color-scheme: dark;
+
+    --studio-canvas: #131314;
+    --studio-surface: #1e1f20;
+    --studio-surface-raised: #242526;
+    --studio-hairline: rgb(255 255 255 / 0.08);
+
+    --ai-accent-1: #8ab4f8;
+    --ai-accent-2: #c58af9;
+    --ai-accent-3: #7ee787;
+    --ai-ramp: linear-gradient(
+      100deg,
+      var(--ai-accent-1) 0%,
+      var(--ai-accent-2) 52%,
+      var(--ai-accent-3) 100%
+    );
+
+    /* Neutral ramp → Gemini obsidian. The existing utility classes
+       (`bg-white`, `text-slate-900`, `border-slate-200`, …) read these tokens,
+       so the whole studio follows without per-element rules. */
+    --color-white: var(--studio-surface);
+    --color-slate-50: var(--studio-canvas);
+    --color-slate-100: #1b1c1e;
+    --color-slate-200: #2a2b2e;
+    --color-slate-300: #3c3d41;
+    --color-slate-400: #8e918f;
+    --color-slate-500: #a8abab;
+    --color-slate-600: #c4c7c5;
+    --color-slate-700: #dcdfdd;
+    --color-slate-800: #e8eaea;
+    --color-slate-900: #f4f4f5;
+
+    /* Accent ramp replaces the cobalt brand inside the studio. */
+    --color-blue-50: #1a2333;
+    --color-blue-100: #23324a;
+    --color-blue-500: #a8c7fa;
+    --color-blue-600: #8ab4f8;
+    --color-blue-700: #a8c7fa;
+    --color-blue-900: #d3e3fd;
+    --color-indigo-50: #221b3a;
+    --color-indigo-600: #c58af9;
+    --color-violet-100: #2a1f4a;
+    --color-violet-200: #3a2b63;
+    --color-violet-600: #c58af9;
+    --color-purple-600: #d7a8ff;
+
+    /* The primary CTA inverts to a light pill on the dark canvas. */
+    --obsidian-bg: #f4f4f5;
+    --obsidian-bg-hover: #ffffff;
+    --obsidian-fg: #131314;
+
+    --shadow-float: 0 1px 2px rgb(0 0 0 / 0.5), 0 8px 24px -12px rgb(0 0 0 / 0.7);
+    --shadow-modal: 0 24px 60px -18px rgb(0 0 0 / 0.8), 0 2px 8px rgb(0 0 0 / 0.45);
+  }
+
+  /* ——— Surfaces: hairline borders and matte elevation ——— */
+  #studio .studioTopBar {
+    background: color-mix(in oklab, var(--studio-canvas) 86%, transparent);
+    border-bottom: 1px solid var(--studio-hairline);
+    backdrop-filter: blur(14px);
+  }
+
+  #studio .studioCard,
+  #studio .consoleCard {
+    background: var(--studio-surface);
+    border-color: var(--studio-hairline);
+    border-radius: 1rem;
+  }
+
+  #studio .studioTabs {
+    border-bottom-color: var(--studio-hairline);
+  }
+
+  #studio .editorTab {
+    border-radius: 9999px;
+  }
+
+  #studio .editorTab[aria-selected='true'] {
+    background: rgb(138 180 248 / 0.16);
+    color: #d3e3fd;
+  }
+
+  #studio .settingsSidebar {
+    background: var(--studio-surface);
+    border-color: var(--studio-hairline);
+    border-radius: 1rem;
+  }
+
+  #studio .sidebarHead {
+    border-bottom-color: var(--studio-hairline);
+  }
+
+  #studio .studioBarBtn,
+  #studio .studioCloseBtn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+  }
+
+  #studio .studioBarBtn:hover,
+  #studio .studioCloseBtn:hover {
+    background: rgb(255 255 255 / 0.07);
+    border-color: var(--studio-hairline);
+    color: #ffffff;
+  }
+
+  /* The drop well reads as a raised surface on the matte card. */
+  #studio #dropZone {
+    background: color-mix(in oklab, var(--studio-surface-raised) 55%, transparent);
+    border-color: rgb(255 255 255 / 0.14);
+  }
+
+  #studio #dropZone:hover {
+    background: rgb(138 180 248 / 0.08);
+    border-color: rgb(138 180 248 / 0.55);
+  }
+
+  #studio .dzIcon {
+    background: var(--studio-surface-raised);
+    border-color: var(--studio-hairline);
+  }
+
+  /* Engine info popovers are viewport-fixed overlays; give them the matte card
+     surface so they stay readable over the stage. */
+  #studio .infoPanel {
+    background: #232427;
+    border-color: var(--studio-hairline);
+    color: var(--color-slate-700);
+    box-shadow: var(--shadow-modal);
+  }
+
+  /* The refinement pill sits on the always-dark preview, so its ink stays light
+     instead of following the (now dark) slate ramp. */
+  #studio .refineNotice {
+    color: #f4f4f5;
+  }
+
+  /* Toasts and the recovery banner are body-level (they must float above the
+     studio), so they only see the page theme. While the studio is open they
+     follow the same obsidian ramp instead of flashing a light card on it. */
+  body:has(#studio.is-open) #toastHost,
+  body:has(#studio.is-open) #recovery {
+    color-scheme: dark;
+    --color-white: #1e1f20;
+    --color-slate-50: #131314;
+    --color-slate-100: #1b1c1e;
+    --color-slate-200: #2a2b2e;
+    --color-slate-300: #3c3d41;
+    --color-slate-400: #8e918f;
+    --color-slate-500: #a8abab;
+    --color-slate-600: #c4c7c5;
+    --color-slate-700: #dcdfdd;
+    --color-slate-800: #e8eaea;
+    --color-slate-900: #f4f4f5;
+    --color-blue-600: #8ab4f8;
+    --color-blue-700: #a8c7fa;
+  }
+
+  /* ——— Engine / runtime pill in the studio header ——— */
+  .aiModelPill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    height: 2.1rem;
+    padding: 0 0.7rem 0 0.75rem;
+    border-radius: 9999px;
+    border: 1px solid var(--studio-hairline);
+    background: color-mix(in oklab, var(--studio-surface-raised) 94%, transparent);
+    color: var(--color-slate-700);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  }
+
+  .aiModelPill:hover {
+    background: #2c2d30;
+    border-color: rgb(255 255 255 / 0.16);
+    color: #ffffff;
+  }
+
+  .aiModelPill[aria-expanded='true'] {
+    border-color: rgb(138 180 248 / 0.55);
+    box-shadow: 0 0 0 3px rgb(138 180 248 / 0.14);
+  }
+
+  .aiModelPill:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .aiModelPillDot {
+    width: 0.45rem;
+    height: 0.45rem;
+    flex: none;
+    border-radius: 9999px;
+    background: var(--ai-accent-3);
+    box-shadow: 0 0 8px rgb(126 231 135 / 0.7);
+  }
+
+  .aiModelPill[data-runtime='wasm'] .aiModelPillDot {
+    background: var(--ai-accent-1);
+    box-shadow: 0 0 8px rgb(138 180 248 / 0.7);
+  }
+
+  .aiModelPillChevron {
+    width: 0.8rem;
+    height: 0.8rem;
+    flex: none;
+    opacity: 0.65;
+  }
+
+  /* ——— Processing stage: iridescent sweep, breathing aura, spark pill ——— */
+  #studio .procWallpaper {
+    background: radial-gradient(circle at 50% 38%, #1d2440 0%, #0b0c14 72%);
+  }
+
+  #studio .procShimmer {
+    position: absolute;
+    inset: -40%;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      115deg,
+      transparent 30%,
+      rgb(138 180 248 / 0.16) 42%,
+      rgb(197 138 249 / 0.22) 50%,
+      rgb(56 189 248 / 0.14) 58%,
+      transparent 70%
+    );
+    background-size: 220% 220%;
+    animation: aiShimmerSweep 3.6s ease-in-out infinite;
+  }
+
+  /* A 2px luminous edge on the existing scanner line. */
+  #studio .procScan::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--ai-accent-1), var(--ai-accent-2), transparent);
+    box-shadow: 0 0 14px rgb(138 180 248 / 0.85);
+  }
+
+  #studio .procAura {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: inherit;
+    box-shadow:
+      inset 0 0 0 1px rgb(138 180 248 / 0.35),
+      inset 0 0 42px rgb(197 138 249 / 0.18);
+    animation: aiAuraPulse 3.2s ease-in-out infinite;
+  }
+
+  #studio .procSpark {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+    animation: aiSparkTwinkle 1.9s ease-in-out infinite;
+  }
+
+  /* ——— Refinement: the same sweep over the usable preview ——— */
+  #studio #outputFrame.is-refining::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    background: linear-gradient(
+      115deg,
+      transparent 35%,
+      rgb(138 180 248 / 0.14) 48%,
+      rgb(197 138 249 / 0.18) 52%,
+      transparent 65%
+    );
+    background-size: 220% 220%;
+    animation: aiShimmerSweep 2.6s linear infinite;
+  }
+
+  /* ——— Quality report: a discreet 30%-opacity flag that expands on intent ——— */
+  #studio .reportProblemBtn {
+    opacity: 0.3;
+    border-radius: 9999px;
+    transition: opacity 0.22s ease, background 0.15s, color 0.15s, border-color 0.15s;
+  }
+
+  #studio .reportProblemLabel {
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    opacity: 0;
+    transition: max-width 0.26s ease, opacity 0.26s ease;
+  }
+
+  #studio .qualityReport:hover .reportProblemBtn,
+  #studio .qualityReport:focus-within .reportProblemBtn,
+  #studio .reportProblemBtn:hover,
+  #studio .reportProblemBtn:focus-visible {
+    opacity: 1;
+  }
+
+  #studio .qualityReport:hover .reportProblemLabel,
+  #studio .qualityReport:focus-within .reportProblemLabel,
+  #studio .reportProblemBtn:focus-visible .reportProblemLabel {
+    max-width: 14rem;
+    opacity: 1;
+  }
+
+  /* ——— Mobile: floating engine sheet over the stage, bottom command dock ——— */
+  @media (max-width: 767px) {
+    /* The engine controls float over the inference stage as a matte card. There
+       is deliberately no backdrop element, so nothing is dimmed or blurred. */
+    #studio .settingsSidebar {
+      position: fixed;
+      top: 3.75rem;
+      left: 0.6rem;
+      right: 0.6rem;
+      /* The base mobile rule pins the sidebar to 100% of the column with
+         !important, so the floating sheet has to match it. The z-index keeps
+         the sheet above the stage's positioned children (the drop well and the
+         result frame are `relative`, so DOM order alone would paint them over
+         it); it stays below the viewport-fixed info popovers (z-index 90). */
+      width: auto !important;
+      max-width: none !important;
+      max-height: min(68vh, 30rem) !important;
+      z-index: 60;
+      border-radius: 1.15rem;
+      background: var(--studio-surface-raised);
+      box-shadow:
+        0 24px 60px -18px rgb(0 0 0 / 0.75),
+        0 0 0 1px rgb(255 255 255 / 0.04);
+    }
+
+    #studio .settingsSidebar[data-collapsed='true'] {
+      display: none;
+    }
+
+    #studio #sidebarResize {
+      display: none;
+    }
+
+    /* The result actions become a floating pill dock that stays in reach while
+       the result scrolls. */
+    #studio .stepResultHead {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      justify-content: center;
+      margin-bottom: 0.5rem;
+    }
+
+    #studio .resultActions {
+      padding: 0.4rem 0.55rem;
+      border-radius: 9999px;
+      border: 1px solid var(--studio-hairline);
+      background: color-mix(in oklab, var(--studio-surface-raised) 96%, transparent);
+      box-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.8);
+      backdrop-filter: blur(12px);
+    }
+
+    #studio .resultIconBtn {
+      border-radius: 9999px;
+      border-color: transparent;
+      background: transparent;
+    }
+
+    #studio .resultIconBtn:hover {
+      background: rgb(255 255 255 / 0.08);
+      border-color: var(--studio-hairline);
+      color: #ffffff;
+    }
+  }
+
+  /* ——— Motion ——— */
+  #studio.is-open .studioTopBar,
+  #studio.is-open .studioCard {
+    animation: aiStudioEnter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes aiShimmerSweep {
+    0% {
+      background-position: 0% 0%;
+      opacity: 0.45;
+    }
+    50% {
+      background-position: 100% 100%;
+      opacity: 0.9;
+    }
+    100% {
+      background-position: 0% 0%;
+      opacity: 0.45;
+    }
+  }
+
+  @keyframes aiAuraPulse {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes aiSparkTwinkle {
+    0%,
+    100% {
+      transform: scale(0.86);
+      opacity: 0.7;
+    }
+    50% {
+      transform: scale(1.08);
+      opacity: 1;
+    }
+  }
+
+  @keyframes aiStudioEnter {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #studio .procShimmer,
+    #studio .procAura,
+    #studio .procSpark,
+    #studio #outputFrame.is-refining::after,
+    #studio.is-open .studioTopBar,
+    #studio.is-open .studioCard {
+      animation: none;
+    }
+  }
+}

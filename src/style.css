@@ -2796,24 +2796,6 @@
     width: 2.75rem;
     height: 2.75rem;
   }
-  .emptyStatePlus {
-    position: absolute;
-    right: -0.35rem;
-    bottom: -0.35rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.9rem;
-    height: 1.9rem;
-    border-radius: 9999px;
-    border: 2px solid var(--color-white);
-    background: var(--color-slate-500);
-    color: var(--color-white);
-  }
-  .emptyStatePlus svg {
-    width: 1rem;
-    height: 1rem;
-  }
   .emptyStateText {
     font-size: 0.75rem;
     color: var(--color-slate-400);
@@ -3067,10 +3049,9 @@
     flex-wrap: wrap;
   }
   .bulkCount {
-    font-size: 0.68rem;
+    font-size: 0.72rem;
     font-weight: 600;
-    color: var(--color-slate-400);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--color-slate-500);
   }
   .bulkActions {
     display: flex;

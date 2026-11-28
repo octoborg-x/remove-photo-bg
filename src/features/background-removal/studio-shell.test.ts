@@ -398,19 +398,27 @@ describe('studio UI refinements', () => {
     expect(head).toContain('class="bulkToolbar"');
     expect(head).not.toContain('bulkTitle');
     expect(HTML).not.toContain('class="bulkTitle"');
-    // Select-all sits alone on the left; add, colour and delete group on the right.
+    // Select-all and the selected/total counter sit on the left; add, colour and
+    // delete group on the right.
     expect(head).toMatch(
-      /class="bulkToolbar"[\s\S]*id="bulkSelectAll"[\s\S]*<\/div>[\s\S]*class="bulkActions"[\s\S]*id="bulkPick"[\s\S]*id="bulkBgButton"[\s\S]*id="bulkDeleteSelected"/,
+      /class="bulkToolbar"[\s\S]*id="bulkSelectAll"[\s\S]*id="bulkSelectionCount"[\s\S]*<\/div>[\s\S]*class="bulkActions"[\s\S]*id="bulkPick"[\s\S]*id="bulkBgButton"[\s\S]*id="bulkDeleteSelected"/,
     );
+    // The old active/limit counter next to the add icon is gone.
+    expect(head).not.toContain('id="bulkCount"');
+    expect(head).not.toMatch(/>0 \/ 5</);
+    expect(head).toContain('0 selected / 0 total');
+    expect(MAIN).toMatch(/bulkSelectionCountEl\.textContent = `\$\{checked\} selected \/ \$\{total\} total`/);
     // The old paragraph placeholder is replaced by the photo-tab figure, with a
     // multi-photo icon, that also opens the picker.
     const empty = HTML.slice(HTML.indexOf('id="bulkEmpty"'), HTML.indexOf('id="panelLibrary"'));
     expect(empty).toContain('class="emptyState"');
     expect(empty).toContain('id="bulkEmptyPick"');
     expect(empty).toContain('class="emptyStateFigure"');
-    // A photo glyph plus a plus badge marks the placeholder as an add-images input.
+    // A multi-photo glyph with a caption underneath marks the placeholder as an
+    // add-images input; the plus badge is gone.
     expect(empty).toContain('class="emptyStateGlyph"');
-    expect(empty).toContain('class="emptyStatePlus"');
+    expect(empty).not.toContain('class="emptyStatePlus"');
+    expect(empty).toMatch(/class="emptyStateText">Add 5 by 5 images</);
     expect(empty).not.toMatch(/Pick up to five photos/);
     // The explanatory paragraph placeholder is gone; only the image placeholder remains.
     expect(HTML).not.toContain('bulkDefaultsHint');

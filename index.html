@@ -1781,9 +1781,9 @@
                           <label class="bulkSelectAll" title="Select all">
                             <input id="bulkSelectAll" type="checkbox" aria-label="Select all" />
                           </label>
+                          <span id="bulkSelectionCount" class="bulkCount">0 selected / 0 total</span>
                         </div>
                         <div class="bulkActions">
-                          <span id="bulkCount" class="bulkCount">0 / 5</span>
                           <button id="bulkPick" type="button" class="bulkToolBtn" aria-label="Add images" title="Add images">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                               <path d="M12 5v14M5 12h14" />
@@ -1827,12 +1827,8 @@
                             <circle cx="12" cy="8" r="2" />
                             <rect width="16" height="16" x="6" y="2" rx="2" />
                           </svg>
-                          <span class="emptyStatePlus" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-                              <path d="M12 5v14M5 12h14" />
-                            </svg>
-                          </span>
                         </button>
+                        <p class="emptyStateText">Add 5 by 5 images</p>
                       </div>
                     </div>
                   </div>

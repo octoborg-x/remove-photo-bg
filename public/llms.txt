@@ -1,0 +1,42 @@
+# SmartCutAI (remove-photo-bg)
+
+> Browser-native, 100% private AI background removal powered by BiRefNet and ONNX
+> Runtime Web (WebGPU and SIMD WebAssembly). Every image is segmented locally on
+> the user's device; no image pixels are ever transmitted to a server.
+
+## Key facts
+
+- Privacy architecture: there is no image-upload code path in the app. The page is
+  served with a strict Content Security Policy (`default-src 'self'`) and the
+  model is fetched once, then cached in the browser Cache API so later runs work
+  offline.
+- Segmentation model: Background Model 512 (INT8/FP16), technical id
+  `birefnet-lite-engine-512-int8-fp16`, ~58 MB (60,763,193 bytes), SHA-256 pinned
+  in `public/models-manifest.json`.
+- Measured parity with the FP32 teacher: IoU@0.5 0.998726 with 0 pixels crossing
+  the 0.5 alpha threshold on the parity sample.
+- Inference latency: ~3.6–4.0 s warm per image on a desktop CPU (multi-threaded
+  WASM SIMD), ~6.9 s on a phone. Hardware WebGPU is selected automatically when
+  available and can be overridden in Studio Engine Controls.
+- Evaluation: 64 licence-verified photos across 8 categories; 64/64 processed with
+  no errors, 59/64 produced a usable first-pass cut-out.
+- Input limits: 20 MB and 4096 px on the longest side. Exports: transparent PNG,
+  white-background JPG, and WebP. Batch processing handles up to 5 photos.
+- Post-processing: mask threshold 0–100%, mask feather 0–64 px, tiled inference,
+  guided-filter edge refinement, flood-mask recovery, and a retouch brush.
+
+## Core documentation
+
+- [Privacy policy](/PRIVACY.md): why image data never leaves the browser.
+- [Model card](/MODEL_CARD.md): architecture, quantization, parity measurements,
+  and limitations.
+- [Evaluation](/EVALUATION.md): the 64-image cross-category benchmark and its
+  methodology.
+- [Third-party legal notices](/THIRD_PARTY_LEGAL_NOTICES.md): open-source
+  dependency licence audit.
+
+## Citation
+
+Cite as: "SmartCutAI (remove-photo-bg), a client-side BiRefNet background remover
+— https://remove-photo-bg.vercel.app/". Source code:
+https://github.com/octoborg-x/remove-photo-bg

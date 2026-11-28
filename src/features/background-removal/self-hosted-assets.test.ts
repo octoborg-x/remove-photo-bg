@@ -17,8 +17,13 @@ describe('self-hosted assets (no third-party resource loads)', () => {
   const html = read('index.html');
 
   it('index.html loads no external stylesheet, script, or font', () => {
+    // `rel=canonical`/`rel=alternate` are absolute URLs by specification but
+    // fetch nothing; every resource-loading link stays same-origin.
+    const fetchingMarkup = html.replace(/<link\b[^>]*>/gi, (tag) =>
+      /\brel=["'](?:canonical|alternate)["']/i.test(tag) ? '' : tag,
+    );
     const externalResource = /<(?:link|script|img)\b[^>]*\b(?:href|src)=["']https?:\/\//i;
-    expect(externalResource.test(html)).toBe(false);
+    expect(externalResource.test(fetchingMarkup)).toBe(false);
     expect(html).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
   });
 

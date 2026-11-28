@@ -202,6 +202,7 @@ const consoleOutputEl = document.getElementById('consoleOutput')!;
 const consoleScrollEl = document.querySelector<HTMLElement>('.consoleScroll')!;
 const outputBox = document.getElementById('outputBox')!;
 const outputSection = document.getElementById('outputSection')!;
+const outputFrameEl = document.getElementById('outputFrame') as HTMLElement | null;
 const refineNoticeEl = document.getElementById('refineNotice')!;
 const providerToggle = document.getElementById('providerToggle')! as HTMLSelectElement;
 const downloadImageBtn = document.getElementById('downloadImage')! as HTMLAnchorElement;
@@ -267,6 +268,9 @@ const settingsSidebarEl = document.getElementById('settingsSidebar') as HTMLElem
 const sidebarToggleBtn = document.getElementById('sidebarToggle') as HTMLButtonElement | null;
 const sidebarCollapseBtn = document.getElementById('sidebarCollapse') as HTMLButtonElement | null;
 const sidebarResizeEl = document.getElementById('sidebarResize');
+// Header pill: shows the active execution runtime and opens the same sidebar.
+const enginePillBtn = document.getElementById('enginePill') as HTMLButtonElement | null;
+const enginePillLabelEl = document.getElementById('enginePillLabel');
 // Manual retouch layer (Result tab only): an overlay edit button on the image
 // and a compact panel below the result.
 const resultEditToggleBtn = document.getElementById('resultEditToggle') as HTMLButtonElement | null;
@@ -446,6 +450,7 @@ function renderStudioView(): void {
   // The refinement banner sits over the already-usable preview while the edge
   // stage runs, and disappears the instant the refined result is swapped in.
   refineNoticeEl.hidden = !studioView.refining;
+  outputFrameEl?.classList.toggle('is-refining', studioView.refining);
   // The console and engine controls belong to the step editor. Leaving that tab
   // closes them and disables their top-bar toggles so a queue tab cannot turn
   // them back on.
@@ -456,6 +461,7 @@ function renderStudioView(): void {
   }
   consoleToggleBtn.disabled = !engineTab;
   if (sidebarToggleBtn) sidebarToggleBtn.disabled = !engineTab;
+  if (enginePillBtn) enginePillBtn.disabled = !engineTab;
   updateDownloadUi();
   updateRetouchUi();
   updateBulkStatus();
@@ -3513,6 +3519,10 @@ function applyProviderUi(): void {
   providerToggle.append(wasm);
   providerToggle.value = selectedProvider;
   providerToggle.disabled = !offerWebGpu && !forcedProvider;
+  if (enginePillLabelEl) {
+    enginePillLabelEl.textContent = selectedProvider === 'webgpu' ? 'WebGPU' : 'CPU';
+  }
+  if (enginePillBtn) enginePillBtn.dataset.runtime = selectedProvider;
   // Keep this line a neutral status. The reason a GPU was not chosen by default
   // (software renderer, known-slow adapter, missing capability) is shown as a
   // popup when the user actually switches to the GPU (see warnOnGpuChoice), not
@@ -3646,8 +3656,14 @@ let sidebarWidthPx: number | null = null;
 
 // Keep the top-bar show/hide button in sync with the sidebar's collapsed state.
 function renderSidebarToggle(): void {
-  if (!sidebarToggleBtn) return;
   const collapsed = settingsSidebarEl?.dataset.collapsed === 'true';
+  if (enginePillBtn) {
+    enginePillBtn.setAttribute('aria-expanded', String(!collapsed));
+    enginePillBtn.title = collapsed
+      ? 'Model, runtime & mask controls'
+      : 'Hide model, runtime & mask controls';
+  }
+  if (!sidebarToggleBtn) return;
   sidebarToggleBtn.setAttribute('aria-pressed', String(!collapsed));
   const label = collapsed ? 'Show settings sidebar' : 'Hide settings sidebar';
   sidebarToggleBtn.setAttribute('aria-label', label);
@@ -3726,6 +3742,10 @@ window.addEventListener('resize', () => {
 // The top-bar button shows/hides the sidebar; the in-sidebar button collapses
 // it too. Both drive the same state, so they stay in sync.
 sidebarToggleBtn?.addEventListener('click', () => {
+  const collapsed = settingsSidebarEl?.dataset.collapsed === 'true';
+  setSidebarCollapsed(!collapsed);
+});
+enginePillBtn?.addEventListener('click', () => {
   const collapsed = settingsSidebarEl?.dataset.collapsed === 'true';
   setSidebarCollapsed(!collapsed);
 });
